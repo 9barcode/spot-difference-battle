@@ -28,6 +28,9 @@
 - [게임 상태](docs/GAME_STATE.md)
 - [기술 설계](docs/TECH_SPEC.md)
 - [테스트 계획](docs/TEST_PLAN.md)
+- [MVP 결정 기록](docs/MVP_DECISIONS.md)
+- [UI 시안 점검](docs/UI_AUDIT.md)
+- [구현 백로그](docs/IMPLEMENTATION_BACKLOG.md)
 
 문서 간 내용이 충돌할 경우 실제 판정 수치는 `GAME_RULES.md`, MVP 범위와 제품 방향은 `GAME_DESIGN.md`를 우선합니다.
 
