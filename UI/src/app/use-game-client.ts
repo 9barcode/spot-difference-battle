@@ -23,6 +23,7 @@ const GUEST_TOKEN_KEY = "spot-battle.guest-token";
 
 export function useGameClient() {
   const socketRef = useRef<GameSocket | null>(null);
+  const snapshotRef = useRef<GameSnapshot | null>(null);
   const [connected, setConnected] = useState(false);
   const [phase, setPhase] = useState<LobbyPhase>(() =>
     localStorage.getItem(NICKNAME_KEY) ? "LOBBY" : "NICKNAME",
@@ -56,6 +57,7 @@ export function useGameClient() {
       setReportId(null);
     });
     socket.on("game:snapshot", (nextSnapshot) => {
+      snapshotRef.current = nextSnapshot;
       setSnapshot(nextSnapshot);
       setFoundIds(new Set(nextSnapshot.myFoundIds));
     });
@@ -106,12 +108,20 @@ export function useGameClient() {
   }, []);
 
   const returnToLobby = useCallback(() => {
+    snapshotRef.current = null;
     setMatch(null);
     setSnapshot(null);
     setFoundIds(new Set());
     setReportId(null);
     setPhase("LOBBY");
   }, []);
+
+  const actionContext = () => {
+    const current = snapshotRef.current;
+    return current
+      ? { expectedState: current.state, expectedStateVersion: current.stateVersion }
+      : null;
+  };
 
   return {
     connected,
@@ -129,16 +139,30 @@ export function useGameClient() {
     startMatching,
     cancelMatching,
     ready: () => match && socketRef.current?.emit("game:ready", { matchId: match.matchId }),
-    submit: (differences: Difference[]) =>
-      match && socketRef.current?.emit("game:submit", { matchId: match.matchId, differences }),
-    guess: (point: NormalizedPoint) =>
-      match && socketRef.current?.emit("game:guess", { matchId: match.matchId, point }),
-    hint: () => match && socketRef.current?.emit("game:hint", { matchId: match.matchId }),
-    forfeit: () =>
-      match && socketRef.current?.emit("game:forfeit", { matchId: match.matchId }),
+    submit: (differences: Difference[]) => {
+      const context = actionContext();
+      if (match && context) socketRef.current?.emit("game:submit", { matchId: match.matchId, differences, ...context });
+    },
+    guess: (point: NormalizedPoint) => {
+      const context = actionContext();
+      if (match && context) socketRef.current?.emit("game:guess", { matchId: match.matchId, point, ...context });
+    },
+    hint: () => {
+      const context = actionContext();
+      if (match && context) socketRef.current?.emit("game:hint", { matchId: match.matchId, ...context });
+    },
+    forfeit: () => {
+      const context = actionContext();
+      if (match && context) socketRef.current?.emit("game:forfeit", { matchId: match.matchId, ...context });
+    },
     report: (reason: ReportReason, details?: string) =>
-      match &&
-      socketRef.current?.emit("game:report", { matchId: match.matchId, reason, details }),
+      match && snapshotRef.current && socketRef.current?.emit("game:report", {
+        matchId: match.matchId,
+        reason,
+        details,
+        expectedState: snapshotRef.current.state,
+        expectedStateVersion: snapshotRef.current.stateVersion,
+      }),
     returnToLobby,
   };
 }

@@ -10,6 +10,7 @@ import { InMemoryMatchStore, type MatchStore } from "./match-store.js";
 export interface GameServerOptions {
   webOrigin: string;
   reconnectGraceMs?: number;
+  inputCooldownMs?: number;
   matchStore?: MatchStore;
 }
 
@@ -54,6 +55,7 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
   const persistedMatches = new Set<string>();
   const reconnectGraceMs =
     options.reconnectGraceMs ?? GAME_CONFIG.reconnectGraceSeconds * 1_000;
+  const inputCooldownMs = options.inputCooldownMs ?? 120;
   let waitingPlayer: { playerId: string; socketId: string; nickname: string } | null = null;
 
   function createSession(): GuestSession {
@@ -126,6 +128,26 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
     emitGameError(socket, error);
   }
 
+  function assertClientState(
+    match: GameMatch,
+    playerId: string,
+    expectedState: string,
+    expectedStateVersion: number,
+    allowConcurrentState = false,
+  ): void {
+    const current = match.snapshot(playerId);
+    if (
+      current.state !== expectedState ||
+      !Number.isInteger(expectedStateVersion) ||
+      expectedStateVersion < 0 ||
+      (allowConcurrentState
+        ? expectedStateVersion > current.stateVersion
+        : expectedStateVersion !== current.stateVersion)
+    ) {
+      throw new GameRuleError("STALE_STATE", "경기 상태가 변경되었습니다. 최신 상태에서 다시 시도해주세요.");
+    }
+  }
+
   function resumeMatch(socket: GameSocket, session: GuestSession): void {
     const match = registry.getCurrentForPlayer(session.playerId);
     if (!match) return;
@@ -158,6 +180,16 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
   }
 
   io.on("connection", (socket) => {
+    const lastInputAt = new Map<string, number>();
+    const enforceCooldown = (action: string) => {
+      if (inputCooldownMs <= 0) return;
+      const now = Date.now();
+      const previous = lastInputAt.get(action) ?? 0;
+      if (now - previous < inputCooldownMs) {
+        throw new GameRuleError("INPUT_RATE_LIMITED", "입력이 너무 빠릅니다. 잠시 후 다시 시도해주세요.");
+      }
+      lastInputAt.set(action, now);
+    };
     const session = sessionsByPlayer.get(socket.data.playerId)!;
     const oldSocketId = session.socketId;
     if (oldSocketId && oldSocketId !== socket.id) {
@@ -243,9 +275,10 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
       }
     });
 
-    socket.on("game:submit", ({ matchId, differences }) => {
+    socket.on("game:submit", ({ matchId, differences, expectedState, expectedStateVersion }) => {
       try {
         const match = registry.getForPlayer(matchId, session.playerId);
+        assertClientState(match, session.playerId, expectedState, expectedStateVersion, true);
         match.submitDifferences(session.playerId, differences, Date.now());
         emitSnapshots(match);
       } catch (error) {
@@ -253,9 +286,11 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
       }
     });
 
-    socket.on("game:guess", ({ matchId, point }) => {
+    socket.on("game:guess", ({ matchId, point, expectedState, expectedStateVersion }) => {
       try {
         const match = registry.getForPlayer(matchId, session.playerId);
+        assertClientState(match, session.playerId, expectedState, expectedStateVersion);
+        enforceCooldown("guess");
         socket.emit(
           "game:guess-result",
           match.guess(session.playerId, point, Date.now()),
@@ -267,9 +302,11 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
       }
     });
 
-    socket.on("game:hint", ({ matchId }) => {
+    socket.on("game:hint", ({ matchId, expectedState, expectedStateVersion }) => {
       try {
         const match = registry.getForPlayer(matchId, session.playerId);
+        assertClientState(match, session.playerId, expectedState, expectedStateVersion);
+        enforceCooldown("hint");
         socket.emit("game:hint-result", match.useHint(session.playerId, Date.now()));
         emitSnapshots(match);
       } catch (error) {
@@ -277,9 +314,10 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
       }
     });
 
-    socket.on("game:forfeit", ({ matchId }) => {
+    socket.on("game:forfeit", ({ matchId, expectedState, expectedStateVersion }) => {
       try {
         const match = registry.getForPlayer(matchId, session.playerId);
+        assertClientState(match, session.playerId, expectedState, expectedStateVersion);
         match.forfeit(session.playerId);
         emitSnapshots(match);
         void persistIfFinished(match);
@@ -288,9 +326,10 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
       }
     });
 
-    socket.on("game:report", async ({ matchId, reason, details }) => {
+    socket.on("game:report", async ({ matchId, reason, details, expectedState, expectedStateVersion }) => {
       try {
         const match = registry.getForPlayer(matchId, session.playerId);
+        assertClientState(match, session.playerId, expectedState, expectedStateVersion);
         if (match.currentState !== "FINISHED" && match.currentState !== "CANCELLED") {
           throw new GameRuleError("MATCH_NOT_FINISHED", "경기 종료 후 신고할 수 있습니다.");
         }

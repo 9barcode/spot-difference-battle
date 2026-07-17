@@ -115,6 +115,11 @@ export interface ReportResultPayload {
   reportId: string;
 }
 
+export interface GameActionContext {
+  expectedState: GameState;
+  expectedStateVersion: number;
+}
+
 export interface ServerToClientEvents {
   "session:ready": (payload: SessionReadyPayload) => void;
   "match:found": (payload: MatchFoundPayload) => void;
@@ -130,11 +135,11 @@ export interface ClientToServerEvents {
   "queue:join": (payload: { nickname: string }) => void;
   "queue:leave": () => void;
   "game:ready": (payload: { matchId: string }) => void;
-  "game:submit": (payload: { matchId: string; differences: Difference[] }) => void;
-  "game:guess": (payload: { matchId: string; point: NormalizedPoint }) => void;
-  "game:hint": (payload: { matchId: string }) => void;
-  "game:forfeit": (payload: { matchId: string }) => void;
-  "game:report": (payload: {
+  "game:submit": (payload: GameActionContext & { matchId: string; differences: Difference[] }) => void;
+  "game:guess": (payload: GameActionContext & { matchId: string; point: NormalizedPoint }) => void;
+  "game:hint": (payload: GameActionContext & { matchId: string }) => void;
+  "game:forfeit": (payload: GameActionContext & { matchId: string }) => void;
+  "game:report": (payload: GameActionContext & {
     matchId: string;
     reason: ReportReason;
     details?: string;
