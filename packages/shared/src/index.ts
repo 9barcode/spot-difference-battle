@@ -17,7 +17,7 @@ export type GameState =
   | "FINISHED"
   | "CANCELLED";
 
-export type DifferenceKind = "ADD" | "COVER" | "COLOR";
+export type DifferenceKind = "ADD" | "COVER" | "COLOR" | "DRAW";
 
 export interface NormalizedPoint {
   x: number;
@@ -28,10 +28,17 @@ export interface AnswerRegion extends NormalizedPoint {
   radius: number;
 }
 
+export interface DifferenceStroke {
+  points: NormalizedPoint[];
+  color: string;
+  width: number;
+}
+
 export interface Difference {
   id: string;
   kind: DifferenceKind;
   region: AnswerRegion;
+  stroke?: DifferenceStroke;
 }
 
 export interface PlayerResult {
