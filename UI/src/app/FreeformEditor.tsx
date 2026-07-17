@@ -3,12 +3,12 @@ import { Check, Eraser, MousePointer2, Pencil, RotateCcw, Trash2 } from "lucide-
 import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import gameSceneImg from "@/imports/image.png";
 
-function hslToHex(hue: number, saturation: number, lightness: number): string {
+function hsvToHex(hue: number, saturation: number, brightness: number): string {
   const s = saturation / 100;
-  const l = lightness / 100;
-  const chroma = (1 - Math.abs(2 * l - 1)) * s;
+  const v = brightness / 100;
+  const chroma = v * s;
   const x = chroma * (1 - Math.abs((hue / 60) % 2 - 1));
-  const match = l - chroma / 2;
+  const match = v - chroma;
   const [r, g, b] =
     hue < 60 ? [chroma, x, 0] :
     hue < 120 ? [x, chroma, 0] :
@@ -18,14 +18,6 @@ function hslToHex(hue: number, saturation: number, lightness: number): string {
   return `#${[r, g, b].map((value) => Math.round((value + match) * 255).toString(16).padStart(2, "0")).join("")}`;
 }
 
-const PALETTE = Array.from({ length: 120 }, (_, index) => {
-  const column = index % 12;
-  const row = Math.floor(index / 12);
-  const hue = column * 30;
-  const saturation = row < 5 ? 82 : 52;
-  const lightness = 24 + (row % 5) * 14;
-  return hslToHex(hue, saturation, lightness);
-});
 type Tool = "FILL" | "PENCIL" | "ERASER";
 
 function hexToRgb(hex: string): [number, number, number] {
@@ -200,7 +192,9 @@ export function FreeformEditor({
 }) {
   const [tool, setTool] = useState<Tool>("FILL");
   const [color, setColor] = useState("#ef4444");
-  const [showPalette, setShowPalette] = useState(false);
+  const [hue, setHue] = useState(0);
+  const [saturation, setSaturation] = useState(82);
+  const [brightness, setBrightness] = useState(92);
   const [selectionOnly, setSelectionOnly] = useState(false);
   const [width, setWidth] = useState(3);
   const [tolerance, setTolerance] = useState(34);
@@ -238,7 +232,6 @@ export function FreeformEditor({
     if (tool === "FILL") {
       setFill({ seed: point, color, tolerance });
       setSelectionOnly(true);
-      setShowPalette(true);
       return;
     }
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -273,6 +266,20 @@ export function FreeformEditor({
     if (fill) setSelectionOnly(false);
   };
 
+  const chooseFromPicker = (nextHue: number, nextSaturation: number, nextBrightness: number) => {
+    setHue(nextHue);
+    setSaturation(nextSaturation);
+    setBrightness(nextBrightness);
+    chooseColor(hsvToHex(nextHue, nextSaturation, nextBrightness));
+  };
+
+  const pickFromColorField = (event: PointerEvent<HTMLDivElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const nextSaturation = Math.round(Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width)) * 100);
+    const nextBrightness = Math.round((1 - Math.min(1, Math.max(0, (event.clientY - rect.top) / rect.height))) * 100);
+    chooseFromPicker(hue, nextSaturation, nextBrightness);
+  };
+
   const saveCurrent = () => {
     if (!current || value.length >= GAME_CONFIG.differenceCount) return;
     onChange([...value, { ...current, id: `edit-${crypto.randomUUID()}` }]);
@@ -292,34 +299,77 @@ export function FreeformEditor({
         {toolButton("PENCIL", "연필", <Pencil size={16}/>)}
         {toolButton("ERASER", "지우개", <Eraser size={16}/>)}
         <span className="mx-1 h-7 w-px bg-slate-200" />
-        <button type="button" onClick={() => setShowPalette((visible) => !visible)} className="inline-flex items-center gap-2 rounded-xl bg-slate-100 px-3 py-2 text-sm font-black">
-          <span className="h-6 w-6 rounded-full border-2 border-white shadow" style={{ backgroundColor: color }}/>
-          색상 선택
-        </button>
-        <label className="inline-flex items-center gap-2 text-xs font-bold">
-          직접 선택
-          <input type="color" value={color} onChange={(event) => chooseColor(event.target.value)} className="h-9 w-12 cursor-pointer rounded border-0 bg-transparent"/>
-        </label>
         {tool !== "FILL" && <label className="flex items-center gap-2 text-xs font-bold">굵기<input type="range" min="1" max="8" value={width} onChange={(event) => setWidth(Number(event.target.value))}/></label>}
         {tool === "FILL" && <label className="flex items-center gap-2 text-xs font-bold">선택 범위<input type="range" min="12" max="70" value={tolerance} onChange={(event) => setTolerance(Number(event.target.value))}/></label>}
       </div>
-      {showPalette && (
-        <div className="mb-3 rounded-2xl bg-white p-3 shadow">
-          <p className="mb-2 text-center text-xs font-bold text-slate-500">120색 팔레트 · 원하는 색을 선택하세요</p>
-          <div className="grid grid-cols-12 gap-1.5">
-            {PALETTE.map((candidate, index) => (
-              <button key={`${candidate}-${index}`} type="button" onClick={() => { chooseColor(candidate); setShowPalette(false); }} aria-label={candidate}
-                className={`aspect-square min-h-6 rounded-md border-2 shadow-sm transition hover:scale-110 ${color === candidate ? "border-slate-950 ring-2 ring-violet-300" : "border-white"}`}
-                style={{ backgroundColor: candidate }}/>
-            ))}
-          </div>
-        </div>
-      )}
 
-      <div className="relative overflow-hidden rounded-3xl border-4 border-white bg-white shadow-xl">
-        <img src={gameSceneImg} alt="편집할 원본 그림" className="block h-auto w-full select-none" draggable={false}/>
-        <DifferenceEffects differences={preview} selectedId={current?.fill ? "current-edit" : undefined} selectionOnly={selectionOnly}/>
-        <svg viewBox="0 0 1000 562.5" preserveAspectRatio="none" className={`absolute inset-0 h-full w-full touch-none ${disabled ? "cursor-not-allowed" : tool === "FILL" ? "cursor-pointer" : "cursor-crosshair"}`} onPointerDown={begin} onPointerMove={move} onPointerUp={finish} onPointerCancel={finish}/>
+      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_260px]">
+        <div className="relative overflow-hidden rounded-3xl border-4 border-white bg-white shadow-xl">
+          <img src={gameSceneImg} alt="편집할 원본 그림" className="block h-auto w-full select-none" draggable={false}/>
+          <DifferenceEffects differences={preview} selectedId={current?.fill ? "current-edit" : undefined} selectionOnly={selectionOnly}/>
+          <svg viewBox="0 0 1000 562.5" preserveAspectRatio="none" className={`absolute inset-0 h-full w-full touch-none ${disabled ? "cursor-not-allowed" : tool === "FILL" ? "cursor-pointer" : "cursor-crosshair"}`} onPointerDown={begin} onPointerMove={move} onPointerUp={finish} onPointerCancel={finish}/>
+        </div>
+
+        <aside className="sticky top-4 rounded-2xl bg-white p-4 shadow-xl">
+          <div className="mb-3 flex items-center justify-between">
+            <div>
+              <h3 className="font-black text-slate-800">색상 선택</h3>
+              <p className="text-xs text-slate-500">{selectionOnly ? "선택한 영역에 적용할 색" : "연필 또는 다음 색칠 색상"}</p>
+            </div>
+            <span className="h-10 w-10 rounded-xl border-2 border-white shadow ring-1 ring-slate-200" style={{ backgroundColor: color }}/>
+          </div>
+
+          <div
+            className="relative aspect-square w-full cursor-crosshair touch-none overflow-hidden rounded-xl ring-1 ring-slate-300"
+            style={{
+              backgroundColor: `hsl(${hue} 100% 50%)`,
+              backgroundImage: "linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, transparent)",
+            }}
+            onPointerDown={(event) => {
+              event.currentTarget.setPointerCapture(event.pointerId);
+              pickFromColorField(event);
+            }}
+            onPointerMove={(event) => {
+              if (event.buttons === 1) pickFromColorField(event);
+            }}
+          >
+            <span
+              className="pointer-events-none absolute h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow-[0_0_0_1px_#000]"
+              style={{ left: `${saturation}%`, top: `${100 - brightness}%` }}
+            />
+          </div>
+
+          <input
+            aria-label="색조"
+            type="range"
+            min="0"
+            max="359"
+            value={hue}
+            onChange={(event) => chooseFromPicker(Number(event.target.value), saturation, brightness)}
+            className="mt-4 h-4 w-full cursor-pointer appearance-none rounded-full"
+            style={{ background: "linear-gradient(to right,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)" }}
+          />
+
+          <label className="mt-4 block text-xs font-bold text-slate-500">
+            HEX 색상
+            <div className="mt-1 flex items-center gap-2">
+              <span className="h-9 w-9 shrink-0 rounded-lg border shadow-inner" style={{ backgroundColor: color }}/>
+              <input
+                value={color.toUpperCase()}
+                onChange={(event) => {
+                  const next = event.target.value;
+                  if (/^#[0-9A-Fa-f]{6}$/.test(next)) chooseColor(next);
+                }}
+                className="min-w-0 flex-1 rounded-lg border border-slate-200 px-3 py-2 font-mono text-sm uppercase outline-none focus:border-violet-500"
+                maxLength={7}
+              />
+            </div>
+          </label>
+
+          <p className="mt-3 rounded-xl bg-violet-50 px-3 py-2 text-xs font-bold text-violet-700">
+            {selectionOnly ? "색을 고르면 하이라이트된 영역에 바로 미리보기됩니다." : "색상 영역과 색조 막대로 원하는 색을 만들 수 있습니다."}
+          </p>
+        </aside>
       </div>
 
       <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
