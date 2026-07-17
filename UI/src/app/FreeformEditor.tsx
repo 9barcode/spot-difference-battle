@@ -1,5 +1,5 @@
 import { GAME_CONFIG, type Difference, type DifferenceFill, type DifferenceStroke, type NormalizedPoint } from "@spot-battle/shared";
-import { Check, Eraser, MousePointer2, Pencil, RotateCcw, Trash2 } from "lucide-react";
+import { Check, Eraser, MousePointer2, Palette, Pencil, RotateCcw, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import gameSceneImg from "@/imports/image.png";
 
@@ -195,6 +195,7 @@ export function FreeformEditor({
   const [hue, setHue] = useState(0);
   const [saturation, setSaturation] = useState(82);
   const [brightness, setBrightness] = useState(92);
+  const [mobilePickerOpen, setMobilePickerOpen] = useState(false);
   const [selectionOnly, setSelectionOnly] = useState(false);
   const [width, setWidth] = useState(3);
   const [tolerance, setTolerance] = useState(34);
@@ -232,6 +233,7 @@ export function FreeformEditor({
     if (tool === "FILL") {
       setFill({ seed: point, color, tolerance });
       setSelectionOnly(true);
+      setMobilePickerOpen(true);
       return;
     }
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -310,13 +312,16 @@ export function FreeformEditor({
           <svg viewBox="0 0 1000 562.5" preserveAspectRatio="none" className={`absolute inset-0 h-full w-full touch-none ${disabled ? "cursor-not-allowed" : tool === "FILL" ? "cursor-pointer" : "cursor-crosshair"}`} onPointerDown={begin} onPointerMove={move} onPointerUp={finish} onPointerCancel={finish}/>
         </div>
 
-        <aside className="sticky top-4 rounded-2xl bg-white p-4 shadow-xl">
-          <div className="mb-3 flex items-center justify-between">
+        <aside className={`${mobilePickerOpen ? "fixed" : "hidden"} bottom-3 right-3 z-40 max-h-[78vh] w-[min(16rem,calc(100vw-1.5rem))] overflow-y-auto rounded-2xl bg-white p-4 shadow-2xl lg:sticky lg:top-4 lg:block lg:max-h-none lg:w-auto lg:overflow-visible`}>
+          <div className="mb-3 flex items-center justify-between gap-2">
             <div>
               <h3 className="font-black text-slate-800">색상 선택</h3>
               <p className="text-xs text-slate-500">{selectionOnly ? "선택한 영역에 적용할 색" : "연필 또는 다음 색칠 색상"}</p>
             </div>
-            <span className="h-10 w-10 rounded-xl border-2 border-white shadow ring-1 ring-slate-200" style={{ backgroundColor: color }}/>
+            <div className="flex items-center gap-2">
+              <span className="h-10 w-10 rounded-xl border-2 border-white shadow ring-1 ring-slate-200" style={{ backgroundColor: color }}/>
+              <button type="button" onClick={() => setMobilePickerOpen(false)} className="rounded-lg bg-slate-100 p-2 text-slate-500 lg:hidden" aria-label="색상 선택 닫기"><X size={18}/></button>
+            </div>
           </div>
 
           <div
@@ -370,6 +375,11 @@ export function FreeformEditor({
             {selectionOnly ? "색을 고르면 하이라이트된 영역에 바로 미리보기됩니다." : "색상 영역과 색조 막대로 원하는 색을 만들 수 있습니다."}
           </p>
         </aside>
+        {!mobilePickerOpen && (
+          <button type="button" onClick={() => setMobilePickerOpen(true)} className="fixed bottom-4 right-4 z-40 inline-flex items-center gap-2 rounded-full bg-violet-600 px-4 py-3 font-black text-white shadow-2xl lg:hidden">
+            <Palette size={19}/>색상
+          </button>
+        )}
       </div>
 
       <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
