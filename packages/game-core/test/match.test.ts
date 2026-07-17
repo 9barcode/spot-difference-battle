@@ -59,13 +59,30 @@ describe("GameMatch lifecycle", () => {
     }
   });
 
-  it("auto-fills missing submissions when editing expires", () => {
+  it("ends without injecting fallback differences when editing expires", () => {
     const match = createMatch();
     startEditing(match, 1_000);
 
     expect(match.expire(31_000)).toBe(true);
-    expect(match.currentState).toBe("FINDING");
-    expect(match.snapshot().players.every((player) => player.submitted)).toBe(true);
+    expect(match.snapshot()).toMatchObject({
+      state: "FINISHED",
+      winnerId: null,
+      endReason: "TIMEOUT",
+    });
+    expect(match.snapshot().players.every((player) => !player.submitted)).toBe(true);
+  });
+
+  it("awards an editing-timeout win to the player who submitted", () => {
+    const match = createMatch();
+    startEditing(match, 1_000);
+    match.submitDifferences("p1", fallback, 2_000);
+
+    expect(match.expire(31_000)).toBe(true);
+    expect(match.snapshot()).toMatchObject({
+      state: "FINISHED",
+      winnerId: "p1",
+      endReason: "TIMEOUT",
+    });
   });
 
   it("tracks correct, duplicate and wrong guesses with server time", () => {
