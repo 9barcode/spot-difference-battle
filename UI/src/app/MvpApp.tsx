@@ -5,14 +5,18 @@ import gameSceneImg from "@/imports/image.png";
 import { DifferenceEffects, FreeformEditor } from "./FreeformEditor";
 import { useGameClient } from "./use-game-client";
 
-function useRemainingSeconds(deadlineMs: number | null | undefined): number | null {
+function useRemainingSeconds(
+  deadlineMs: number | null | undefined,
+  wrongAnswerCount: number,
+): number | null {
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
     if (!deadlineMs) return;
     const timer = window.setInterval(() => setNow(Date.now()), 250);
     return () => window.clearInterval(timer);
   }, [deadlineMs]);
-  return deadlineMs ? Math.max(0, Math.ceil((deadlineMs - now) / 1_000)) : null;
+  const penaltyMs = wrongAnswerCount * GAME_CONFIG.wrongAnswerPenaltySeconds * 1_000;
+  return deadlineMs ? Math.max(0, Math.ceil((deadlineMs - now - penaltyMs) / 1_000)) : null;
 }
 
 function pointFromEvent(event: MouseEvent<HTMLDivElement>): NormalizedPoint {
@@ -89,9 +93,9 @@ export default function MvpApp() {
   const game = useGameClient();
   const [nicknameInput, setNicknameInput] = useState(game.nickname);
   const [draft, setDraft] = useState<Difference[]>([]);
-  const remaining = useRemainingSeconds(game.snapshot?.deadlineMs);
   const me = game.snapshot?.players.find((player) => player.playerId === game.match?.playerId);
   const opponent = game.snapshot?.players.find((player) => player.playerId !== game.match?.playerId);
+  const remaining = useRemainingSeconds(game.snapshot?.deadlineMs, me?.wrongAnswerCount ?? 0);
 
   useEffect(() => {
     if (game.snapshot?.state === "EDITING" && !me?.submitted) setDraft([]);
@@ -126,7 +130,7 @@ export default function MvpApp() {
   return (
     <Shell>
       {header}
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-white px-5 py-3 shadow-sm"><div><span className="font-black">나 {me?.foundCount ?? 0}/3</span><span className="mx-3 text-slate-300">vs</span><span className="font-black">{opponent?.nickname} {opponent?.foundCount ?? 0}/3</span></div><div className="flex items-center gap-2">{remaining !== null && <span className={`flex items-center gap-2 rounded-full px-4 py-2 font-black ${remaining <= 10 ? "bg-red-100 text-red-600" : "bg-violet-100 text-violet-700"}`}><Clock size={18}/>{remaining}초</span>}{game.snapshot.state !== "FINISHED" && <button onClick={() => window.confirm("경기를 나가면 기권패로 처리됩니다. 나갈까요?") && game.forfeit()} className="rounded-full bg-slate-100 p-2 text-slate-500 hover:bg-red-100 hover:text-red-600" title="경기 나가기"><LogOut size={18}/></button>}</div></div>
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-white px-5 py-3 shadow-sm"><div><span className="font-black">나 {me?.foundCount ?? 0}/3 · 오답 {me?.wrongAnswerCount ?? 0}</span><span className="mx-3 text-slate-300">vs</span><span className="font-black">{opponent?.nickname} {opponent?.foundCount ?? 0}/3</span></div><div className="flex items-center gap-2">{remaining !== null && <span className={`flex items-center gap-2 rounded-full px-4 py-2 font-black ${remaining <= 10 ? "bg-red-100 text-red-600" : "bg-violet-100 text-violet-700"}`}><Clock size={18}/>{remaining}초</span>}{game.snapshot.state !== "FINISHED" && <button onClick={() => window.confirm("경기를 나가면 기권패로 처리됩니다. 나갈까요?") && game.forfeit()} className="rounded-full bg-slate-100 p-2 text-slate-500 hover:bg-red-100 hover:text-red-600" title="경기 나가기"><LogOut size={18}/></button>}</div></div>
 
       {opponent?.connectionStatus === "RECONNECTING" && <div className="mb-5 rounded-2xl bg-amber-100 px-5 py-4 text-center font-bold text-amber-800">상대의 연결이 끊겼습니다. 10초 동안 복귀를 기다립니다.</div>}
 
