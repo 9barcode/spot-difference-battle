@@ -59,6 +59,7 @@ function paintConnectedRegion(
   source: ImageData,
   output: ImageData,
   fill: DifferenceFill,
+  applyColor = true,
 ): Uint8Array {
   const { width, height, data } = source;
   const startX = Math.min(width - 1, Math.max(0, Math.floor(fill.seed.x * width)));
@@ -83,12 +84,14 @@ function paintConnectedRegion(
     const db = data[offset + 2]! - baseB;
     if (dr * dr + dg * dg + db * db > maxDistance) continue;
 
-    const luminance = (data[offset]! * 0.299 + data[offset + 1]! * 0.587 + data[offset + 2]! * 0.114) / 255;
-    const shade = 0.35 + luminance * 0.8;
-    output.data[offset] = Math.min(255, targetR * shade);
-    output.data[offset + 1] = Math.min(255, targetG * shade);
-    output.data[offset + 2] = Math.min(255, targetB * shade);
-    output.data[offset + 3] = 235;
+    if (applyColor) {
+      const luminance = (data[offset]! * 0.299 + data[offset + 1]! * 0.587 + data[offset + 2]! * 0.114) / 255;
+      const shade = 0.35 + luminance * 0.8;
+      output.data[offset] = Math.min(255, targetR * shade);
+      output.data[offset + 1] = Math.min(255, targetG * shade);
+      output.data[offset + 2] = Math.min(255, targetB * shade);
+      output.data[offset + 3] = 235;
+    }
     visited[index] = 2;
 
     const x = index % width;
@@ -117,7 +120,15 @@ function drawSelectionOutline(output: ImageData, mask: Uint8Array, width: number
   }
 }
 
-export function DifferenceEffects({ differences, selectedId }: { differences: Difference[]; selectedId?: string }) {
+export function DifferenceEffects({
+  differences,
+  selectedId,
+  selectionOnly = false,
+}: {
+  differences: Difference[];
+  selectedId?: string;
+  selectionOnly?: boolean;
+}) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -145,8 +156,9 @@ export function DifferenceEffects({ differences, selectedId }: { differences: Di
       let selectedMask: Uint8Array | null = null;
       differences.forEach((difference) => {
         if (!difference.fill) return;
-        const mask = paintConnectedRegion(source, output, difference.fill);
-        if (difference.id === selectedId) selectedMask = mask;
+        const isSelected = difference.id === selectedId;
+        const mask = paintConnectedRegion(source, output, difference.fill, !(isSelected && selectionOnly));
+        if (isSelected) selectedMask = mask;
       });
       if (selectedMask) drawSelectionOutline(output, selectedMask, width, height);
       context.clearRect(0, 0, width, height);
@@ -172,7 +184,7 @@ export function DifferenceEffects({ differences, selectedId }: { differences: Di
         context.restore();
       });
     };
-  }, [differences, selectedId]);
+  }, [differences, selectedId, selectionOnly]);
 
   return <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 h-full w-full" />;
 }
@@ -189,6 +201,7 @@ export function FreeformEditor({
   const [tool, setTool] = useState<Tool>("FILL");
   const [color, setColor] = useState("#ef4444");
   const [showPalette, setShowPalette] = useState(false);
+  const [selectionOnly, setSelectionOnly] = useState(false);
   const [width, setWidth] = useState(3);
   const [tolerance, setTolerance] = useState(34);
   const [fill, setFill] = useState<DifferenceFill | null>(null);
@@ -213,6 +226,7 @@ export function FreeformEditor({
   const preview = current ? [...value, current] : value;
   const clearCurrent = () => {
     setFill(null);
+    setSelectionOnly(false);
     setStrokes([]);
     setActivePoints([]);
   };
@@ -222,6 +236,8 @@ export function FreeformEditor({
     const point = pointFromPointer(event);
     if (tool === "FILL") {
       setFill({ seed: point, color, tolerance });
+      setSelectionOnly(true);
+      setShowPalette(true);
       return;
     }
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -245,6 +261,12 @@ export function FreeformEditor({
       if (points.length) setStrokes((items) => [...items, { points, color, width, tool: tool === "ERASER" ? "ERASER" : "PENCIL" }]);
       return [];
     });
+  };
+
+  const chooseColor = (nextColor: string) => {
+    setColor(nextColor);
+    setFill((currentFill) => currentFill ? { ...currentFill, color: nextColor } : currentFill);
+    if (fill) setSelectionOnly(false);
   };
 
   const saveCurrent = () => {
@@ -272,7 +294,7 @@ export function FreeformEditor({
         </button>
         <label className="inline-flex items-center gap-2 text-xs font-bold">
           직접 선택
-          <input type="color" value={color} onChange={(event) => setColor(event.target.value)} className="h-9 w-12 cursor-pointer rounded border-0 bg-transparent"/>
+          <input type="color" value={color} onChange={(event) => chooseColor(event.target.value)} className="h-9 w-12 cursor-pointer rounded border-0 bg-transparent"/>
         </label>
         {tool !== "FILL" && <label className="flex items-center gap-2 text-xs font-bold">굵기<input type="range" min="1" max="8" value={width} onChange={(event) => setWidth(Number(event.target.value))}/></label>}
         {tool === "FILL" && <label className="flex items-center gap-2 text-xs font-bold">선택 범위<input type="range" min="12" max="70" value={tolerance} onChange={(event) => setTolerance(Number(event.target.value))}/></label>}
@@ -282,7 +304,7 @@ export function FreeformEditor({
           <p className="mb-2 text-center text-xs font-bold text-slate-500">120색 팔레트 · 원하는 색을 선택하세요</p>
           <div className="grid grid-cols-12 gap-1.5">
             {PALETTE.map((candidate, index) => (
-              <button key={`${candidate}-${index}`} type="button" onClick={() => { setColor(candidate); setShowPalette(false); }} aria-label={candidate}
+              <button key={`${candidate}-${index}`} type="button" onClick={() => { chooseColor(candidate); setShowPalette(false); }} aria-label={candidate}
                 className={`aspect-square min-h-6 rounded-md border-2 shadow-sm transition hover:scale-110 ${color === candidate ? "border-slate-950 ring-2 ring-violet-300" : "border-white"}`}
                 style={{ backgroundColor: candidate }}/>
             ))}
@@ -292,16 +314,18 @@ export function FreeformEditor({
 
       <div className="relative overflow-hidden rounded-3xl border-4 border-white bg-white shadow-xl">
         <img src={gameSceneImg} alt="편집할 원본 그림" className="block h-auto w-full select-none" draggable={false}/>
-        <DifferenceEffects differences={preview} selectedId={current?.fill ? "current-edit" : undefined}/>
+        <DifferenceEffects differences={preview} selectedId={current?.fill ? "current-edit" : undefined} selectionOnly={selectionOnly}/>
         <svg viewBox="0 0 1000 562.5" preserveAspectRatio="none" className={`absolute inset-0 h-full w-full touch-none ${disabled ? "cursor-not-allowed" : tool === "FILL" ? "cursor-pointer" : "cursor-crosshair"}`} onPointerDown={begin} onPointerMove={move} onPointerUp={finish} onPointerCancel={finish}/>
       </div>
 
       <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
         <button type="button" disabled={!strokes.length} onClick={() => setStrokes((items) => items.slice(0, -1))} className="inline-flex items-center gap-1 rounded-xl bg-white px-4 py-2 text-sm font-bold shadow disabled:opacity-40"><RotateCcw size={16}/>현재 획 취소</button>
         <button type="button" disabled={!current} onClick={clearCurrent} className="inline-flex items-center gap-1 rounded-xl bg-red-50 px-4 py-2 text-sm font-bold text-red-600 disabled:opacity-40"><Trash2 size={16}/>현재 작업 삭제</button>
-        <button type="button" disabled={!current || value.length >= GAME_CONFIG.differenceCount} onClick={saveCurrent} className="inline-flex items-center gap-1 rounded-xl bg-emerald-500 px-5 py-2 font-black text-white disabled:opacity-40"><Check size={17}/>차이점으로 저장</button>
+        <button type="button" disabled={!current || selectionOnly || value.length >= GAME_CONFIG.differenceCount} onClick={saveCurrent} className="inline-flex items-center gap-1 rounded-xl bg-emerald-500 px-5 py-2 font-black text-white disabled:opacity-40"><Check size={17}/>차이점으로 저장</button>
       </div>
-      <p className="mt-3 text-center text-sm font-bold text-violet-700">연필은 여러 획을 그린 뒤 저장하세요 · 완료 {value.length}/{GAME_CONFIG.differenceCount}</p>
+      <p className="mt-3 text-center text-sm font-bold text-violet-700">
+        {selectionOnly ? "선택한 영역의 외곽선을 확인하고 색상을 골라주세요." : "연필은 여러 획을 그린 뒤 저장하세요."} · 완료 {value.length}/{GAME_CONFIG.differenceCount}
+      </p>
     </div>
   );
 }
