@@ -65,6 +65,7 @@ export interface GameSnapshot {
   deadlineMs: number | null;
   players: [PlayerProgress, PlayerProgress];
   winnerId: string | null;
+  problem: Difference[] | null;
 }
 
 export interface GuessResult {

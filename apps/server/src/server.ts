@@ -1,5 +1,5 @@
 import cors from "@fastify/cors";
-import { GameRuleError } from "@spot-battle/game-core";
+import { GameMatch, GameRuleError } from "@spot-battle/game-core";
 import type { ClientToServerEvents, ServerToClientEvents } from "@spot-battle/shared";
 import Fastify, { type FastifyInstance } from "fastify";
 import { randomUUID } from "node:crypto";
@@ -20,6 +20,12 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
   });
   const registry = new MatchRegistry();
   let waitingPlayer: { socketId: string; nickname: string } | null = null;
+
+  function emitSnapshots(match: GameMatch): void {
+    for (const player of match.snapshot().players) {
+      io.to(player.playerId).emit("game:snapshot", match.snapshot(player.playerId));
+    }
+  }
 
   function emitGameError(
     socket: Socket<ClientToServerEvents, ServerToClientEvents>,
@@ -71,7 +77,7 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
         playerId: opponent.id,
         opponentNickname: normalizedNickname,
       });
-      io.to(room).emit("game:snapshot", match.snapshot());
+      emitSnapshots(match);
       waitingPlayer = null;
     });
 
@@ -84,7 +90,7 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
       try {
         const match = registry.getForPlayer(matchId, socket.id);
         match.markReady(socket.id, Date.now());
-        io.to(`match:${matchId}`).emit("game:snapshot", match.snapshot());
+        emitSnapshots(match);
       } catch (error) {
         emitGameError(socket, error);
       }
@@ -94,7 +100,7 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
       try {
         const match = registry.getForPlayer(matchId, socket.id);
         match.submitDifferences(socket.id, differences, Date.now());
-        io.to(`match:${matchId}`).emit("game:snapshot", match.snapshot());
+        emitSnapshots(match);
       } catch (error) {
         emitGameError(socket, error);
       }
@@ -104,7 +110,7 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
       try {
         const match = registry.getForPlayer(matchId, socket.id);
         socket.emit("game:guess-result", match.guess(socket.id, point, Date.now()));
-        io.to(`match:${matchId}`).emit("game:snapshot", match.snapshot());
+        emitSnapshots(match);
       } catch (error) {
         emitGameError(socket, error);
       }
@@ -114,7 +120,7 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
       try {
         const match = registry.getForPlayer(matchId, socket.id);
         socket.emit("game:hint-result", match.useHint(socket.id, Date.now()));
-        io.to(`match:${matchId}`).emit("game:snapshot", match.snapshot());
+        emitSnapshots(match);
       } catch (error) {
         emitGameError(socket, error);
       }
@@ -127,7 +133,7 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
 
   const expiryTimer = setInterval(() => {
     for (const match of registry.expire(Date.now())) {
-      io.to(`match:${match.matchId}`).emit("game:snapshot", match.snapshot());
+      emitSnapshots(match);
     }
   }, 250);
   expiryTimer.unref();
@@ -139,4 +145,3 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
 
   return app;
 }
-

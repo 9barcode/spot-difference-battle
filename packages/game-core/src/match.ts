@@ -188,7 +188,9 @@ export class GameMatch {
     return false;
   }
 
-  snapshot(): GameSnapshot {
+  snapshot(viewerId?: string): GameSnapshot {
+    const problemOwner = viewerId ? this.getOpponent(viewerId) : null;
+    const canViewProblem = this.state === "FINDING" || this.state === "FINISHED";
     return {
       matchId: this.matchId,
       state: this.state,
@@ -200,6 +202,10 @@ export class GameMatch {
         PlayerProgress,
       ],
       winnerId: this.winnerId,
+      problem:
+        canViewProblem && problemOwner?.differences
+          ? structuredClone(problemOwner.differences)
+          : null,
     };
   }
 
