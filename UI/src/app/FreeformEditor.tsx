@@ -1,24 +1,8 @@
 import { GAME_CONFIG, type Difference, type DifferenceFill, type DifferenceStroke, type NormalizedPoint } from "@spot-battle/shared";
-import { Check, Eraser, MousePointer2, Palette, Pencil, RotateCcw, Trash2, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
+import { Check, MousePointer2, Trash2 } from "lucide-react";
+import { useEffect, useRef, useState, type PointerEvent } from "react";
 import gameSceneImg from "@/imports/image.png";
 
-function hsvToHex(hue: number, saturation: number, brightness: number): string {
-  const s = saturation / 100;
-  const v = brightness / 100;
-  const chroma = v * s;
-  const x = chroma * (1 - Math.abs((hue / 60) % 2 - 1));
-  const match = v - chroma;
-  const [r, g, b] =
-    hue < 60 ? [chroma, x, 0] :
-    hue < 120 ? [x, chroma, 0] :
-    hue < 180 ? [0, chroma, x] :
-    hue < 240 ? [0, x, chroma] :
-    hue < 300 ? [x, 0, chroma] : [chroma, 0, x];
-  return `#${[r, g, b].map((value) => Math.round((value + match) * 255).toString(16).padStart(2, "0")).join("")}`;
-}
-
-type Tool = "FILL" | "PENCIL" | "ERASER";
 
 function hexToRgb(hex: string): [number, number, number] {
   const value = Number.parseInt(hex.slice(1), 16);
@@ -190,76 +174,31 @@ export function FreeformEditor({
   onChange: (next: Difference[]) => void;
   disabled?: boolean;
 }) {
-  const [tool, setTool] = useState<Tool>("FILL");
   const [color, setColor] = useState("#ef4444");
-  const [hue, setHue] = useState(0);
-  const [saturation, setSaturation] = useState(82);
-  const [brightness, setBrightness] = useState(92);
-  const [mobilePickerOpen, setMobilePickerOpen] = useState(false);
   const [selectionOnly, setSelectionOnly] = useState(false);
-  const [width, setWidth] = useState(3);
   const [tolerance, setTolerance] = useState(34);
   const [fill, setFill] = useState<DifferenceFill | null>(null);
-  const [strokes, setStrokes] = useState<DifferenceStroke[]>([]);
-  const [activePoints, setActivePoints] = useState<NormalizedPoint[]>([]);
-  const drawingRef = useRef(false);
 
-  const current = useMemo<Difference | null>(() => {
-    if (!fill && !strokes.length && !activePoints.length) return null;
-    const activeTool: DifferenceStroke["tool"] = tool === "ERASER" ? "ERASER" : "PENCIL";
-    const previewStrokes: DifferenceStroke[] = activePoints.length
-      ? [...strokes, { points: activePoints, color, width, tool: activeTool }]
-      : strokes;
-    return {
-      id: "current-edit",
-      kind: fill ? "COLOR" : "DRAW",
-      region: regionFromDifference(fill, previewStrokes),
-      fill: fill ?? undefined,
-      strokes: previewStrokes.length ? previewStrokes : undefined,
-    };
-  }, [activePoints, color, fill, strokes, tool, width]);
-
+  const current: Difference | null = fill
+    ? {
+        id: "current-edit",
+        kind: "COLOR",
+        region: regionFromDifference(fill, []),
+        fill,
+      }
+    : null;
   const preview = current ? [...value, current] : value;
+
   const clearCurrent = () => {
     setFill(null);
     setSelectionOnly(false);
-    setStrokes([]);
-    setActivePoints([]);
   };
 
-  const begin = (event: PointerEvent<SVGSVGElement>) => {
+  const selectRegion = (event: PointerEvent<SVGSVGElement>) => {
     if (disabled || value.length >= GAME_CONFIG.differenceCount) return;
     const point = pointFromPointer(event);
-    if (tool === "FILL") {
-      setFill({ seed: point, color, tolerance });
-      setSelectionOnly(true);
-      setMobilePickerOpen(true);
-      return;
-    }
-    event.currentTarget.setPointerCapture(event.pointerId);
-    drawingRef.current = true;
-    setActivePoints([point]);
-  };
-
-  const move = (event: PointerEvent<SVGSVGElement>) => {
-    if (!drawingRef.current) return;
-    const point = pointFromPointer(event);
-    setActivePoints((points) => {
-      const last = points.at(-1);
-      return last && Math.hypot(last.x - point.x, last.y - point.y) < 0.003 ? points : [...points, point];
-    });
-  };
-
-  const finish = () => {
-    if (!drawingRef.current) return;
-    drawingRef.current = false;
-    setActivePoints((points) => {
-      if (points.length) {
-        const strokeTool: DifferenceStroke["tool"] = tool === "ERASER" ? "ERASER" : "PENCIL";
-        setStrokes((items) => [...items, { points, color, width, tool: strokeTool }]);
-      }
-      return [];
-    });
+    setFill({ seed: point, color, tolerance });
+    setSelectionOnly(true);
   };
 
   const chooseColor = (nextColor: string) => {
@@ -268,127 +207,85 @@ export function FreeformEditor({
     if (fill) setSelectionOnly(false);
   };
 
-  const chooseFromPicker = (nextHue: number, nextSaturation: number, nextBrightness: number) => {
-    setHue(nextHue);
-    setSaturation(nextSaturation);
-    setBrightness(nextBrightness);
-    chooseColor(hsvToHex(nextHue, nextSaturation, nextBrightness));
-  };
-
-  const pickFromColorField = (event: PointerEvent<HTMLDivElement>) => {
-    const rect = event.currentTarget.getBoundingClientRect();
-    const nextSaturation = Math.round(Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width)) * 100);
-    const nextBrightness = Math.round((1 - Math.min(1, Math.max(0, (event.clientY - rect.top) / rect.height))) * 100);
-    chooseFromPicker(hue, nextSaturation, nextBrightness);
-  };
-
   const saveCurrent = () => {
-    if (!current || value.length >= GAME_CONFIG.differenceCount) return;
+    if (!current || selectionOnly || value.length >= GAME_CONFIG.differenceCount) return;
     onChange([...value, { ...current, id: `edit-${crypto.randomUUID()}` }]);
     clearCurrent();
   };
 
-  const toolButton = (candidate: Tool, label: string, icon: React.ReactNode) => (
-    <button type="button" onClick={() => setTool(candidate)} className={`inline-flex items-center gap-1 rounded-xl px-3 py-2 text-sm font-black ${tool === candidate ? "bg-violet-600 text-white" : "bg-slate-100"}`}>
-      {icon}{label}
-    </button>
-  );
+  const paletteColors = [
+    { name: "빨강", value: "#ef2b2d", position: "left-[25%] top-[8%]" },
+    { name: "주황", value: "#ff9418", position: "right-[20%] top-[10%]" },
+    { name: "노랑", value: "#ffd400", position: "right-[5%] top-[38%]" },
+    { name: "초록", value: "#18a83a", position: "bottom-[18%] right-[10%]" },
+    { name: "파랑", value: "#1775e5", position: "bottom-[5%] right-[32%]" },
+    { name: "남색", value: "#173568", position: "bottom-[6%] left-[30%]" },
+    { name: "보라", value: "#6522a8", position: "bottom-[25%] left-[7%]" },
+  ];
 
   return (
     <div>
-      <div className="mb-3 flex flex-wrap items-center justify-center gap-2 rounded-2xl bg-white p-3 shadow">
-        {toolButton("FILL", "물체 색칠", <MousePointer2 size={16}/>)}
-        {toolButton("PENCIL", "연필", <Pencil size={16}/>)}
-        {toolButton("ERASER", "지우개", <Eraser size={16}/>)}
-        <span className="mx-1 h-7 w-px bg-slate-200" />
-        {tool !== "FILL" && <label className="flex items-center gap-2 text-xs font-bold">굵기<input type="range" min="1" max="8" value={width} onChange={(event) => setWidth(Number(event.target.value))}/></label>}
-        {tool === "FILL" && <label className="flex items-center gap-2 text-xs font-bold">선택 범위<input type="range" min="12" max="70" value={tolerance} onChange={(event) => setTolerance(Number(event.target.value))}/></label>}
+      <div className="mb-3 flex flex-wrap items-center justify-center gap-3 rounded-2xl bg-white p-3 shadow">
+        <span className="inline-flex items-center gap-1 rounded-xl bg-violet-600 px-4 py-2 text-sm font-black text-white">
+          <MousePointer2 size={16}/>영역 색상 변경
+        </span>
+        <label className="flex items-center gap-2 text-xs font-bold">
+          선택 범위
+          <input type="range" min="12" max="70" value={tolerance} onChange={(event) => setTolerance(Number(event.target.value))}/>
+        </label>
+        <span className="text-xs font-bold text-slate-500">그림의 바꿀 부분을 먼저 클릭하세요.</span>
       </div>
 
-      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_260px]">
-        <div className="relative overflow-hidden rounded-3xl border-4 border-white bg-white shadow-xl">
-          <img src={gameSceneImg} alt="편집할 원본 그림" className="block h-auto w-full select-none" draggable={false}/>
-          <DifferenceEffects differences={preview} selectedId={current?.fill ? "current-edit" : undefined} selectionOnly={selectionOnly}/>
-          <svg viewBox="0 0 1000 562.5" preserveAspectRatio="none" className={`absolute inset-0 h-full w-full touch-none ${disabled ? "cursor-not-allowed" : tool === "FILL" ? "cursor-pointer" : "cursor-crosshair"}`} onPointerDown={begin} onPointerMove={move} onPointerUp={finish} onPointerCancel={finish}/>
-        </div>
+      <div className="relative overflow-hidden rounded-3xl border-4 border-white bg-white shadow-xl">
+        <img src={gameSceneImg} alt="따뜻한 거실과 귀여운 고양이" className="block h-auto w-full select-none" draggable={false}/>
+        <DifferenceEffects differences={preview} selectedId={current?.fill ? "current-edit" : undefined} selectionOnly={selectionOnly}/>
+        <svg
+          viewBox="0 0 1000 562.5"
+          preserveAspectRatio="none"
+          className={`absolute inset-0 h-full w-full touch-none ${disabled ? "cursor-not-allowed" : "cursor-pointer"}`}
+          onPointerDown={selectRegion}
+        />
 
-        <aside className={`${mobilePickerOpen ? "fixed" : "hidden"} bottom-3 right-3 z-40 max-h-[78vh] w-[min(16rem,calc(100vw-1.5rem))] overflow-y-auto rounded-2xl bg-white p-4 shadow-2xl lg:sticky lg:top-4 lg:block lg:max-h-none lg:w-auto lg:overflow-visible`}>
-          <div className="mb-3 flex items-center justify-between gap-2">
-            <div>
-              <h3 className="font-black text-slate-800">색상 선택</h3>
-              <p className="text-xs text-slate-500">{selectionOnly ? "선택한 영역에 적용할 색" : "연필 또는 다음 색칠 색상"}</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="h-10 w-10 rounded-xl border-2 border-white shadow ring-1 ring-slate-200" style={{ backgroundColor: color }}/>
-              <button type="button" onClick={() => setMobilePickerOpen(false)} className="rounded-lg bg-slate-100 p-2 text-slate-500 lg:hidden" aria-label="색상 선택 닫기"><X size={18}/></button>
-            </div>
-          </div>
-
-          <div
-            className="relative aspect-square w-full cursor-crosshair touch-none overflow-hidden rounded-xl ring-1 ring-slate-300"
-            style={{
-              backgroundColor: `hsl(${hue} 100% 50%)`,
-              backgroundImage: "linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, transparent)",
-            }}
-            onPointerDown={(event) => {
-              event.currentTarget.setPointerCapture(event.pointerId);
-              pickFromColorField(event);
-            }}
-            onPointerMove={(event) => {
-              if (event.buttons === 1) pickFromColorField(event);
-            }}
-          >
-            <span
-              className="pointer-events-none absolute h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow-[0_0_0_1px_#000]"
-              style={{ left: `${saturation}%`, top: `${100 - brightness}%` }}
+        <aside
+          aria-label="나무 색상 팔레트"
+          className="absolute right-2 top-2 z-20 h-28 w-40 rounded-[48%] border-[5px] border-[#9a5b24] shadow-2xl sm:right-4 sm:top-4 sm:h-36 sm:w-52"
+          style={{
+            background:
+              "radial-gradient(circle at 35% 28%, #f7d38b 0 8%, transparent 9%), repeating-linear-gradient(12deg, #dca65a 0 8px, #cf9148 9px 12px, #e3b56c 13px 20px)",
+          }}
+        >
+          <div className="absolute left-[3%] top-[34%] h-[30%] w-[18%] rounded-full bg-white/90 shadow-inner ring-2 ring-[#a56a32]" aria-hidden="true"/>
+          {paletteColors.map((candidate) => (
+            <button
+              key={candidate.name}
+              type="button"
+              title={candidate.name}
+              aria-label={candidate.name}
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={() => chooseColor(candidate.value)}
+              className={`absolute h-[20%] w-[18%] rounded-[45%_55%_48%_52%] border-2 transition hover:scale-110 ${candidate.position} ${color === candidate.value ? "border-white ring-2 ring-slate-900" : "border-white/60"}`}
+              style={{
+                background: `radial-gradient(circle at 35% 25%, rgba(255,255,255,.75), transparent 22%), ${candidate.value}`,
+                boxShadow: "0 3px 4px rgba(91,48,16,.35)",
+              }}
             />
-          </div>
-
-          <input
-            aria-label="색조"
-            type="range"
-            min="0"
-            max="359"
-            value={hue}
-            onChange={(event) => chooseFromPicker(Number(event.target.value), saturation, brightness)}
-            className="mt-4 h-4 w-full cursor-pointer appearance-none rounded-full"
-            style={{ background: "linear-gradient(to right,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)" }}
-          />
-
-          <label className="mt-4 block text-xs font-bold text-slate-500">
-            HEX 색상
-            <div className="mt-1 flex items-center gap-2">
-              <span className="h-9 w-9 shrink-0 rounded-lg border shadow-inner" style={{ backgroundColor: color }}/>
-              <input
-                value={color.toUpperCase()}
-                onChange={(event) => {
-                  const next = event.target.value;
-                  if (/^#[0-9A-Fa-f]{6}$/.test(next)) chooseColor(next);
-                }}
-                className="min-w-0 flex-1 rounded-lg border border-slate-200 px-3 py-2 font-mono text-sm uppercase outline-none focus:border-violet-500"
-                maxLength={7}
-              />
-            </div>
-          </label>
-
-          <p className="mt-3 rounded-xl bg-violet-50 px-3 py-2 text-xs font-bold text-violet-700">
-            {selectionOnly ? "색을 고르면 하이라이트된 영역에 바로 미리보기됩니다." : "색상 영역과 색조 막대로 원하는 색을 만들 수 있습니다."}
-          </p>
+          ))}
+          <span className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#82501f]/75 px-2 py-1 text-[9px] font-black text-white sm:text-[10px]">
+            {selectionOnly ? "색 선택" : "7 COLORS"}
+          </span>
         </aside>
-        {!mobilePickerOpen && (
-          <button type="button" onClick={() => setMobilePickerOpen(true)} className="fixed bottom-4 right-4 z-40 inline-flex items-center gap-2 rounded-full bg-violet-600 px-4 py-3 font-black text-white shadow-2xl lg:hidden">
-            <Palette size={19}/>색상
-          </button>
-        )}
       </div>
 
       <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
-        <button type="button" disabled={!strokes.length} onClick={() => setStrokes((items) => items.slice(0, -1))} className="inline-flex items-center gap-1 rounded-xl bg-white px-4 py-2 text-sm font-bold shadow disabled:opacity-40"><RotateCcw size={16}/>현재 획 취소</button>
-        <button type="button" disabled={!current} onClick={clearCurrent} className="inline-flex items-center gap-1 rounded-xl bg-red-50 px-4 py-2 text-sm font-bold text-red-600 disabled:opacity-40"><Trash2 size={16}/>현재 작업 삭제</button>
-        <button type="button" disabled={!current || selectionOnly || value.length >= GAME_CONFIG.differenceCount} onClick={saveCurrent} className="inline-flex items-center gap-1 rounded-xl bg-emerald-500 px-5 py-2 font-black text-white disabled:opacity-40"><Check size={17}/>차이점으로 저장</button>
+        <button type="button" disabled={!current} onClick={clearCurrent} className="inline-flex items-center gap-1 rounded-xl bg-red-50 px-4 py-2 text-sm font-bold text-red-600 disabled:opacity-40">
+          <Trash2 size={16}/>현재 작업 삭제
+        </button>
+        <button type="button" disabled={!current || selectionOnly || value.length >= GAME_CONFIG.differenceCount} onClick={saveCurrent} className="inline-flex items-center gap-1 rounded-xl bg-emerald-500 px-5 py-2 font-black text-white disabled:opacity-40">
+          <Check size={17}/>차이점으로 저장
+        </button>
       </div>
       <p className="mt-3 text-center text-sm font-bold text-violet-700">
-        {selectionOnly ? "선택한 영역의 외곽선을 확인하고 색상을 골라주세요." : "연필은 여러 획을 그린 뒤 저장하세요."} · 완료 {value.length}/{GAME_CONFIG.differenceCount}
+        {selectionOnly ? "하이라이트된 영역을 확인하고 나무 팔레트에서 색을 선택하세요." : "영역을 클릭하고 7가지 색 중 하나로 바꾸세요."} · 완료 {value.length}/{GAME_CONFIG.differenceCount}
       </p>
     </div>
   );
