@@ -106,6 +106,7 @@ export function DifferenceEffects({
   selectionOnly?: boolean;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const effectsKey = JSON.stringify(differences);
 
   useEffect(() => {
     const image = new Image();
@@ -160,7 +161,7 @@ export function DifferenceEffects({
         context.restore();
       });
     };
-  }, [differences, selectedId, selectionOnly]);
+  }, [effectsKey, selectedId, selectionOnly]);
 
   return <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 h-full w-full" />;
 }
