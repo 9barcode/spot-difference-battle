@@ -32,13 +32,21 @@ export interface DifferenceStroke {
   points: NormalizedPoint[];
   color: string;
   width: number;
+  tool: "PENCIL" | "ERASER";
+}
+
+export interface DifferenceFill {
+  seed: NormalizedPoint;
+  color: string;
+  tolerance: number;
 }
 
 export interface Difference {
   id: string;
   kind: DifferenceKind;
   region: AnswerRegion;
-  stroke?: DifferenceStroke;
+  strokes?: DifferenceStroke[];
+  fill?: DifferenceFill;
 }
 
 export interface PlayerResult {
