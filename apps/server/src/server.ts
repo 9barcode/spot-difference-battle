@@ -5,10 +5,12 @@ import Fastify, { type FastifyInstance } from "fastify";
 import { randomUUID } from "node:crypto";
 import { Server, type Socket } from "socket.io";
 import { MatchRegistry } from "./match-registry.js";
+import { InMemoryMatchStore, type MatchStore } from "./match-store.js";
 
 export interface GameServerOptions {
   webOrigin: string;
   reconnectGraceMs?: number;
+  matchStore?: MatchStore;
 }
 
 interface SocketData {
@@ -33,7 +35,11 @@ type GameSocket = Socket<
 export async function createGameServer(options: GameServerOptions): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
   await app.register(cors, { origin: options.webOrigin });
-  app.get("/health", async () => ({ status: "ok" }));
+  const matchStore = options.matchStore ?? new InMemoryMatchStore();
+  app.get("/health", async () => {
+    const database = await matchStore.health();
+    return { status: database ? "ok" : "degraded", server: "ok", database };
+  });
 
   const io = new Server<
     ClientToServerEvents,
@@ -45,6 +51,7 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
   const sessionsByToken = new Map<string, GuestSession>();
   const sessionsByPlayer = new Map<string, GuestSession>();
   const reconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  const persistedMatches = new Set<string>();
   const reconnectGraceMs =
     options.reconnectGraceMs ?? GAME_CONFIG.reconnectGraceSeconds * 1_000;
   let waitingPlayer: { playerId: string; socketId: string; nickname: string } | null = null;
@@ -58,6 +65,7 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
     };
     sessionsByToken.set(session.guestToken, session);
     sessionsByPlayer.set(session.playerId, session);
+    void matchStore.upsertGuest(session).catch((error) => app.log.error(error));
     return session;
   }
 
@@ -77,6 +85,21 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
     }
   }
 
+  async function persistIfFinished(match: GameMatch): Promise<void> {
+    if (
+      persistedMatches.has(match.matchId) ||
+      (match.currentState !== "FINISHED" && match.currentState !== "CANCELLED")
+    ) {
+      return;
+    }
+    try {
+      await matchStore.saveMatch(match.snapshot());
+      persistedMatches.add(match.matchId);
+    } catch (error) {
+      app.log.error(error);
+    }
+  }
+
   function emitGameError(socket: GameSocket, error: unknown): void {
     if (error instanceof GameRuleError) {
       socket.emit("game:error", { code: error.code, message: error.message });
@@ -87,6 +110,20 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
       message: "경기 처리 중 오류가 발생했습니다.",
     });
     app.log.error(error);
+  }
+
+  function handleActionError(socket: GameSocket, matchId: string, error: unknown): void {
+    if (error instanceof GameRuleError) {
+      emitGameError(socket, error);
+      return;
+    }
+    const match = registry.getCurrentForPlayer(socket.data.playerId);
+    if (match?.matchId === matchId) {
+      match.cancel();
+      emitSnapshots(match);
+      void persistIfFinished(match);
+    }
+    emitGameError(socket, error);
   }
 
   function resumeMatch(socket: GameSocket, session: GuestSession): void {
@@ -114,6 +151,7 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
       if (!match) return;
       match.forfeit(session.playerId);
       emitSnapshots(match);
+      void persistIfFinished(match);
     }, reconnectGraceMs);
     timer.unref();
     reconnectTimers.set(session.playerId, timer);
@@ -146,6 +184,7 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
         return;
       }
       session.nickname = normalizedNickname;
+      void matchStore.upsertGuest(session).catch((error) => app.log.error(error));
 
       if (!waitingPlayer || waitingPlayer.playerId === session.playerId) {
         waitingPlayer = {
@@ -200,7 +239,7 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
         match.markReady(session.playerId, Date.now());
         emitSnapshots(match);
       } catch (error) {
-        emitGameError(socket, error);
+        handleActionError(socket, matchId, error);
       }
     });
 
@@ -210,7 +249,7 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
         match.submitDifferences(session.playerId, differences, Date.now());
         emitSnapshots(match);
       } catch (error) {
-        emitGameError(socket, error);
+        handleActionError(socket, matchId, error);
       }
     });
 
@@ -222,8 +261,9 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
           match.guess(session.playerId, point, Date.now()),
         );
         emitSnapshots(match);
+        void persistIfFinished(match);
       } catch (error) {
-        emitGameError(socket, error);
+        handleActionError(socket, matchId, error);
       }
     });
 
@@ -233,7 +273,7 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
         socket.emit("game:hint-result", match.useHint(session.playerId, Date.now()));
         emitSnapshots(match);
       } catch (error) {
-        emitGameError(socket, error);
+        handleActionError(socket, matchId, error);
       }
     });
 
@@ -242,8 +282,35 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
         const match = registry.getForPlayer(matchId, session.playerId);
         match.forfeit(session.playerId);
         emitSnapshots(match);
+        void persistIfFinished(match);
       } catch (error) {
-        emitGameError(socket, error);
+        handleActionError(socket, matchId, error);
+      }
+    });
+
+    socket.on("game:report", async ({ matchId, reason, details }) => {
+      try {
+        const match = registry.getForPlayer(matchId, session.playerId);
+        if (match.currentState !== "FINISHED" && match.currentState !== "CANCELLED") {
+          throw new GameRuleError("MATCH_NOT_FINISHED", "경기 종료 후 신고할 수 있습니다.");
+        }
+        await persistIfFinished(match);
+        const reportId = await matchStore.createReport({
+          matchId,
+          reporterPlayerId: session.playerId,
+          reason,
+          details: details?.trim().slice(0, 500),
+        });
+        socket.emit("game:report-result", { reportId });
+      } catch (error) {
+        if ((error as Error).message === "DUPLICATE_REPORT") {
+          socket.emit("game:error", {
+            code: "DUPLICATE_REPORT",
+            message: "이미 이 경기를 신고했습니다.",
+          });
+        } else {
+          emitGameError(socket, error);
+        }
       }
     });
 
@@ -262,7 +329,10 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
   });
 
   const expiryTimer = setInterval(() => {
-    for (const match of registry.expire(Date.now())) emitSnapshots(match);
+    for (const match of registry.expire(Date.now())) {
+      emitSnapshots(match);
+      void persistIfFinished(match);
+    }
   }, 250);
   expiryTimer.unref();
 
@@ -270,6 +340,7 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
     clearInterval(expiryTimer);
     for (const timer of reconnectTimers.values()) clearTimeout(timer);
     io.close();
+    await matchStore.close();
   });
 
   return app;

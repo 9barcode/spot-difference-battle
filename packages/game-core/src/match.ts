@@ -49,6 +49,7 @@ export class GameMatch {
   private deadlineMs: number | null = null;
   private winnerId: string | null = null;
   private endReason: GameEndReason | null = null;
+  private cancelReason: string | null = null;
   private readonly players: [InternalPlayer, InternalPlayer];
 
   constructor(
@@ -210,6 +211,7 @@ export class GameMatch {
           : null,
       myFoundIds: viewer ? [...viewer.foundIds] : [],
       endReason: this.endReason,
+      cancelReason: this.cancelReason,
     };
   }
 
@@ -231,9 +233,10 @@ export class GameMatch {
     this.finish(this.getOpponent(playerId).playerId, "FORFEIT");
   }
 
-  cancel(): void {
+  cancel(reason = "경기를 계속할 수 없는 서버 오류가 발생했습니다."): void {
     if (this.state === "FINISHED" || this.state === "CANCELLED") return;
     this.endReason = "CANCELLED";
+    this.cancelReason = reason;
     this.transition("CANCELLED", null);
   }
 

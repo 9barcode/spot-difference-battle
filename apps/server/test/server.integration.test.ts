@@ -2,6 +2,7 @@ import type {
   ClientToServerEvents,
   Difference,
   GameSnapshot,
+  GameErrorPayload,
   MatchFoundPayload,
   SessionReadyPayload,
   ServerToClientEvents,
@@ -10,6 +11,7 @@ import type { AddressInfo } from "node:net";
 import { io as createClient, type Socket } from "socket.io-client";
 import { afterEach, describe, expect, it } from "vitest";
 import { createGameServer } from "../src/server.js";
+import { InMemoryMatchStore } from "../src/match-store.js";
 
 type TestSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 
@@ -68,7 +70,11 @@ function waitForConnection(
 
 describe("game server", () => {
   it("lets two clients complete a server-authoritative match", async () => {
-    const app = await createGameServer({ webOrigin: "http://localhost:5173" });
+    const matchStore = new InMemoryMatchStore();
+    const app = await createGameServer({
+      webOrigin: "http://localhost:5173",
+      matchStore,
+    });
     await app.listen({ host: "127.0.0.1", port: 0 });
 
     try {
@@ -103,6 +109,16 @@ describe("game server", () => {
       const result = await finished;
       expect(result).toMatchObject({ state: "FINISHED", winnerId: firstMatch.playerId });
       expect(result.players.find((player) => player.playerId === firstMatch.playerId)?.foundCount).toBe(3);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(matchStore.matches.has(firstMatch.matchId)).toBe(true);
+
+      const reportResult = once<{ reportId: string }>(first, "game:report-result");
+      first.emit("game:report", { matchId: firstMatch.matchId, reason: "UNFAIR" });
+      await expect(reportResult).resolves.toMatchObject({ reportId: expect.any(String) });
+
+      const duplicateError = once<GameErrorPayload>(first, "game:error");
+      first.emit("game:report", { matchId: firstMatch.matchId, reason: "UNFAIR" });
+      await expect(duplicateError).resolves.toMatchObject({ code: "DUPLICATE_REPORT" });
     } finally {
       for (const socket of sockets.splice(0)) socket.disconnect();
       await app.close();
@@ -189,6 +205,43 @@ describe("game server", () => {
         endReason: "FORFEIT",
       });
       expect(firstMatch.playerId).not.toBe(secondMatch.playerId);
+    } finally {
+      for (const socket of sockets.splice(0)) socket.disconnect();
+      await app.close();
+    }
+  });
+
+  it("keeps the authoritative result when persistence fails", async () => {
+    class FailingStore extends InMemoryMatchStore {
+      override async saveMatch(): Promise<void> {
+        throw new Error("database unavailable");
+      }
+    }
+    const app = await createGameServer({
+      webOrigin: "http://localhost:5173",
+      matchStore: new FailingStore(),
+    });
+    await app.listen({ host: "127.0.0.1", port: 0 });
+
+    try {
+      const port = (app.server.address() as AddressInfo).port;
+      const first = createClient(`http://127.0.0.1:${port}`) as TestSocket;
+      const second = createClient(`http://127.0.0.1:${port}`) as TestSocket;
+      sockets.push(first, second);
+      await Promise.all([once(first, "connect"), once(second, "connect")]);
+
+      const firstFound = once<MatchFoundPayload>(first, "match:found");
+      const secondFound = once<MatchFoundPayload>(second, "match:found");
+      first.emit("queue:join", { nickname: "첫째" });
+      second.emit("queue:join", { nickname: "둘째" });
+      const [firstMatch, secondMatch] = await Promise.all([firstFound, secondFound]);
+
+      const finished = waitForState(second, "FINISHED");
+      first.emit("game:forfeit", { matchId: firstMatch.matchId });
+      await expect(finished).resolves.toMatchObject({
+        winnerId: secondMatch.playerId,
+        endReason: "FORFEIT",
+      });
     } finally {
       for (const socket of sockets.splice(0)) socket.disconnect();
       await app.close();

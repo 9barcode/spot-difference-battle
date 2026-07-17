@@ -50,3 +50,14 @@ pnpm dev
 - 서버 상태 확인: `http://localhost:3001/health`
 
 전체 타입 검사와 게임 규칙 테스트는 각각 `pnpm check`, `pnpm test`로 실행합니다. UI만 실행하려면 [UI/README.md](UI/README.md)를 참고합니다.
+
+## 로컬 데이터베이스
+
+Docker가 설치되어 있다면 PostgreSQL을 다음과 같이 준비할 수 있습니다.
+
+```sh
+docker compose up -d postgres
+pnpm --filter @spot-battle/server db:migrate
+```
+
+`DATABASE_URL`이 설정되면 서버는 경기 결과, 게스트와 신고를 PostgreSQL에 저장합니다. 설정하지 않은 로컬 환경에서는 메모리 저장소를 사용합니다. 필요한 환경변수는 `.env.example`을 참고합니다.

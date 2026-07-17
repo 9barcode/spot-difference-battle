@@ -74,6 +74,7 @@ export interface PlayerProgress {
 }
 
 export type GameEndReason = "COMPLETED" | "TIMEOUT" | "FORFEIT" | "CANCELLED";
+export type ReportReason = "UNFAIR" | "INAPPROPRIATE" | "SYSTEM_ERROR" | "OTHER";
 
 export interface GameSnapshot {
   matchId: string;
@@ -86,6 +87,7 @@ export interface GameSnapshot {
   problem: Difference[] | null;
   myFoundIds: string[];
   endReason: GameEndReason | null;
+  cancelReason: string | null;
 }
 
 export interface SessionReadyPayload {
@@ -109,6 +111,10 @@ export interface GameErrorPayload {
   message: string;
 }
 
+export interface ReportResultPayload {
+  reportId: string;
+}
+
 export interface ServerToClientEvents {
   "session:ready": (payload: SessionReadyPayload) => void;
   "match:found": (payload: MatchFoundPayload) => void;
@@ -117,6 +123,7 @@ export interface ServerToClientEvents {
   "game:guess-result": (payload: GuessResult) => void;
   "game:hint-result": (payload: HintResult) => void;
   "game:error": (payload: GameErrorPayload) => void;
+  "game:report-result": (payload: ReportResultPayload) => void;
 }
 
 export interface ClientToServerEvents {
@@ -127,4 +134,9 @@ export interface ClientToServerEvents {
   "game:guess": (payload: { matchId: string; point: NormalizedPoint }) => void;
   "game:hint": (payload: { matchId: string }) => void;
   "game:forfeit": (payload: { matchId: string }) => void;
+  "game:report": (payload: {
+    matchId: string;
+    reason: ReportReason;
+    details?: string;
+  }) => void;
 }

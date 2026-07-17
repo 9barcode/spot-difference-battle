@@ -7,6 +7,7 @@ import type {
   HintResult,
   MatchFoundPayload,
   NormalizedPoint,
+  ReportReason,
   ServerToClientEvents,
   SessionReadyPayload,
 } from "@spot-battle/shared";
@@ -33,6 +34,7 @@ export function useGameClient() {
   const [foundIds, setFoundIds] = useState<Set<string>>(new Set());
   const [hintArea, setHintArea] = useState<HintResult["area"] | null>(null);
   const [error, setError] = useState<GameErrorPayload | null>(null);
+  const [reportId, setReportId] = useState<string | null>(null);
 
   useEffect(() => {
     const socket: GameSocket = io(SERVER_URL, {
@@ -51,6 +53,7 @@ export function useGameClient() {
       setPhase("IN_GAME");
       setFoundIds(new Set());
       setLastGuess(null);
+      setReportId(null);
     });
     socket.on("game:snapshot", (nextSnapshot) => {
       setSnapshot(nextSnapshot);
@@ -67,6 +70,7 @@ export function useGameClient() {
       window.setTimeout(() => setHintArea(null), 2_000);
     });
     socket.on("game:error", setError);
+    socket.on("game:report-result", ({ reportId: nextReportId }) => setReportId(nextReportId));
     socket.on("queue:left", () => setPhase("LOBBY"));
 
     return () => {
@@ -105,6 +109,7 @@ export function useGameClient() {
     setMatch(null);
     setSnapshot(null);
     setFoundIds(new Set());
+    setReportId(null);
     setPhase("LOBBY");
   }, []);
 
@@ -118,6 +123,7 @@ export function useGameClient() {
     foundIds,
     hintArea,
     error,
+    reportId,
     clearError: () => setError(null),
     saveNickname,
     startMatching,
@@ -130,6 +136,9 @@ export function useGameClient() {
     hint: () => match && socketRef.current?.emit("game:hint", { matchId: match.matchId }),
     forfeit: () =>
       match && socketRef.current?.emit("game:forfeit", { matchId: match.matchId }),
+    report: (reason: ReportReason, details?: string) =>
+      match &&
+      socketRef.current?.emit("game:report", { matchId: match.matchId, reason, details }),
     returnToLobby,
   };
 }
