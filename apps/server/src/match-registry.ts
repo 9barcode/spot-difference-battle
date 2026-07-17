@@ -32,6 +32,11 @@ export class MatchRegistry {
     return match;
   }
 
+  getCurrentForPlayer(playerId: string): GameMatch | null {
+    const matchId = this.playerMatches.get(playerId);
+    return matchId ? this.matches.get(matchId) ?? null : null;
+  }
+
   expire(nowMs: number): GameMatch[] {
     const changed: GameMatch[] = [];
     for (const match of this.matches.values()) {
@@ -40,4 +45,3 @@ export class MatchRegistry {
     return changed;
   }
 }
-

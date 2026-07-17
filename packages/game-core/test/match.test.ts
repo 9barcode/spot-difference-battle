@@ -127,4 +127,26 @@ describe("GameMatch lifecycle", () => {
 
     expect(match.snapshot()).toMatchObject({ state: "FINISHED", winnerId: "p2" });
   });
+
+  it("tracks reconnecting players and restores their connection", () => {
+    const match = createMatch();
+    match.setConnectionStatus("p1", "RECONNECTING");
+    expect(match.snapshot().players[0]?.connectionStatus).toBe("RECONNECTING");
+
+    match.setConnectionStatus("p1", "CONNECTED");
+    expect(match.snapshot().players[0]?.connectionStatus).toBe("CONNECTED");
+  });
+
+  it("awards a forfeit win to the opponent", () => {
+    const match = createMatch();
+    startEditing(match);
+    match.forfeit("p1");
+
+    expect(match.snapshot()).toMatchObject({
+      state: "FINISHED",
+      winnerId: "p2",
+      endReason: "FORFEIT",
+    });
+    expect(match.snapshot().players[0]?.connectionStatus).toBe("FORFEITED");
+  });
 });

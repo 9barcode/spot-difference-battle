@@ -8,6 +8,7 @@ import type {
   MatchFoundPayload,
   NormalizedPoint,
   ServerToClientEvents,
+  SessionReadyPayload,
 } from "@spot-battle/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { io, type Socket } from "socket.io-client";
@@ -17,6 +18,7 @@ type LobbyPhase = "NICKNAME" | "LOBBY" | "MATCHING" | "IN_GAME";
 
 const SERVER_URL = import.meta.env.VITE_SERVER_URL ?? "http://localhost:3001";
 const NICKNAME_KEY = "spot-battle.nickname";
+const GUEST_TOKEN_KEY = "spot-battle.guest-token";
 
 export function useGameClient() {
   const socketRef = useRef<GameSocket | null>(null);
@@ -33,8 +35,15 @@ export function useGameClient() {
   const [error, setError] = useState<GameErrorPayload | null>(null);
 
   useEffect(() => {
-    const socket: GameSocket = io(SERVER_URL, { reconnection: true });
+    const socket: GameSocket = io(SERVER_URL, {
+      reconnection: true,
+      auth: { guestToken: localStorage.getItem(GUEST_TOKEN_KEY) },
+    });
     socketRef.current = socket;
+    socket.on("session:ready", ({ guestToken }: SessionReadyPayload) => {
+      localStorage.setItem(GUEST_TOKEN_KEY, guestToken);
+      socket.auth = { guestToken };
+    });
     socket.on("connect", () => setConnected(true));
     socket.on("disconnect", () => setConnected(false));
     socket.on("match:found", (payload) => {
@@ -43,7 +52,10 @@ export function useGameClient() {
       setFoundIds(new Set());
       setLastGuess(null);
     });
-    socket.on("game:snapshot", setSnapshot);
+    socket.on("game:snapshot", (nextSnapshot) => {
+      setSnapshot(nextSnapshot);
+      setFoundIds(new Set(nextSnapshot.myFoundIds));
+    });
     socket.on("game:guess-result", (result) => {
       setLastGuess(result);
       if (result.correct && result.differenceId) {
@@ -116,6 +128,8 @@ export function useGameClient() {
     guess: (point: NormalizedPoint) =>
       match && socketRef.current?.emit("game:guess", { matchId: match.matchId, point }),
     hint: () => match && socketRef.current?.emit("game:hint", { matchId: match.matchId }),
+    forfeit: () =>
+      match && socketRef.current?.emit("game:forfeit", { matchId: match.matchId }),
     returnToLobby,
   };
 }

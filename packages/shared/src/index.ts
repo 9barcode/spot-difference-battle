@@ -55,7 +55,10 @@ export interface PlayerProgress {
   foundCount: number;
   wrongAnswerCount: number;
   hintsRemaining: number;
+  connectionStatus: "CONNECTED" | "RECONNECTING" | "FORFEITED";
 }
+
+export type GameEndReason = "COMPLETED" | "TIMEOUT" | "FORFEIT" | "CANCELLED";
 
 export interface GameSnapshot {
   matchId: string;
@@ -66,6 +69,13 @@ export interface GameSnapshot {
   players: [PlayerProgress, PlayerProgress];
   winnerId: string | null;
   problem: Difference[] | null;
+  myFoundIds: string[];
+  endReason: GameEndReason | null;
+}
+
+export interface SessionReadyPayload {
+  guestToken: string;
+  playerId: string;
 }
 
 export interface GuessResult {
@@ -85,6 +95,7 @@ export interface GameErrorPayload {
 }
 
 export interface ServerToClientEvents {
+  "session:ready": (payload: SessionReadyPayload) => void;
   "match:found": (payload: MatchFoundPayload) => void;
   "queue:left": () => void;
   "game:snapshot": (payload: GameSnapshot) => void;
@@ -100,4 +111,5 @@ export interface ClientToServerEvents {
   "game:submit": (payload: { matchId: string; differences: Difference[] }) => void;
   "game:guess": (payload: { matchId: string; point: NormalizedPoint }) => void;
   "game:hint": (payload: { matchId: string }) => void;
+  "game:forfeit": (payload: { matchId: string }) => void;
 }

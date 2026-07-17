@@ -4,6 +4,7 @@ import {
   type Difference,
   type GameSnapshot,
   type GameState,
+  type GameEndReason,
   type GuessResult,
   type HintResult,
   type NormalizedPoint,
@@ -39,6 +40,7 @@ interface InternalPlayer extends MatchPlayer {
   wrongAnswerCount: number;
   hintsUsed: number;
   lastCorrectAtMs: number | null;
+  connectionStatus: "CONNECTED" | "RECONNECTING" | "FORFEITED";
 }
 
 export class GameMatch {
@@ -46,6 +48,7 @@ export class GameMatch {
   private stateVersion = 1;
   private deadlineMs: number | null = null;
   private winnerId: string | null = null;
+  private endReason: GameEndReason | null = null;
   private readonly players: [InternalPlayer, InternalPlayer];
 
   constructor(
@@ -70,6 +73,7 @@ export class GameMatch {
       wrongAnswerCount: 0,
       hintsUsed: 0,
       lastCorrectAtMs: null,
+      connectionStatus: "CONNECTED",
     })) as [InternalPlayer, InternalPlayer];
   }
 
@@ -134,7 +138,7 @@ export class GameMatch {
 
     const remainingTimeMs = this.getPlayerRemainingTime(player, nowMs);
     if (player.foundIds.size === GAME_CONFIG.differenceCount) {
-      this.finish(playerId);
+      this.finish(playerId, "COMPLETED");
     } else if (remainingTimeMs === 0) {
       this.finishByScore();
     }
@@ -181,7 +185,7 @@ export class GameMatch {
     }
 
     if (this.state === "FINDING") {
-      this.finishByScore();
+      this.finishByScore("TIMEOUT");
       return true;
     }
 
@@ -189,6 +193,7 @@ export class GameMatch {
   }
 
   snapshot(viewerId?: string): GameSnapshot {
+    const viewer = viewerId ? this.getPlayer(viewerId) : null;
     const problemOwner = viewerId ? this.getOpponent(viewerId) : null;
     const canViewProblem = this.state === "FINDING" || this.state === "FINISHED";
     return {
@@ -206,7 +211,33 @@ export class GameMatch {
         canViewProblem && problemOwner?.differences
           ? structuredClone(problemOwner.differences)
           : null,
+      myFoundIds: viewer ? [...viewer.foundIds] : [],
+      endReason: this.endReason,
     };
+  }
+
+  setConnectionStatus(
+    playerId: string,
+    status: "CONNECTED" | "RECONNECTING",
+  ): void {
+    if (this.state === "FINISHED" || this.state === "CANCELLED") return;
+    const player = this.getPlayer(playerId);
+    if (player.connectionStatus === status) return;
+    player.connectionStatus = status;
+    this.bumpVersion();
+  }
+
+  forfeit(playerId: string): void {
+    if (this.state === "FINISHED" || this.state === "CANCELLED") return;
+    const player = this.getPlayer(playerId);
+    player.connectionStatus = "FORFEITED";
+    this.finish(this.getOpponent(playerId).playerId, "FORFEIT");
+  }
+
+  cancel(): void {
+    if (this.state === "FINISHED" || this.state === "CANCELLED") return;
+    this.endReason = "CANCELLED";
+    this.transition("CANCELLED", null);
   }
 
   private startFinding(nowMs: number): void {
@@ -214,13 +245,17 @@ export class GameMatch {
     this.transition("FINDING", nowMs + GAME_CONFIG.findingDurationSeconds * 1_000);
   }
 
-  private finish(winnerId: string | null): void {
+  private finish(winnerId: string | null, reason: GameEndReason): void {
     this.winnerId = winnerId;
+    this.endReason = reason;
     this.transition("FINISHED", null);
   }
 
-  private finishByScore(): void {
-    this.finish(determineWinner(this.toResult(this.players[0]), this.toResult(this.players[1])));
+  private finishByScore(reason: GameEndReason = "TIMEOUT"): void {
+    this.finish(
+      determineWinner(this.toResult(this.players[0]), this.toResult(this.players[1])),
+      reason,
+    );
   }
 
   private requireBeforeDeadline(playerId: string, nowMs: number): void {
@@ -282,6 +317,7 @@ export class GameMatch {
       foundCount: player.foundIds.size,
       wrongAnswerCount: player.wrongAnswerCount,
       hintsRemaining: GAME_CONFIG.hintsPerGame - player.hintsUsed,
+      connectionStatus: player.connectionStatus,
     };
   }
 

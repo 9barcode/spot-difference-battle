@@ -3,6 +3,7 @@ import type {
   Difference,
   GameSnapshot,
   MatchFoundPayload,
+  SessionReadyPayload,
   ServerToClientEvents,
 } from "@spot-battle/shared";
 import type { AddressInfo } from "node:net";
@@ -39,6 +40,24 @@ function waitForState(socket: TestSocket, state: GameSnapshot["state"]): Promise
     const timeout = setTimeout(() => reject(new Error(`${state} state timed out`)), 3_000);
     const listener = (snapshot: GameSnapshot) => {
       if (snapshot.state !== state) return;
+      clearTimeout(timeout);
+      socket.off("game:snapshot", listener);
+      resolve(snapshot);
+    };
+    socket.on("game:snapshot", listener);
+  });
+}
+
+function waitForConnection(
+  socket: TestSocket,
+  playerId: string,
+  status: "CONNECTED" | "RECONNECTING" | "FORFEITED",
+): Promise<GameSnapshot> {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error(`${status} connection timed out`)), 3_000);
+    const listener = (snapshot: GameSnapshot) => {
+      const player = snapshot.players.find((candidate) => candidate.playerId === playerId);
+      if (player?.connectionStatus !== status) return;
       clearTimeout(timeout);
       socket.off("game:snapshot", listener);
       resolve(snapshot);
@@ -84,6 +103,92 @@ describe("game server", () => {
       const result = await finished;
       expect(result).toMatchObject({ state: "FINISHED", winnerId: firstMatch.playerId });
       expect(result.players.find((player) => player.playerId === firstMatch.playerId)?.foundCount).toBe(3);
+    } finally {
+      for (const socket of sockets.splice(0)) socket.disconnect();
+      await app.close();
+    }
+  });
+
+  it("restores the same player and match with a guest token", async () => {
+    const app = await createGameServer({
+      webOrigin: "http://localhost:5173",
+      reconnectGraceMs: 200,
+    });
+    await app.listen({ host: "127.0.0.1", port: 0 });
+
+    try {
+      const port = (app.server.address() as AddressInfo).port;
+      const url = `http://127.0.0.1:${port}`;
+      const first = createClient(url) as TestSocket;
+      const second = createClient(url) as TestSocket;
+      sockets.push(first, second);
+      const firstSessionPromise = once<SessionReadyPayload>(first, "session:ready");
+      await Promise.all([once(first, "connect"), once(second, "connect")]);
+      const firstSession = await firstSessionPromise;
+
+      const firstFound = once<MatchFoundPayload>(first, "match:found");
+      const secondFound = once<MatchFoundPayload>(second, "match:found");
+      first.emit("queue:join", { nickname: "첫째" });
+      second.emit("queue:join", { nickname: "둘째" });
+      const [firstMatch, secondMatch] = await Promise.all([firstFound, secondFound]);
+
+      const reconnecting = waitForConnection(second, firstSession.playerId, "RECONNECTING");
+      first.disconnect();
+      await reconnecting;
+
+      const resumed = createClient(url, {
+        autoConnect: false,
+        auth: { guestToken: firstSession.guestToken },
+      }) as TestSocket;
+      sockets.push(resumed);
+      const resumedSession = once<SessionReadyPayload>(resumed, "session:ready");
+      const resumedMatch = once<MatchFoundPayload>(resumed, "match:found");
+      const connectedAgain = waitForConnection(second, firstSession.playerId, "CONNECTED");
+      resumed.connect();
+
+      await expect(resumedSession).resolves.toMatchObject({ playerId: firstSession.playerId });
+      await expect(resumedMatch).resolves.toMatchObject({ matchId: firstMatch.matchId });
+      await connectedAgain;
+
+      const finished = waitForState(second, "FINISHED");
+      resumed.emit("game:forfeit", { matchId: firstMatch.matchId });
+      await expect(finished).resolves.toMatchObject({
+        winnerId: secondMatch.playerId,
+        endReason: "FORFEIT",
+      });
+    } finally {
+      for (const socket of sockets.splice(0)) socket.disconnect();
+      await app.close();
+    }
+  });
+
+  it("forfeits a disconnected player after the grace period", async () => {
+    const app = await createGameServer({
+      webOrigin: "http://localhost:5173",
+      reconnectGraceMs: 50,
+    });
+    await app.listen({ host: "127.0.0.1", port: 0 });
+
+    try {
+      const port = (app.server.address() as AddressInfo).port;
+      const first = createClient(`http://127.0.0.1:${port}`) as TestSocket;
+      const second = createClient(`http://127.0.0.1:${port}`) as TestSocket;
+      sockets.push(first, second);
+      await Promise.all([once(first, "connect"), once(second, "connect")]);
+
+      const firstFound = once<MatchFoundPayload>(first, "match:found");
+      const secondFound = once<MatchFoundPayload>(second, "match:found");
+      first.emit("queue:join", { nickname: "첫째" });
+      second.emit("queue:join", { nickname: "둘째" });
+      const [firstMatch, secondMatch] = await Promise.all([firstFound, secondFound]);
+
+      const finished = waitForState(second, "FINISHED");
+      first.disconnect();
+      await expect(finished).resolves.toMatchObject({
+        winnerId: secondMatch.playerId,
+        endReason: "FORFEIT",
+      });
+      expect(firstMatch.playerId).not.toBe(secondMatch.playerId);
     } finally {
       for (const socket of sockets.splice(0)) socket.disconnect();
       await app.close();
