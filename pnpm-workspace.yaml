@@ -1,0 +1,11 @@
+packages:
+  - "UI"
+  - "apps/*"
+  - "packages/*"
+
+onlyBuiltDependencies:
+  - "@tailwindcss/oxide"
+  - "esbuild"
+allowBuilds:
+  '@tailwindcss/oxide': true
+  esbuild: true

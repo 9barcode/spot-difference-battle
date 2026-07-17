@@ -1,0 +1,16 @@
+{
+  "name": "spot-difference-battle",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@11.9.0",
+  "scripts": {
+    "build": "pnpm -r --if-present build",
+    "check": "pnpm -r --if-present check",
+    "dev": "pnpm --parallel --filter @spot-battle/web --filter @spot-battle/server dev",
+    "test": "pnpm -r --if-present test"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
+}

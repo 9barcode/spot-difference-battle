@@ -15,7 +15,10 @@
 
 ## 프로젝트 구성
 
-- `UI/`: Figma에서 생성한 프론트엔드 시안
+- `UI/`: React와 Vite 기반 웹 앱 및 Figma 시안
+- `apps/server/`: Fastify와 Socket.IO 기반 게임 서버
+- `packages/shared/`: 웹과 서버가 공유하는 타입과 게임 설정
+- `packages/game-core/`: 서버 권한 게임 규칙과 판정 로직
 - `docs/`: 게임 기획, 규칙, 화면, 기술 및 테스트 문서
 - `spot_difference_game_mockup_editable.svg`: 편집 가능한 화면 목업
 
@@ -34,6 +37,16 @@
 
 문서 간 내용이 충돌할 경우 실제 판정 수치는 `GAME_RULES.md`, MVP 범위와 제품 방향은 `GAME_DESIGN.md`를 우선합니다.
 
-## UI 시안 실행
+## 로컬 실행
 
-UI 프로젝트의 실행 방법은 [UI/README.md](UI/README.md)를 참고합니다.
+Node.js와 pnpm이 필요합니다.
+
+```sh
+pnpm install
+pnpm dev
+```
+
+- 웹: `http://localhost:5173`
+- 서버 상태 확인: `http://localhost:3001/health`
+
+전체 타입 검사와 게임 규칙 테스트는 각각 `pnpm check`, `pnpm test`로 실행합니다. UI만 실행하려면 [UI/README.md](UI/README.md)를 참고합니다.

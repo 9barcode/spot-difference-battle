@@ -483,7 +483,7 @@ function EditorScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
     setTimeout(() => setClickFx(null), 700);
     if (differences.length < 5) {
       const opts = diffLabels[selectedTool] || ["차이점"];
-      const label = opts[Math.floor(Math.random() * opts.length)];
+      const label = opts[Math.floor(Math.random() * opts.length)] ?? "차이점";
       setDifferences(d => [...d, { type: selectedTool, label, x, y }]);
     }
   }, [differences.length, selectedTool]);
@@ -990,7 +990,7 @@ function RankingScreen() {
       {/* Podium (global only) */}
       {tab === "global" && (
         <div className="flex items-end justify-center gap-4 mb-6">
-          {[GLOBAL_PLAYERS[1], GLOBAL_PLAYERS[0], GLOBAL_PLAYERS[2]].map((p, i) => {
+          {[GLOBAL_PLAYERS[1]!, GLOBAL_PLAYERS[0]!, GLOBAL_PLAYERS[2]!].map((p, i) => {
             const heights = ["h-20", "h-28", "h-16"];
             const bgs = ["bg-gray-200", "bg-yellow-300", "bg-amber-300/70"];
             const rank = [2, 1, 3];
