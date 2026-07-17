@@ -3,7 +3,29 @@ import { Check, Eraser, MousePointer2, Pencil, RotateCcw, Trash2 } from "lucide-
 import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import gameSceneImg from "@/imports/image.png";
 
-const COLORS = ["#ef4444", "#3b82f6", "#22c55e", "#facc15", "#a855f7", "#ffffff"];
+function hslToHex(hue: number, saturation: number, lightness: number): string {
+  const s = saturation / 100;
+  const l = lightness / 100;
+  const chroma = (1 - Math.abs(2 * l - 1)) * s;
+  const x = chroma * (1 - Math.abs((hue / 60) % 2 - 1));
+  const match = l - chroma / 2;
+  const [r, g, b] =
+    hue < 60 ? [chroma, x, 0] :
+    hue < 120 ? [x, chroma, 0] :
+    hue < 180 ? [0, chroma, x] :
+    hue < 240 ? [0, x, chroma] :
+    hue < 300 ? [x, 0, chroma] : [chroma, 0, x];
+  return `#${[r, g, b].map((value) => Math.round((value + match) * 255).toString(16).padStart(2, "0")).join("")}`;
+}
+
+const PALETTE = Array.from({ length: 120 }, (_, index) => {
+  const column = index % 12;
+  const row = Math.floor(index / 12);
+  const hue = column * 30;
+  const saturation = row < 5 ? 82 : 52;
+  const lightness = 24 + (row % 5) * 14;
+  return hslToHex(hue, saturation, lightness);
+});
 type Tool = "FILL" | "PENCIL" | "ERASER";
 
 function hexToRgb(hex: string): [number, number, number] {
@@ -37,7 +59,7 @@ function paintConnectedRegion(
   source: ImageData,
   output: ImageData,
   fill: DifferenceFill,
-): void {
+): Uint8Array {
   const { width, height, data } = source;
   const startX = Math.min(width - 1, Math.max(0, Math.floor(fill.seed.x * width)));
   const startY = Math.min(height - 1, Math.max(0, Math.floor(fill.seed.y * height)));
@@ -67,6 +89,7 @@ function paintConnectedRegion(
     output.data[offset + 1] = Math.min(255, targetG * shade);
     output.data[offset + 2] = Math.min(255, targetB * shade);
     output.data[offset + 3] = 235;
+    visited[index] = 2;
 
     const x = index % width;
     if (x > 0) stack.push(index - 1);
@@ -74,9 +97,27 @@ function paintConnectedRegion(
     if (index >= width) stack.push(index - width);
     if (index < width * (height - 1)) stack.push(index + width);
   }
+  return visited;
 }
 
-export function DifferenceEffects({ differences }: { differences: Difference[] }) {
+function drawSelectionOutline(output: ImageData, mask: Uint8Array, width: number, height: number): void {
+  for (let index = 0; index < mask.length; index += 1) {
+    if (mask[index] !== 2) continue;
+    const x = index % width;
+    const boundary =
+      x === 0 || x === width - 1 || index < width || index >= width * (height - 1) ||
+      mask[index - 1] !== 2 || mask[index + 1] !== 2 ||
+      mask[index - width] !== 2 || mask[index + width] !== 2;
+    if (!boundary) continue;
+    const offset = index * 4;
+    output.data[offset] = 124;
+    output.data[offset + 1] = 58;
+    output.data[offset + 2] = 237;
+    output.data[offset + 3] = 255;
+  }
+}
+
+export function DifferenceEffects({ differences, selectedId }: { differences: Difference[]; selectedId?: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -101,9 +142,13 @@ export function DifferenceEffects({ differences }: { differences: Difference[] }
       const source = sourceContext.getImageData(0, 0, width, height);
       const output = context.createImageData(width, height);
 
+      let selectedMask: Uint8Array | null = null;
       differences.forEach((difference) => {
-        if (difference.fill) paintConnectedRegion(source, output, difference.fill);
+        if (!difference.fill) return;
+        const mask = paintConnectedRegion(source, output, difference.fill);
+        if (difference.id === selectedId) selectedMask = mask;
       });
+      if (selectedMask) drawSelectionOutline(output, selectedMask, width, height);
       context.clearRect(0, 0, width, height);
       context.putImageData(output, 0, 0);
 
@@ -127,7 +172,7 @@ export function DifferenceEffects({ differences }: { differences: Difference[] }
         context.restore();
       });
     };
-  }, [differences]);
+  }, [differences, selectedId]);
 
   return <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 h-full w-full" />;
 }
@@ -142,7 +187,8 @@ export function FreeformEditor({
   disabled?: boolean;
 }) {
   const [tool, setTool] = useState<Tool>("FILL");
-  const [color, setColor] = useState(COLORS[0]!);
+  const [color, setColor] = useState("#ef4444");
+  const [showPalette, setShowPalette] = useState(false);
   const [width, setWidth] = useState(3);
   const [tolerance, setTolerance] = useState(34);
   const [fill, setFill] = useState<DifferenceFill | null>(null);
@@ -220,14 +266,33 @@ export function FreeformEditor({
         {toolButton("PENCIL", "연필", <Pencil size={16}/>)}
         {toolButton("ERASER", "지우개", <Eraser size={16}/>)}
         <span className="mx-1 h-7 w-px bg-slate-200" />
-        {COLORS.map((candidate) => <button key={candidate} type="button" onClick={() => setColor(candidate)} className={`h-8 w-8 rounded-full border-2 shadow-sm ${color === candidate ? "scale-110 border-slate-900" : "border-white"}`} style={{ backgroundColor: candidate }} aria-label={candidate}/>)}
+        <button type="button" onClick={() => setShowPalette((visible) => !visible)} className="inline-flex items-center gap-2 rounded-xl bg-slate-100 px-3 py-2 text-sm font-black">
+          <span className="h-6 w-6 rounded-full border-2 border-white shadow" style={{ backgroundColor: color }}/>
+          색상 선택
+        </button>
+        <label className="inline-flex items-center gap-2 text-xs font-bold">
+          직접 선택
+          <input type="color" value={color} onChange={(event) => setColor(event.target.value)} className="h-9 w-12 cursor-pointer rounded border-0 bg-transparent"/>
+        </label>
         {tool !== "FILL" && <label className="flex items-center gap-2 text-xs font-bold">굵기<input type="range" min="1" max="8" value={width} onChange={(event) => setWidth(Number(event.target.value))}/></label>}
         {tool === "FILL" && <label className="flex items-center gap-2 text-xs font-bold">선택 범위<input type="range" min="12" max="70" value={tolerance} onChange={(event) => setTolerance(Number(event.target.value))}/></label>}
       </div>
+      {showPalette && (
+        <div className="mb-3 rounded-2xl bg-white p-3 shadow">
+          <p className="mb-2 text-center text-xs font-bold text-slate-500">120색 팔레트 · 원하는 색을 선택하세요</p>
+          <div className="grid grid-cols-12 gap-1.5">
+            {PALETTE.map((candidate, index) => (
+              <button key={`${candidate}-${index}`} type="button" onClick={() => { setColor(candidate); setShowPalette(false); }} aria-label={candidate}
+                className={`aspect-square min-h-6 rounded-md border-2 shadow-sm transition hover:scale-110 ${color === candidate ? "border-slate-950 ring-2 ring-violet-300" : "border-white"}`}
+                style={{ backgroundColor: candidate }}/>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="relative overflow-hidden rounded-3xl border-4 border-white bg-white shadow-xl">
         <img src={gameSceneImg} alt="편집할 원본 그림" className="block h-auto w-full select-none" draggable={false}/>
-        <DifferenceEffects differences={preview}/>
+        <DifferenceEffects differences={preview} selectedId={current?.fill ? "current-edit" : undefined}/>
         <svg viewBox="0 0 1000 562.5" preserveAspectRatio="none" className={`absolute inset-0 h-full w-full touch-none ${disabled ? "cursor-not-allowed" : tool === "FILL" ? "cursor-pointer" : "cursor-crosshair"}`} onPointerDown={begin} onPointerMove={move} onPointerUp={finish} onPointerCancel={finish}/>
       </div>
 
