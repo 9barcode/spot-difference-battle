@@ -119,3 +119,4 @@ export function determineWinner(
   return null;
 }
 
+export { GameMatch, GameRuleError, type MatchPlayer } from "./match.js";
