@@ -102,6 +102,22 @@ describe("GameMatch lifecycle", () => {
     expect(match.snapshot().players[0]).toMatchObject({ foundCount: 1, wrongAnswerCount: 1 });
   });
 
+  it("applies another three-second penalty for every wrong guess and still allows a hint", () => {
+    const match = createMatch();
+    startFinding(match);
+
+    expect(match.guess("p1", { x: 0.05, y: 0.95 }, 3_000)).toMatchObject({
+      correct: false,
+      remainingTimeMs: 56_000,
+    });
+    expect(match.guess("p1", { x: 0.1, y: 0.9 }, 4_000)).toMatchObject({
+      correct: false,
+      remainingTimeMs: 52_000,
+    });
+    expect(match.snapshot().players[0]).toMatchObject({ wrongAnswerCount: 2 });
+    expect(match.useHint("p1", 5_000)).toMatchObject({ remaining: 0 });
+  });
+
   it("limits hints and returns a wider surrounding area", () => {
     const match = createMatch();
     startFinding(match);
