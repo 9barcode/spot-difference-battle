@@ -176,11 +176,8 @@ export class GameMatch {
     if (this.deadlineMs === null || nowMs < this.deadlineMs) return false;
 
     if (this.state === "EDITING") {
-      for (const player of this.players) {
-        player.differences ??= structuredClone(this.fallbackDifferences);
-      }
-      this.bumpVersion();
-      this.startFinding(nowMs);
+      const submittedPlayers = this.players.filter((player) => player.differences !== null);
+      this.finish(submittedPlayers.length === 1 ? submittedPlayers[0]!.playerId : null, "TIMEOUT");
       return true;
     }
 

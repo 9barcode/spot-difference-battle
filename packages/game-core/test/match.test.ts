@@ -59,13 +59,30 @@ describe("GameMatch lifecycle", () => {
     }
   });
 
-  it("auto-fills missing submissions when editing expires", () => {
+  it("ends without injecting fallback differences when editing expires", () => {
     const match = createMatch();
     startEditing(match, 1_000);
 
     expect(match.expire(31_000)).toBe(true);
-    expect(match.currentState).toBe("FINDING");
-    expect(match.snapshot().players.every((player) => player.submitted)).toBe(true);
+    expect(match.snapshot()).toMatchObject({
+      state: "FINISHED",
+      winnerId: null,
+      endReason: "TIMEOUT",
+    });
+    expect(match.snapshot().players.every((player) => !player.submitted)).toBe(true);
+  });
+
+  it("awards an editing-timeout win to the player who submitted", () => {
+    const match = createMatch();
+    startEditing(match, 1_000);
+    match.submitDifferences("p1", fallback, 2_000);
+
+    expect(match.expire(31_000)).toBe(true);
+    expect(match.snapshot()).toMatchObject({
+      state: "FINISHED",
+      winnerId: "p1",
+      endReason: "TIMEOUT",
+    });
   });
 
   it("tracks correct, duplicate and wrong guesses with server time", () => {
@@ -83,6 +100,22 @@ describe("GameMatch lifecycle", () => {
       remainingTimeMs: 55_000,
     });
     expect(match.snapshot().players[0]).toMatchObject({ foundCount: 1, wrongAnswerCount: 1 });
+  });
+
+  it("applies another three-second penalty for every wrong guess and still allows a hint", () => {
+    const match = createMatch();
+    startFinding(match);
+
+    expect(match.guess("p1", { x: 0.05, y: 0.95 }, 3_000)).toMatchObject({
+      correct: false,
+      remainingTimeMs: 56_000,
+    });
+    expect(match.guess("p1", { x: 0.1, y: 0.9 }, 4_000)).toMatchObject({
+      correct: false,
+      remainingTimeMs: 52_000,
+    });
+    expect(match.snapshot().players[0]).toMatchObject({ wrongAnswerCount: 2 });
+    expect(match.useHint("p1", 5_000)).toMatchObject({ remaining: 0 });
   });
 
   it("limits hints and returns a wider surrounding area", () => {
