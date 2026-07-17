@@ -2,7 +2,7 @@ import { GAME_CONFIG, type Difference, type NormalizedPoint } from "@spot-battle
 import { Clock, Eye, LoaderCircle, LogOut, RotateCcw, Search, Send, WifiOff, X } from "lucide-react";
 import { useEffect, useMemo, useState, type MouseEvent } from "react";
 import gameSceneImg from "@/imports/image.png";
-import { DifferenceStroke, FreeformEditor } from "./FreeformEditor";
+import { DifferenceEffects, FreeformEditor } from "./FreeformEditor";
 import { useGameClient } from "./use-game-client";
 
 function useRemainingSeconds(deadlineMs: number | null | undefined): number | null {
@@ -66,13 +66,9 @@ function ImageBoard({
       onClick={onSelect ? (event) => onSelect(pointFromEvent(event)) : undefined}
     >
       <img src={gameSceneImg} alt="게임 원본 그림" className="block h-auto w-full select-none" draggable={false} />
-      <svg viewBox="0 0 1000 562.5" preserveAspectRatio="none" className="pointer-events-none absolute inset-0 h-full w-full">
-        {differences
-          .filter((difference) => difference.stroke && !foundIds.has(difference.id))
-          .map((difference) => <DifferenceStroke key={difference.id} difference={difference} />)}
-      </svg>
+      <DifferenceEffects differences={differences.filter((difference) => !foundIds.has(difference.id))} />
       {differences
-        .filter((difference) => !difference.stroke || foundIds.has(difference.id))
+        .filter((difference) => foundIds.has(difference.id) || (!difference.fill && !difference.strokes))
         .map((difference) => (
           <DifferenceOverlay key={difference.id} difference={difference} found={foundIds.has(difference.id)} />
         ))}
