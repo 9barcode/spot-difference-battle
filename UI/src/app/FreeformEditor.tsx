@@ -211,8 +211,9 @@ export function FreeformEditor({
 
   const current = useMemo<Difference | null>(() => {
     if (!fill && !strokes.length && !activePoints.length) return null;
-    const previewStrokes = activePoints.length
-      ? [...strokes, { points: activePoints, color, width, tool: tool === "ERASER" ? "ERASER" : "PENCIL" }]
+    const activeTool: DifferenceStroke["tool"] = tool === "ERASER" ? "ERASER" : "PENCIL";
+    const previewStrokes: DifferenceStroke[] = activePoints.length
+      ? [...strokes, { points: activePoints, color, width, tool: activeTool }]
       : strokes;
     return {
       id: "current-edit",
@@ -258,7 +259,10 @@ export function FreeformEditor({
     if (!drawingRef.current) return;
     drawingRef.current = false;
     setActivePoints((points) => {
-      if (points.length) setStrokes((items) => [...items, { points, color, width, tool: tool === "ERASER" ? "ERASER" : "PENCIL" }]);
+      if (points.length) {
+        const strokeTool: DifferenceStroke["tool"] = tool === "ERASER" ? "ERASER" : "PENCIL";
+        setStrokes((items) => [...items, { points, color, width, tool: strokeTool }]);
+      }
       return [];
     });
   };
