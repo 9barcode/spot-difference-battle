@@ -84,7 +84,7 @@ export interface GameSnapshot {
   deadlineMs: number | null;
   players: [PlayerProgress, PlayerProgress];
   winnerId: string | null;
-  problem: Difference[] | null;
+  problemImageDataUrl: string | null;
   myFoundIds: string[];
   endReason: GameEndReason | null;
   cancelReason: string | null;
@@ -116,6 +116,7 @@ export interface ReportResultPayload {
 }
 
 export interface GameActionContext {
+  actionId: string;
   expectedState: GameState;
   expectedStateVersion: number;
 }
@@ -135,7 +136,11 @@ export interface ClientToServerEvents {
   "queue:join": (payload: { nickname: string }) => void;
   "queue:leave": () => void;
   "game:ready": (payload: { matchId: string }) => void;
-  "game:submit": (payload: GameActionContext & { matchId: string; differences: Difference[] }) => void;
+  "game:submit": (payload: GameActionContext & {
+    matchId: string;
+    differences: Difference[];
+    problemImageDataUrl: string;
+  }) => void;
   "game:guess": (payload: GameActionContext & { matchId: string; point: NormalizedPoint }) => void;
   "game:hint": (payload: GameActionContext & { matchId: string }) => void;
   "game:forfeit": (payload: GameActionContext & { matchId: string }) => void;

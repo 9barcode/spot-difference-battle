@@ -119,7 +119,11 @@ export function useGameClient() {
   const actionContext = () => {
     const current = snapshotRef.current;
     return current
-      ? { expectedState: current.state, expectedStateVersion: current.stateVersion }
+      ? {
+          actionId: crypto.randomUUID(),
+          expectedState: current.state,
+          expectedStateVersion: current.stateVersion,
+        }
       : null;
   };
 
@@ -139,9 +143,14 @@ export function useGameClient() {
     startMatching,
     cancelMatching,
     ready: () => match && socketRef.current?.emit("game:ready", { matchId: match.matchId }),
-    submit: (differences: Difference[]) => {
+    submit: (differences: Difference[], problemImageDataUrl: string) => {
       const context = actionContext();
-      if (match && context) socketRef.current?.emit("game:submit", { matchId: match.matchId, differences, ...context });
+      if (match && context) socketRef.current?.emit("game:submit", {
+        matchId: match.matchId,
+        differences,
+        problemImageDataUrl,
+        ...context,
+      });
     },
     guess: (point: NormalizedPoint) => {
       const context = actionContext();
@@ -155,14 +164,15 @@ export function useGameClient() {
       const context = actionContext();
       if (match && context) socketRef.current?.emit("game:forfeit", { matchId: match.matchId, ...context });
     },
-    report: (reason: ReportReason, details?: string) =>
-      match && snapshotRef.current && socketRef.current?.emit("game:report", {
-        matchId: match.matchId,
-        reason,
-        details,
-        expectedState: snapshotRef.current.state,
-        expectedStateVersion: snapshotRef.current.stateVersion,
-      }),
+    report: (reason: ReportReason, details?: string) => {
+      const context = actionContext();
+      if (match && context) socketRef.current?.emit("game:report", {
+          matchId: match.matchId,
+          reason,
+          details,
+          ...context,
+        });
+    },
     returnToLobby,
   };
 }

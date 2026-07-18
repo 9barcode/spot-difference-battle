@@ -1,6 +1,6 @@
 import cors from "@fastify/cors";
 import { GameMatch, GameRuleError } from "@spot-battle/game-core";
-import { GAME_CONFIG, type ClientToServerEvents, type ServerToClientEvents } from "@spot-battle/shared";
+import { GAME_CONFIG, type ClientToServerEvents, type Difference, type GameState, type NormalizedPoint, type ServerToClientEvents } from "@spot-battle/shared";
 import Fastify, { type FastifyInstance } from "fastify";
 import { randomUUID } from "node:crypto";
 import { Server, type Socket } from "socket.io";
@@ -47,12 +47,17 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
     ServerToClientEvents,
     Record<string, never>,
     SocketData
-  >(app.server, { cors: { origin: options.webOrigin } });
+  >(app.server, {
+    cors: { origin: options.webOrigin },
+    maxHttpBufferSize: 1_600_000,
+  });
   const registry = new MatchRegistry();
   const sessionsByToken = new Map<string, GuestSession>();
   const sessionsByPlayer = new Map<string, GuestSession>();
   const reconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
   const persistedMatches = new Set<string>();
+  const processedActions = new Map<string, Set<string>>();
+  const lastInputAtByPlayer = new Map<string, number>();
   const reconnectGraceMs =
     options.reconnectGraceMs ?? GAME_CONFIG.reconnectGraceSeconds * 1_000;
   const inputCooldownMs = options.inputCooldownMs ?? 120;
@@ -133,19 +138,88 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
     playerId: string,
     expectedState: string,
     expectedStateVersion: number,
-    allowConcurrentState = false,
   ): void {
     const current = match.snapshot(playerId);
     if (
       current.state !== expectedState ||
       !Number.isInteger(expectedStateVersion) ||
       expectedStateVersion < 0 ||
-      (allowConcurrentState
-        ? expectedStateVersion > current.stateVersion
-        : expectedStateVersion !== current.stateVersion)
+      expectedStateVersion > current.stateVersion
     ) {
       throw new GameRuleError("STALE_STATE", "경기 상태가 변경되었습니다. 최신 상태에서 다시 시도해주세요.");
     }
+  }
+
+  function invalidInput(message = "요청 형식이 올바르지 않습니다."): never {
+    throw new GameRuleError("INVALID_INPUT", message);
+  }
+
+  function asRecord(value: unknown): Record<string, unknown> {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return invalidInput();
+    return value as Record<string, unknown>;
+  }
+
+  function asString(value: unknown, field: string, maxLength = 100): string {
+    if (typeof value !== "string" || value.length === 0 || value.length > maxLength) {
+      return invalidInput(`${field} 값이 올바르지 않습니다.`);
+    }
+    return value;
+  }
+
+  function asPoint(value: unknown): NormalizedPoint {
+    const point = asRecord(value);
+    if (
+      typeof point.x !== "number" || !Number.isFinite(point.x) || point.x < 0 || point.x > 1 ||
+      typeof point.y !== "number" || !Number.isFinite(point.y) || point.y < 0 || point.y > 1
+    ) return invalidInput("좌표가 올바르지 않습니다.");
+    return { x: point.x, y: point.y };
+  }
+
+  function asDifferences(value: unknown): Difference[] {
+    if (!Array.isArray(value) || value.length !== GAME_CONFIG.differenceCount) {
+      return invalidInput("차이점 데이터가 올바르지 않습니다.");
+    }
+    for (const item of value) {
+      const difference = asRecord(item);
+      asString(difference.id, "차이점 ID", 100);
+      if (!(["ADD", "COVER", "COLOR", "DRAW"] as unknown[]).includes(difference.kind)) invalidInput();
+      const region = asRecord(difference.region);
+      asPoint(region);
+      if (typeof region.radius !== "number" || !Number.isFinite(region.radius)) invalidInput();
+    }
+    return value as Difference[];
+  }
+
+  function parseAction(payload: unknown): {
+    record: Record<string, unknown>;
+    matchId: string;
+    actionId: string;
+    expectedState: GameState;
+    expectedStateVersion: number;
+  } {
+    const record = asRecord(payload);
+    const expectedState = record.expectedState;
+    if (!(["READY", "EDITING", "FINDING", "FINISHED", "CANCELLED"] as unknown[]).includes(expectedState)) {
+      return invalidInput("경기 상태가 올바르지 않습니다.");
+    }
+    if (!Number.isInteger(record.expectedStateVersion) || (record.expectedStateVersion as number) < 0) {
+      return invalidInput("경기 상태 버전이 올바르지 않습니다.");
+    }
+    return {
+      record,
+      matchId: asString(record.matchId, "경기 ID", 100),
+      actionId: asString(record.actionId, "요청 ID", 100),
+      expectedState: expectedState as GameState,
+      expectedStateVersion: record.expectedStateVersion as number,
+    };
+  }
+
+  function claimAction(playerId: string, actionId: string): void {
+    const actions = processedActions.get(playerId) ?? new Set<string>();
+    if (actions.has(actionId)) throw new GameRuleError("DUPLICATE_ACTION", "이미 처리한 요청입니다.");
+    actions.add(actionId);
+    if (actions.size > 200) actions.delete(actions.values().next().value!);
+    processedActions.set(playerId, actions);
   }
 
   function resumeMatch(socket: GameSocket, session: GuestSession): void {
@@ -180,15 +254,14 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
   }
 
   io.on("connection", (socket) => {
-    const lastInputAt = new Map<string, number>();
-    const enforceCooldown = (action: string) => {
+    const enforceCooldown = () => {
       if (inputCooldownMs <= 0) return;
       const now = Date.now();
-      const previous = lastInputAt.get(action) ?? 0;
+      const previous = lastInputAtByPlayer.get(session.playerId) ?? 0;
       if (now - previous < inputCooldownMs) {
         throw new GameRuleError("INPUT_RATE_LIMITED", "입력이 너무 빠릅니다. 잠시 후 다시 시도해주세요.");
       }
-      lastInputAt.set(action, now);
+      lastInputAtByPlayer.set(session.playerId, now);
     };
     const session = sessionsByPlayer.get(socket.data.playerId)!;
     const oldSocketId = session.socketId;
@@ -206,7 +279,14 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
     });
     resumeMatch(socket, session);
 
-    socket.on("queue:join", ({ nickname }) => {
+    socket.on("queue:join", (payload) => {
+      let nickname: string;
+      try {
+        nickname = asString(asRecord(payload).nickname, "닉네임", 16);
+      } catch (error) {
+        emitGameError(socket, error);
+        return;
+      }
       const normalizedNickname = nickname.trim().slice(0, 16);
       if (normalizedNickname.length < 2) {
         socket.emit("game:error", {
@@ -265,8 +345,10 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
       socket.emit("queue:left");
     });
 
-    socket.on("game:ready", ({ matchId }) => {
+    socket.on("game:ready", (payload) => {
+      let matchId = "";
       try {
+        matchId = asString(asRecord(payload).matchId, "경기 ID", 100);
         const match = registry.getForPlayer(matchId, session.playerId);
         match.markReady(session.playerId, Date.now());
         emitSnapshots(match);
@@ -275,22 +357,36 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
       }
     });
 
-    socket.on("game:submit", ({ matchId, differences, expectedState, expectedStateVersion }) => {
+    socket.on("game:submit", (payload) => {
+      let matchId = "";
       try {
+        const parsed = parseAction(payload);
+        ({ matchId } = parsed);
+        const { record, actionId, expectedState, expectedStateVersion } = parsed;
         const match = registry.getForPlayer(matchId, session.playerId);
-        assertClientState(match, session.playerId, expectedState, expectedStateVersion, true);
-        match.submitDifferences(session.playerId, differences, Date.now());
+        assertClientState(match, session.playerId, expectedState, expectedStateVersion);
+        const differences = asDifferences(record.differences);
+        const problemImageDataUrl = asString(record.problemImageDataUrl, "문제 이미지", 1_500_000);
+        if (!/^data:image\/(?:webp|png|jpeg);base64,[A-Za-z0-9+/=]+$/.test(problemImageDataUrl)) invalidInput("문제 이미지 형식이 올바르지 않습니다.");
+        claimAction(session.playerId, actionId);
+        match.submitDifferences(session.playerId, differences, Date.now(), problemImageDataUrl);
         emitSnapshots(match);
       } catch (error) {
         handleActionError(socket, matchId, error);
       }
     });
 
-    socket.on("game:guess", ({ matchId, point, expectedState, expectedStateVersion }) => {
+    socket.on("game:guess", (payload) => {
+      let matchId = "";
       try {
+        const parsed = parseAction(payload);
+        ({ matchId } = parsed);
+        const { record, actionId, expectedState, expectedStateVersion } = parsed;
         const match = registry.getForPlayer(matchId, session.playerId);
         assertClientState(match, session.playerId, expectedState, expectedStateVersion);
-        enforceCooldown("guess");
+        enforceCooldown();
+        const point = asPoint(record.point);
+        claimAction(session.playerId, actionId);
         socket.emit(
           "game:guess-result",
           match.guess(session.playerId, point, Date.now()),
@@ -302,11 +398,16 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
       }
     });
 
-    socket.on("game:hint", ({ matchId, expectedState, expectedStateVersion }) => {
+    socket.on("game:hint", (payload) => {
+      let matchId = "";
       try {
+        const parsed = parseAction(payload);
+        ({ matchId } = parsed);
+        const { actionId, expectedState, expectedStateVersion } = parsed;
         const match = registry.getForPlayer(matchId, session.playerId);
         assertClientState(match, session.playerId, expectedState, expectedStateVersion);
-        enforceCooldown("hint");
+        enforceCooldown();
+        claimAction(session.playerId, actionId);
         socket.emit("game:hint-result", match.useHint(session.playerId, Date.now()));
         emitSnapshots(match);
       } catch (error) {
@@ -314,10 +415,15 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
       }
     });
 
-    socket.on("game:forfeit", ({ matchId, expectedState, expectedStateVersion }) => {
+    socket.on("game:forfeit", (payload) => {
+      let matchId = "";
       try {
+        const parsed = parseAction(payload);
+        ({ matchId } = parsed);
+        const { actionId, expectedState, expectedStateVersion } = parsed;
         const match = registry.getForPlayer(matchId, session.playerId);
         assertClientState(match, session.playerId, expectedState, expectedStateVersion);
+        claimAction(session.playerId, actionId);
         match.forfeit(session.playerId);
         emitSnapshots(match);
         void persistIfFinished(match);
@@ -326,18 +432,23 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
       }
     });
 
-    socket.on("game:report", async ({ matchId, reason, details, expectedState, expectedStateVersion }) => {
+    socket.on("game:report", async (payload) => {
       try {
+        const { record, matchId, actionId, expectedState, expectedStateVersion } = parseAction(payload);
         const match = registry.getForPlayer(matchId, session.playerId);
         assertClientState(match, session.playerId, expectedState, expectedStateVersion);
         if (match.currentState !== "FINISHED" && match.currentState !== "CANCELLED") {
           throw new GameRuleError("MATCH_NOT_FINISHED", "경기 종료 후 신고할 수 있습니다.");
         }
+        const reason = asString(record.reason, "신고 사유", 30);
+        if (!["UNFAIR", "INAPPROPRIATE", "SYSTEM_ERROR", "OTHER"].includes(reason)) invalidInput();
+        const details = record.details === undefined ? undefined : asString(record.details, "신고 내용", 500);
+        claimAction(session.playerId, actionId);
         await persistIfFinished(match);
         const reportId = await matchStore.createReport({
           matchId,
           reporterPlayerId: session.playerId,
-          reason,
+          reason: reason as "UNFAIR" | "INAPPROPRIATE" | "SYSTEM_ERROR" | "OTHER",
           details: details?.trim().slice(0, 500),
         });
         socket.emit("game:report-result", { reportId });

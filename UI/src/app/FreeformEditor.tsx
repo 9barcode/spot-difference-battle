@@ -96,6 +96,46 @@ function drawSelectionOutline(output: ImageData, mask: Uint8Array, width: number
   }
 }
 
+export async function renderProblemImage(differences: Difference[]): Promise<string> {
+  const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const next = new Image();
+    next.onload = () => resolve(next);
+    next.onerror = () => reject(new Error("문제 이미지를 불러오지 못했습니다."));
+    next.src = gameSceneImg;
+  });
+  const width = Math.min(1000, image.naturalWidth);
+  const height = Math.round(width * image.naturalHeight / image.naturalWidth);
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  if (!context) throw new Error("문제 이미지를 만들 수 없습니다.");
+  context.drawImage(image, 0, 0, width, height);
+  const source = context.getImageData(0, 0, width, height);
+  const output = context.createImageData(width, height);
+  for (const difference of differences) {
+    if (difference.fill) paintConnectedRegion(source, output, difference.fill);
+  }
+  context.putImageData(output, 0, 0);
+  context.globalCompositeOperation = "destination-over";
+  context.drawImage(image, 0, 0, width, height);
+  context.globalCompositeOperation = "source-over";
+  for (const stroke of differences.flatMap((difference) => difference.strokes ?? [])) {
+    if (!stroke.points.length) continue;
+    context.strokeStyle = stroke.color;
+    context.lineWidth = stroke.width * 3;
+    context.lineCap = "round";
+    context.lineJoin = "round";
+    context.beginPath();
+    stroke.points.forEach((point, index) => {
+      if (index === 0) context.moveTo(point.x * width, point.y * height);
+      else context.lineTo(point.x * width, point.y * height);
+    });
+    context.stroke();
+  }
+  return canvas.toDataURL("image/webp", 0.82);
+}
+
 export function DifferenceEffects({
   differences,
   selectedId,

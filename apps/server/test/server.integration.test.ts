@@ -20,6 +20,15 @@ const differences: Difference[] = [
   { id: "b", kind: "COVER", region: { x: 0.5, y: 0.5, radius: 0.05 } },
   { id: "c", kind: "COLOR", region: { x: 0.8, y: 0.8, radius: 0.05 } },
 ];
+const problemImageDataUrl = "data:image/png;base64,AA==";
+
+function actionContext(snapshot: Pick<GameSnapshot, "state" | "stateVersion">) {
+  return {
+    actionId: crypto.randomUUID(),
+    expectedState: snapshot.state,
+    expectedStateVersion: snapshot.stateVersion,
+  };
+}
 
 const sockets: TestSocket[] = [];
 
@@ -112,29 +121,39 @@ describe("game server", () => {
       expect(editingSnapshot).toMatchObject({ state: "EDITING" });
 
       const finding = waitForState(first, "FINDING");
-      const editingContext = { expectedState: editingSnapshot.state, expectedStateVersion: editingSnapshot.stateVersion };
-      first.emit("game:submit", { matchId: firstMatch.matchId, differences, ...editingContext });
-      second.emit("game:submit", { matchId: secondMatch.matchId, differences, ...editingContext });
+      first.emit("game:submit", { matchId: firstMatch.matchId, differences, problemImageDataUrl, ...actionContext(editingSnapshot) });
+      second.emit("game:submit", { matchId: secondMatch.matchId, differences, problemImageDataUrl, ...actionContext(editingSnapshot) });
       const findingSnapshot = await finding;
       expect(findingSnapshot).toMatchObject({ state: "FINDING" });
+      expect(findingSnapshot.problemImageDataUrl).toBe(problemImageDataUrl);
+      expect(findingSnapshot).not.toHaveProperty("problem");
+
+      const invalidError = once<GameErrorPayload>(first, "game:error");
+      first.emit("game:guess", {
+        matchId: firstMatch.matchId,
+        point: null,
+        ...actionContext(findingSnapshot),
+      } as never);
+      await expect(invalidError).resolves.toMatchObject({ code: "INVALID_INPUT" });
 
       const staleError = once<GameErrorPayload>(first, "game:error");
       first.emit("game:hint", {
         matchId: firstMatch.matchId,
+        actionId: crypto.randomUUID(),
         expectedState: "EDITING",
         expectedStateVersion: editingSnapshot.stateVersion,
       });
       await expect(staleError).resolves.toMatchObject({ code: "STALE_STATE" });
 
-      let findingContext = { expectedState: findingSnapshot.state, expectedStateVersion: findingSnapshot.stateVersion };
+      let findingContext = actionContext(findingSnapshot);
       let nextSnapshot = waitForNewerVersion(first, findingContext.expectedStateVersion);
       first.emit("game:guess", { matchId: firstMatch.matchId, point: { x: 0.2, y: 0.2 }, ...findingContext });
       const afterFirstGuess = await nextSnapshot;
-      findingContext = { expectedState: afterFirstGuess.state, expectedStateVersion: afterFirstGuess.stateVersion };
+      findingContext = actionContext(afterFirstGuess);
       nextSnapshot = waitForNewerVersion(first, findingContext.expectedStateVersion);
       first.emit("game:guess", { matchId: firstMatch.matchId, point: { x: 0.5, y: 0.5 }, ...findingContext });
       const afterSecondGuess = await nextSnapshot;
-      findingContext = { expectedState: afterSecondGuess.state, expectedStateVersion: afterSecondGuess.stateVersion };
+      findingContext = actionContext(afterSecondGuess);
       const finished = waitForState(first, "FINISHED");
       first.emit("game:guess", { matchId: firstMatch.matchId, point: { x: 0.8, y: 0.8 }, ...findingContext });
 
@@ -145,8 +164,8 @@ describe("game server", () => {
       expect(matchStore.matches.has(firstMatch.matchId)).toBe(true);
 
       const reportResult = once<{ reportId: string }>(first, "game:report-result");
-      const finishedContext = { expectedState: result.state, expectedStateVersion: result.stateVersion };
-      first.emit("game:report", { matchId: firstMatch.matchId, reason: "UNFAIR", ...finishedContext });
+      const finishedContext = actionContext(result);
+      first.emit("game:report", { matchId: firstMatch.matchId, reason: "UNFAIR", ...actionContext(result) });
       await expect(reportResult).resolves.toMatchObject({ reportId: expect.any(String) });
 
       const duplicateError = once<GameErrorPayload>(first, "game:error");
@@ -202,6 +221,7 @@ describe("game server", () => {
       const finished = waitForState(second, "FINISHED");
       resumed.emit("game:forfeit", {
         matchId: firstMatch.matchId,
+        actionId: crypto.randomUUID(),
         expectedState: resumedSnapshot.state,
         expectedStateVersion: resumedSnapshot.stateVersion,
       });
@@ -209,6 +229,63 @@ describe("game server", () => {
         winnerId: secondMatch.playerId,
         endReason: "FORFEIT",
       });
+    } finally {
+      for (const socket of sockets.splice(0)) socket.disconnect();
+      await app.close();
+    }
+  });
+
+  it("rate-limits consecutive interactive actions", async () => {
+    const app = await createGameServer({
+      webOrigin: "http://localhost:5173",
+      inputCooldownMs: 1_000,
+    });
+    await app.listen({ host: "127.0.0.1", port: 0 });
+
+    try {
+      const port = (app.server.address() as AddressInfo).port;
+      const first = createClient(`http://127.0.0.1:${port}`) as TestSocket;
+      const second = createClient(`http://127.0.0.1:${port}`) as TestSocket;
+      sockets.push(first, second);
+      await Promise.all([once(first, "connect"), once(second, "connect")]);
+
+      const firstFound = once<MatchFoundPayload>(first, "match:found");
+      const secondFound = once<MatchFoundPayload>(second, "match:found");
+      first.emit("queue:join", { nickname: "첫째" });
+      second.emit("queue:join", { nickname: "둘째" });
+      const [firstMatch, secondMatch] = await Promise.all([firstFound, secondFound]);
+
+      const editingFirst = waitForState(first, "EDITING");
+      const editingSecond = waitForState(second, "EDITING");
+      first.emit("game:ready", { matchId: firstMatch.matchId });
+      second.emit("game:ready", { matchId: secondMatch.matchId });
+      const [firstEditing, secondEditing] = await Promise.all([editingFirst, editingSecond]);
+
+      const finding = waitForState(first, "FINDING");
+      first.emit("game:submit", {
+        matchId: firstMatch.matchId,
+        differences,
+        problemImageDataUrl,
+        ...actionContext(firstEditing),
+      });
+      second.emit("game:submit", {
+        matchId: secondMatch.matchId,
+        differences,
+        problemImageDataUrl,
+        ...actionContext(secondEditing),
+      });
+      const findingSnapshot = await finding;
+
+      const newer = waitForNewerVersion(first, findingSnapshot.stateVersion);
+      first.emit("game:guess", {
+        matchId: firstMatch.matchId,
+        point: { x: 0.2, y: 0.2 },
+        ...actionContext(findingSnapshot),
+      });
+      const afterGuess = await newer;
+      const limited = once<GameErrorPayload>(first, "game:error");
+      first.emit("game:hint", { matchId: firstMatch.matchId, ...actionContext(afterGuess) });
+      await expect(limited).resolves.toMatchObject({ code: "INPUT_RATE_LIMITED" });
     } finally {
       for (const socket of sockets.splice(0)) socket.disconnect();
       await app.close();
@@ -278,6 +355,7 @@ describe("game server", () => {
       const finished = waitForState(second, "FINISHED");
       first.emit("game:forfeit", {
         matchId: firstMatch.matchId,
+        actionId: crypto.randomUUID(),
         expectedState: readySnapshot.state,
         expectedStateVersion: readySnapshot.stateVersion,
       });

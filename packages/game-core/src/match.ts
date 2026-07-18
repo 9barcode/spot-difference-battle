@@ -36,6 +36,7 @@ export interface MatchPlayer {
 interface InternalPlayer extends MatchPlayer {
   ready: boolean;
   differences: Difference[] | null;
+  problemImageDataUrl: string | null;
   foundIds: Set<string>;
   wrongAnswerCount: number;
   hintsUsed: number;
@@ -70,6 +71,7 @@ export class GameMatch {
       ...player,
       ready: false,
       differences: null,
+      problemImageDataUrl: null,
       foundIds: new Set<string>(),
       wrongAnswerCount: 0,
       hintsUsed: 0,
@@ -98,7 +100,12 @@ export class GameMatch {
     }
   }
 
-  submitDifferences(playerId: string, differences: Difference[], nowMs: number): void {
+  submitDifferences(
+    playerId: string,
+    differences: Difference[],
+    nowMs: number,
+    problemImageDataUrl: string | null = null,
+  ): void {
     this.requireState("EDITING");
     this.requireBeforeDeadline(playerId, nowMs);
     const player = this.getPlayer(playerId);
@@ -112,6 +119,7 @@ export class GameMatch {
     }
 
     player.differences = structuredClone(differences);
+    player.problemImageDataUrl = problemImageDataUrl;
     this.bumpVersion();
     if (this.players.every((candidate) => candidate.differences !== null)) {
       this.startFinding(nowMs);
@@ -205,9 +213,9 @@ export class GameMatch {
         PlayerProgress,
       ],
       winnerId: this.winnerId,
-      problem:
+      problemImageDataUrl:
         canViewProblem && problemOwner?.differences
-          ? structuredClone(problemOwner.differences)
+          ? problemOwner.problemImageDataUrl
           : null,
       myFoundIds: viewer ? [...viewer.foundIds] : [],
       endReason: this.endReason,
