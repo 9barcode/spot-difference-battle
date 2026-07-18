@@ -1,4 +1,4 @@
-import { GameMatch, GameRuleError } from "@spot-battle/game-core";
+import { GameMatch, GameRuleError, type PersistedMatchState } from "@spot-battle/game-core";
 import type { Difference } from "@spot-battle/shared";
 
 const FALLBACK_DIFFERENCES: Difference[] = [
@@ -21,6 +21,13 @@ export class MatchRegistry {
     const match = new GameMatch(matchId, "prototype-room", players, FALLBACK_DIFFERENCES);
     this.matches.set(matchId, match);
     for (const player of players) this.playerMatches.set(player.playerId, matchId);
+    return match;
+  }
+
+  restore(state: PersistedMatchState): GameMatch {
+    const match = GameMatch.restore(state, FALLBACK_DIFFERENCES);
+    this.matches.set(match.matchId, match);
+    for (const player of state.players) this.playerMatches.set(player.playerId, match.matchId);
     return match;
   }
 

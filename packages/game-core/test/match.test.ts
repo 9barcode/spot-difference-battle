@@ -170,6 +170,22 @@ describe("GameMatch lifecycle", () => {
     expect(match.snapshot().players[0]?.connectionStatus).toBe("CONNECTED");
   });
 
+  it("serializes and restores an active match without exposing mutable state", () => {
+    const match = createMatch();
+    startEditing(match, 1_000);
+    match.submitDifferences("p1", fallback, 2_000, "data:image/png;base64,AA==");
+
+    const state = match.serialize();
+    const restored = GameMatch.restore(state, fallback);
+    state.players[0].differences![0]!.region.x = 0.99;
+
+    expect(restored.snapshot("p2")).toMatchObject({
+      state: "EDITING",
+      stateVersion: match.version,
+    });
+    expect(restored.serialize().players[0].differences![0]!.region.x).toBe(0.2);
+  });
+
   it("awards a forfeit win to the opponent", () => {
     const match = createMatch();
     startEditing(match);

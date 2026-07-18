@@ -292,6 +292,70 @@ describe("game server", () => {
     }
   });
 
+  it("restores guest sessions and an active match after a server restart", async () => {
+    const matchStore = new InMemoryMatchStore();
+    const firstApp = await createGameServer({
+      webOrigin: "http://localhost:5173",
+      matchStore,
+      reconnectGraceMs: 5_000,
+    });
+    await firstApp.listen({ host: "127.0.0.1", port: 0 });
+
+    let secondApp: Awaited<ReturnType<typeof createGameServer>> | null = null;
+    try {
+      const firstPort = (firstApp.server.address() as AddressInfo).port;
+      const first = createClient(`http://127.0.0.1:${firstPort}`) as TestSocket;
+      const second = createClient(`http://127.0.0.1:${firstPort}`) as TestSocket;
+      sockets.push(first, second);
+      const firstSessionPromise = once<SessionReadyPayload>(first, "session:ready");
+      const secondSessionPromise = once<SessionReadyPayload>(second, "session:ready");
+      await Promise.all([once(first, "connect"), once(second, "connect")]);
+      const [firstSession, secondSession] = await Promise.all([firstSessionPromise, secondSessionPromise]);
+
+      const firstFound = once<MatchFoundPayload>(first, "match:found");
+      const secondFound = once<MatchFoundPayload>(second, "match:found");
+      first.emit("queue:join", { nickname: "첫째" });
+      second.emit("queue:join", { nickname: "둘째" });
+      const [firstMatch, secondMatch] = await Promise.all([firstFound, secondFound]);
+      const editing = waitForState(first, "EDITING");
+      first.emit("game:ready", { matchId: firstMatch.matchId });
+      second.emit("game:ready", { matchId: secondMatch.matchId });
+      await editing;
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      first.disconnect();
+      second.disconnect();
+      await firstApp.close();
+
+      secondApp = await createGameServer({
+        webOrigin: "http://localhost:5173",
+        matchStore,
+        reconnectGraceMs: 5_000,
+      });
+      await secondApp.listen({ host: "127.0.0.1", port: 0 });
+      const secondPort = (secondApp.server.address() as AddressInfo).port;
+      const restoredFirst = createClient(`http://127.0.0.1:${secondPort}`, {
+        auth: { guestToken: firstSession.guestToken },
+      }) as TestSocket;
+      const restoredSecond = createClient(`http://127.0.0.1:${secondPort}`, {
+        auth: { guestToken: secondSession.guestToken },
+      }) as TestSocket;
+      sockets.push(restoredFirst, restoredSecond);
+      const restoredFirstSession = once<SessionReadyPayload>(restoredFirst, "session:ready");
+      const restoredFirstMatch = once<MatchFoundPayload>(restoredFirst, "match:found");
+      const restoredEditing = waitForState(restoredFirst, "EDITING");
+      await Promise.all([once(restoredFirst, "connect"), once(restoredSecond, "connect")]);
+
+      await expect(restoredFirstSession).resolves.toMatchObject({ playerId: firstSession.playerId });
+      await expect(restoredFirstMatch).resolves.toMatchObject({ matchId: firstMatch.matchId });
+      await expect(restoredEditing).resolves.toMatchObject({ state: "EDITING" });
+    } finally {
+      for (const socket of sockets.splice(0)) socket.disconnect();
+      if (secondApp) await secondApp.close();
+      else await firstApp.close();
+    }
+  });
+
   it("forfeits a disconnected player after the grace period", async () => {
     const app = await createGameServer({
       webOrigin: "http://localhost:5173",

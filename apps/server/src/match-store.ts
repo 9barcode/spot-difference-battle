@@ -1,3 +1,4 @@
+import type { PersistedMatchState } from "@spot-battle/game-core";
 import type { GameSnapshot, ReportReason } from "@spot-battle/shared";
 import { randomUUID } from "node:crypto";
 import { Pool } from "pg";
@@ -11,7 +12,11 @@ export interface ReportInput {
 
 export interface MatchStore {
   health(): Promise<boolean>;
+  loadGuests(): Promise<Array<{ playerId: string; guestToken: string; nickname: string | null }>>;
   upsertGuest(input: { playerId: string; guestToken: string; nickname: string | null }): Promise<void>;
+  loadActiveMatches(): Promise<PersistedMatchState[]>;
+  saveActiveMatch(state: PersistedMatchState): Promise<void>;
+  deleteActiveMatch(matchId: string): Promise<void>;
   saveMatch(snapshot: GameSnapshot): Promise<void>;
   createReport(input: ReportInput): Promise<string>;
   close(): Promise<void>;
@@ -21,9 +26,26 @@ export class InMemoryMatchStore implements MatchStore {
   readonly matches = new Map<string, GameSnapshot>();
   readonly reports = new Map<string, ReportInput>();
   readonly guests = new Map<string, { guestToken: string; nickname: string | null }>();
+  readonly activeMatches = new Map<string, PersistedMatchState>();
 
   async health(): Promise<boolean> {
     return true;
+  }
+
+  async loadGuests() {
+    return [...this.guests.entries()].map(([playerId, guest]) => ({ playerId, ...guest }));
+  }
+
+  async loadActiveMatches(): Promise<PersistedMatchState[]> {
+    return [...this.activeMatches.values()].map((state) => structuredClone(state));
+  }
+
+  async saveActiveMatch(state: PersistedMatchState): Promise<void> {
+    this.activeMatches.set(state.matchId, structuredClone(state));
+  }
+
+  async deleteActiveMatch(matchId: string): Promise<void> {
+    this.activeMatches.delete(matchId);
   }
 
   async upsertGuest(input: {
@@ -149,5 +171,38 @@ export class PostgresMatchStore implements MatchStore {
 
   async close(): Promise<void> {
     await this.pool.end();
+  }
+
+  async loadGuests() {
+    const result = await this.pool.query<{
+      player_id: string;
+      guest_token: string;
+      nickname: string | null;
+    }>("SELECT player_id, guest_token, nickname FROM guest_sessions");
+    return result.rows.map((row) => ({
+      playerId: row.player_id,
+      guestToken: row.guest_token,
+      nickname: row.nickname,
+    }));
+  }
+
+  async loadActiveMatches(): Promise<PersistedMatchState[]> {
+    const result = await this.pool.query<{ state: PersistedMatchState }>(
+      "SELECT state FROM active_matches ORDER BY updated_at",
+    );
+    return result.rows.map((row) => row.state);
+  }
+
+  async saveActiveMatch(state: PersistedMatchState): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO active_matches (match_id, state)
+       VALUES ($1, $2::jsonb)
+       ON CONFLICT (match_id) DO UPDATE SET state = EXCLUDED.state, updated_at = NOW()`,
+      [state.matchId, JSON.stringify(state)],
+    );
+  }
+
+  async deleteActiveMatch(matchId: string): Promise<void> {
+    await this.pool.query("DELETE FROM active_matches WHERE match_id = $1", [matchId]);
   }
 }

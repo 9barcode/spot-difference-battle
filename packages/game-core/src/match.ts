@@ -33,6 +33,29 @@ export interface MatchPlayer {
   nickname: string;
 }
 
+export interface PersistedMatchPlayer extends MatchPlayer {
+  ready: boolean;
+  differences: Difference[] | null;
+  problemImageDataUrl: string | null;
+  foundIds: string[];
+  wrongAnswerCount: number;
+  hintsUsed: number;
+  lastCorrectAtMs: number | null;
+  connectionStatus: "CONNECTED" | "RECONNECTING" | "FORFEITED";
+}
+
+export interface PersistedMatchState {
+  matchId: string;
+  imageId: string;
+  state: GameState;
+  stateVersion: number;
+  deadlineMs: number | null;
+  winnerId: string | null;
+  endReason: GameEndReason | null;
+  cancelReason: string | null;
+  players: [PersistedMatchPlayer, PersistedMatchPlayer];
+}
+
 interface InternalPlayer extends MatchPlayer {
   ready: boolean;
   differences: Difference[] | null;
@@ -51,7 +74,7 @@ export class GameMatch {
   private winnerId: string | null = null;
   private endReason: GameEndReason | null = null;
   private cancelReason: string | null = null;
-  private readonly players: [InternalPlayer, InternalPlayer];
+  private players: [InternalPlayer, InternalPlayer];
 
   constructor(
     public readonly matchId: string,
@@ -78,6 +101,51 @@ export class GameMatch {
       lastCorrectAtMs: null,
       connectionStatus: "CONNECTED",
     })) as [InternalPlayer, InternalPlayer];
+  }
+
+  static restore(state: PersistedMatchState, fallbackDifferences: Difference[]): GameMatch {
+    const match = new GameMatch(
+      state.matchId,
+      state.imageId,
+      state.players.map(({ playerId, nickname }) => ({ playerId, nickname })) as [MatchPlayer, MatchPlayer],
+      fallbackDifferences,
+    );
+    match.state = state.state;
+    match.stateVersion = state.stateVersion;
+    match.deadlineMs = state.deadlineMs;
+    match.winnerId = state.winnerId;
+    match.endReason = state.endReason;
+    match.cancelReason = state.cancelReason;
+    match.players = state.players.map((player) => ({
+      ...structuredClone(player),
+      foundIds: new Set(player.foundIds),
+    })) as [InternalPlayer, InternalPlayer];
+    return match;
+  }
+
+  serialize(): PersistedMatchState {
+    return {
+      matchId: this.matchId,
+      imageId: this.imageId,
+      state: this.state,
+      stateVersion: this.stateVersion,
+      deadlineMs: this.deadlineMs,
+      winnerId: this.winnerId,
+      endReason: this.endReason,
+      cancelReason: this.cancelReason,
+      players: this.players.map((player) => ({
+        playerId: player.playerId,
+        nickname: player.nickname,
+        ready: player.ready,
+        differences: structuredClone(player.differences),
+        problemImageDataUrl: player.problemImageDataUrl,
+        foundIds: [...player.foundIds],
+        wrongAnswerCount: player.wrongAnswerCount,
+        hintsUsed: player.hintsUsed,
+        lastCorrectAtMs: player.lastCorrectAtMs,
+        connectionStatus: player.connectionStatus,
+      })) as [PersistedMatchPlayer, PersistedMatchPlayer],
+    };
   }
 
   get currentState(): GameState {
