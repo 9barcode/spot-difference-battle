@@ -48,6 +48,7 @@ pnpm dev
 
 - 웹: `http://localhost:5173`
 - 서버 상태 확인: `http://localhost:3001/health`
+- 운영 지표 확인: `http://localhost:3001/metrics`
 
 전체 타입 검사와 게임 규칙 테스트는 각각 `pnpm check`, `pnpm test`로 실행합니다. UI만 실행하려면 [UI/README.md](UI/README.md)를 참고합니다.
 
@@ -65,3 +66,5 @@ pnpm --filter @spot-battle/server db:migrate
 PostgreSQL 저장소를 사용하는 경우 진행 중인 경기 상태도 매 변경마다 저장됩니다. 서버가 재시작되면 게스트 토큰과 활성 경기를 복원하고 기존 재접속 유예시간을 적용합니다. 메모리 저장소를 사용하는 기본 로컬 실행은 프로세스 재시작 후 상태가 유지되지 않습니다.
 
 실제 PostgreSQL 복구 테스트는 `DATABASE_URL`을 설정한 뒤 `pnpm --filter @spot-battle/server exec vitest run test/postgres-restart.integration.test.ts`로 실행합니다.
+
+서버는 경기 생성·종료·취소·기권, 재접속 성공·만료, 저장·복구 실패와 게임 오류 코드를 구조화 로그와 `/metrics`에 기록합니다. 게스트 토큰, 정답 좌표와 신고 내용은 운영 지표에 포함하지 않습니다.

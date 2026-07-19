@@ -208,6 +208,20 @@ describe("game server", () => {
       const duplicateError = once<GameErrorPayload>(first, "game:error");
       first.emit("game:report", { matchId: firstMatch.matchId, reason: "UNFAIR", ...finishedContext });
       await expect(duplicateError).resolves.toMatchObject({ code: "DUPLICATE_REPORT" });
+
+      const metricsResponse = await app.inject({ method: "GET", url: "/metrics" });
+      expect(metricsResponse.statusCode).toBe(200);
+      expect(metricsResponse.json()).toMatchObject({
+        matchesCreated: 1,
+        matchesFinished: 1,
+        matchesCancelled: 0,
+        errors: {
+          INVALID_INPUT: 1,
+          STALE_STATE: 1,
+          DUPLICATE_ACTION: 1,
+        },
+      });
+      expect(JSON.stringify(metricsResponse.json())).not.toContain("guestToken");
     } finally {
       for (const socket of sockets.splice(0)) socket.disconnect();
       await app.close();
