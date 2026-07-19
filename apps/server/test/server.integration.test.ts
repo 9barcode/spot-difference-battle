@@ -72,6 +72,22 @@ function waitForNewerVersion(socket: TestSocket, stateVersion: number): Promise<
   });
 }
 
+function waitForProgress(
+  socket: TestSocket,
+  predicate: (snapshot: GameSnapshot) => boolean,
+): Promise<GameSnapshot> {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error("progress snapshot timed out")), 3_000);
+    const listener = (snapshot: GameSnapshot) => {
+      if (!predicate(snapshot)) return;
+      clearTimeout(timeout);
+      socket.off("game:snapshot", listener);
+      resolve(snapshot);
+    };
+    socket.on("game:snapshot", listener);
+  });
+}
+
 function waitForConnection(
   socket: TestSocket,
   playerId: string,
@@ -145,12 +161,33 @@ describe("game server", () => {
       });
       await expect(staleError).resolves.toMatchObject({ code: "STALE_STATE" });
 
-      let findingContext = actionContext(findingSnapshot);
+      const delayedGuess = {
+        matchId: firstMatch.matchId,
+        point: { x: 0.2, y: 0.2 },
+        ...actionContext(findingSnapshot),
+      };
+      const bothFoundOne = waitForProgress(first, (snapshot) =>
+        snapshot.players.every((player) => player.foundCount === 1),
+      );
+      const secondGuessResult = once(second, "game:guess-result");
+      second.emit("game:guess", {
+        matchId: secondMatch.matchId,
+        point: { x: 0.2, y: 0.2 },
+        ...actionContext(findingSnapshot),
+      });
+      await secondGuessResult;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      const firstGuessResult = once(first, "game:guess-result");
+      first.emit("game:guess", delayedGuess);
+      await firstGuessResult;
+      const afterConcurrentGuesses = await bothFoundOne;
+
+      const duplicateActionError = once<GameErrorPayload>(first, "game:error");
+      first.emit("game:guess", delayedGuess);
+      await expect(duplicateActionError).resolves.toMatchObject({ code: "DUPLICATE_ACTION" });
+
+      let findingContext = actionContext(afterConcurrentGuesses);
       let nextSnapshot = waitForNewerVersion(first, findingContext.expectedStateVersion);
-      first.emit("game:guess", { matchId: firstMatch.matchId, point: { x: 0.2, y: 0.2 }, ...findingContext });
-      const afterFirstGuess = await nextSnapshot;
-      findingContext = actionContext(afterFirstGuess);
-      nextSnapshot = waitForNewerVersion(first, findingContext.expectedStateVersion);
       first.emit("game:guess", { matchId: firstMatch.matchId, point: { x: 0.5, y: 0.5 }, ...findingContext });
       const afterSecondGuess = await nextSnapshot;
       findingContext = actionContext(afterSecondGuess);
