@@ -37,6 +37,8 @@ export interface PersistedMatchPlayer extends MatchPlayer {
   ready: boolean;
   differences: Difference[] | null;
   problemImageDataUrl: string | null;
+  autoFilledIds: string[];
+  autoFillOverlayDataUrl: string | null;
   foundIds: string[];
   wrongAnswerCount: number;
   hintsUsed: number;
@@ -60,6 +62,8 @@ interface InternalPlayer extends MatchPlayer {
   ready: boolean;
   differences: Difference[] | null;
   problemImageDataUrl: string | null;
+  autoFilledIds: string[];
+  autoFillOverlayDataUrl: string | null;
   foundIds: Set<string>;
   wrongAnswerCount: number;
   hintsUsed: number;
@@ -82,7 +86,14 @@ export class GameMatch {
     players: [MatchPlayer, MatchPlayer],
     private readonly fallbackDifferences: Difference[],
   ) {
-    const validation = validateDifferences(fallbackDifferences);
+    const validation = validateDifferences(
+      fallbackDifferences,
+      undefined,
+      fallbackDifferences.length,
+    );
+    if (fallbackDifferences.length < GAME_CONFIG.differenceCount) {
+      throw new GameRuleError("INVALID_FALLBACK", "자동 보충 후보가 부족합니다.");
+    }
     if (!validation.valid) {
       throw new GameRuleError("INVALID_FALLBACK", validation.errors.join(" "));
     }
@@ -95,12 +106,14 @@ export class GameMatch {
       ready: false,
       differences: null,
       problemImageDataUrl: null,
+      autoFilledIds: [],
+      autoFillOverlayDataUrl: null,
       foundIds: new Set<string>(),
       wrongAnswerCount: 0,
       hintsUsed: 0,
       lastCorrectAtMs: null,
       connectionStatus: "CONNECTED",
-    })) as [InternalPlayer, InternalPlayer];
+    })) as unknown as [InternalPlayer, InternalPlayer];
   }
 
   static restore(state: PersistedMatchState, fallbackDifferences: Difference[]): GameMatch {
@@ -118,8 +131,10 @@ export class GameMatch {
     match.cancelReason = state.cancelReason;
     match.players = state.players.map((player) => ({
       ...structuredClone(player),
+      autoFilledIds: player.autoFilledIds ?? [],
+      autoFillOverlayDataUrl: player.autoFillOverlayDataUrl ?? null,
       foundIds: new Set(player.foundIds),
-    })) as [InternalPlayer, InternalPlayer];
+    })) as unknown as [InternalPlayer, InternalPlayer];
     return match;
   }
 
@@ -139,6 +154,8 @@ export class GameMatch {
         ready: player.ready,
         differences: structuredClone(player.differences),
         problemImageDataUrl: player.problemImageDataUrl,
+        autoFilledIds: [...player.autoFilledIds],
+        autoFillOverlayDataUrl: player.autoFillOverlayDataUrl,
         foundIds: [...player.foundIds],
         wrongAnswerCount: player.wrongAnswerCount,
         hintsUsed: player.hintsUsed,
@@ -181,7 +198,10 @@ export class GameMatch {
       throw new GameRuleError("ALREADY_SUBMITTED", "이미 차이점을 제출했습니다.");
     }
 
-    const validation = validateDifferences(differences);
+    if (differences.length < 1 || differences.length > GAME_CONFIG.differenceCount) {
+      throw new GameRuleError("INVALID_DIFFERENCES", "차이점은 1개 이상 3개 이하여야 합니다.");
+    }
+    const validation = validateDifferences(differences, undefined, differences.length);
     if (!validation.valid) {
       throw new GameRuleError("INVALID_DIFFERENCES", validation.errors.join(" "));
     }
@@ -189,7 +209,7 @@ export class GameMatch {
     player.differences = structuredClone(differences);
     player.problemImageDataUrl = problemImageDataUrl;
     this.bumpVersion();
-    if (this.players.every((candidate) => candidate.differences !== null)) {
+    if (this.players.every((candidate) => candidate.differences?.length === GAME_CONFIG.differenceCount)) {
       this.startFinding(nowMs);
     }
   }
@@ -253,8 +273,12 @@ export class GameMatch {
     if (this.deadlineMs === null || nowMs < this.deadlineMs) return false;
 
     if (this.state === "EDITING") {
-      const submittedPlayers = this.players.filter((player) => player.differences !== null);
-      this.finish(submittedPlayers.length === 1 ? submittedPlayers[0]!.playerId : null, "TIMEOUT");
+      for (const player of this.players) this.autoFillPlayer(player);
+      if (this.players.every((player) => player.differences?.length === GAME_CONFIG.differenceCount)) {
+        this.startFinding(nowMs);
+      } else {
+        this.cancel("자동 보충 후보가 부족해 경기를 계속할 수 없습니다.");
+      }
       return true;
     }
 
@@ -285,6 +309,10 @@ export class GameMatch {
         canViewProblem && problemOwner?.differences
           ? problemOwner.problemImageDataUrl
           : null,
+      autoFillOverlayDataUrl:
+        canViewProblem && problemOwner?.differences
+          ? problemOwner.autoFillOverlayDataUrl
+          : null,
       myFoundIds: viewer ? [...viewer.foundIds] : [],
       endReason: this.endReason,
       cancelReason: this.cancelReason,
@@ -314,6 +342,30 @@ export class GameMatch {
     this.endReason = "CANCELLED";
     this.cancelReason = reason;
     this.transition("CANCELLED", null);
+  }
+
+  setAutoFillOverlay(playerId: string, dataUrl: string): void {
+    this.getPlayer(playerId).autoFillOverlayDataUrl = dataUrl;
+  }
+
+  getAutoFilledDifferences(playerId: string): Difference[] {
+    const player = this.getPlayer(playerId);
+    return (player.differences ?? []).filter((difference) => player.autoFilledIds.includes(difference.id));
+  }
+
+  private autoFillPlayer(player: InternalPlayer): void {
+    const selected = structuredClone(player.differences ?? []);
+    for (const candidate of this.fallbackDifferences) {
+      if (selected.length >= GAME_CONFIG.differenceCount) break;
+      if (selected.some((difference) => difference.id === candidate.id)) continue;
+      const next = [...selected, candidate];
+      if (validateDifferences(next, undefined, next.length).valid) {
+        selected.push(structuredClone(candidate));
+        player.autoFilledIds.push(candidate.id);
+      }
+    }
+    player.differences = selected;
+    this.bumpVersion();
   }
 
   private startFinding(nowMs: number): void {
@@ -390,6 +442,7 @@ export class GameMatch {
       nickname: player.nickname,
       ready: player.ready,
       submitted: player.differences !== null,
+      autoFilledCount: player.autoFilledIds.length,
       foundCount: player.foundIds.size,
       wrongAnswerCount: player.wrongAnswerCount,
       hintsRemaining: GAME_CONFIG.hintsPerGame - player.hintsUsed,

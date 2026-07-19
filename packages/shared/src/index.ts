@@ -67,6 +67,7 @@ export interface PlayerProgress {
   nickname: string;
   ready: boolean;
   submitted: boolean;
+  autoFilledCount: number;
   foundCount: number;
   wrongAnswerCount: number;
   hintsRemaining: number;
@@ -85,6 +86,7 @@ export interface GameSnapshot {
   players: [PlayerProgress, PlayerProgress];
   winnerId: string | null;
   problemImageDataUrl: string | null;
+  autoFillOverlayDataUrl: string | null;
   myFoundIds: string[];
   endReason: GameEndReason | null;
   cancelReason: string | null;

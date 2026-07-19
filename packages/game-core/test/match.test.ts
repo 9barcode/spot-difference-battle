@@ -59,30 +59,48 @@ describe("GameMatch lifecycle", () => {
     }
   });
 
-  it("ends without injecting fallback differences when editing expires", () => {
+  it("auto-fills both players and starts finding when editing expires", () => {
     const match = createMatch();
     startEditing(match, 1_000);
 
     expect(match.expire(31_000)).toBe(true);
-    expect(match.snapshot()).toMatchObject({
-      state: "FINISHED",
-      winnerId: null,
-      endReason: "TIMEOUT",
-    });
-    expect(match.snapshot().players.every((player) => !player.submitted)).toBe(true);
+    expect(match.snapshot().state).toBe("FINDING");
+    expect(match.snapshot().players).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ playerId: "p1", submitted: true, autoFilledCount: 3 }),
+        expect.objectContaining({ playerId: "p2", submitted: true, autoFilledCount: 3 }),
+      ]),
+    );
   });
 
-  it("awards an editing-timeout win to the player who submitted", () => {
+  it("auto-fills only the player who did not submit", () => {
     const match = createMatch();
     startEditing(match, 1_000);
     match.submitDifferences("p1", fallback, 2_000);
 
     expect(match.expire(31_000)).toBe(true);
-    expect(match.snapshot()).toMatchObject({
-      state: "FINISHED",
-      winnerId: "p1",
-      endReason: "TIMEOUT",
-    });
+    expect(match.snapshot().state).toBe("FINDING");
+    expect(match.snapshot().players).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ playerId: "p1", autoFilledCount: 0 }),
+        expect.objectContaining({ playerId: "p2", autoFilledCount: 3 }),
+      ]),
+    );
+  });
+
+  it("keeps a partial submission and fills only its missing slots", () => {
+    const match = createMatch();
+    startEditing(match, 1_000);
+    match.submitDifferences("p1", fallback.slice(0, 1), 2_000);
+
+    expect(match.expire(31_000)).toBe(true);
+    expect(match.snapshot().state).toBe("FINDING");
+    expect(match.snapshot().players).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ playerId: "p1", autoFilledCount: 2 }),
+        expect.objectContaining({ playerId: "p2", autoFilledCount: 3 }),
+      ]),
+    );
   });
 
   it("tracks correct, duplicate and wrong guesses with server time", () => {

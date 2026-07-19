@@ -34,11 +34,12 @@ function distance(a: NormalizedPoint, b: NormalizedPoint): number {
 export function validateDifferences(
   differences: Difference[],
   options: DifferenceValidationOptions = DEFAULT_VALIDATION_OPTIONS,
+  requiredCount: number = GAME_CONFIG.differenceCount,
 ): DifferenceValidationResult {
   const errors: string[] = [];
 
-  if (differences.length !== GAME_CONFIG.differenceCount) {
-    errors.push(`차이점은 정확히 ${GAME_CONFIG.differenceCount}개여야 합니다.`);
+  if (differences.length !== requiredCount) {
+    errors.push(`차이점은 정확히 ${requiredCount}개여야 합니다.`);
   }
 
   const ids = new Set<string>();

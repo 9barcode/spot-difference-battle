@@ -2,9 +2,15 @@ import { GameMatch, GameRuleError, type PersistedMatchState } from "@spot-battle
 import type { Difference } from "@spot-battle/shared";
 
 const FALLBACK_DIFFERENCES: Difference[] = [
-  { id: "fallback-a", kind: "ADD", region: { x: 0.2, y: 0.2, radius: 0.05 } },
-  { id: "fallback-b", kind: "COVER", region: { x: 0.5, y: 0.5, radius: 0.05 } },
-  { id: "fallback-c", kind: "COLOR", region: { x: 0.8, y: 0.8, radius: 0.05 } },
+  { id: "auto-a", kind: "ADD", region: { x: 0.18, y: 0.18, radius: 0.04 } },
+  { id: "auto-b", kind: "COVER", region: { x: 0.5, y: 0.18, radius: 0.04 } },
+  { id: "auto-c", kind: "COLOR", region: { x: 0.82, y: 0.18, radius: 0.04 } },
+  { id: "auto-d", kind: "COLOR", region: { x: 0.18, y: 0.5, radius: 0.04 } },
+  { id: "auto-e", kind: "ADD", region: { x: 0.5, y: 0.5, radius: 0.04 } },
+  { id: "auto-f", kind: "COVER", region: { x: 0.82, y: 0.5, radius: 0.04 } },
+  { id: "auto-g", kind: "COVER", region: { x: 0.18, y: 0.82, radius: 0.04 } },
+  { id: "auto-h", kind: "COLOR", region: { x: 0.5, y: 0.82, radius: 0.04 } },
+  { id: "auto-i", kind: "ADD", region: { x: 0.82, y: 0.82, radius: 0.04 } },
 ];
 
 export class MatchRegistry {

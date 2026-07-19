@@ -6,6 +6,7 @@ import { randomUUID } from "node:crypto";
 import { Server, type Socket } from "socket.io";
 import { MatchRegistry } from "./match-registry.js";
 import { InMemoryMatchStore, type MatchStore } from "./match-store.js";
+import { renderAutoFillOverlay } from "./auto-fill-renderer.js";
 
 export interface GameServerOptions {
   webOrigin: string;
@@ -134,6 +135,18 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
     app.log.info({ event: "match_terminal", matchId: match.matchId, state: match.currentState });
   }
 
+  async function attachAutoFillOverlays(match: GameMatch): Promise<void> {
+    for (const player of match.snapshot().players) {
+      if (!player.autoFilledCount) continue;
+      try {
+        const differences = match.getAutoFilledDifferences(player.playerId);
+        match.setAutoFillOverlay(player.playerId, await renderAutoFillOverlay(differences));
+      } catch (error) {
+        app.log.error({ event: "auto_fill_overlay_failed", matchId: match.matchId, playerId: player.playerId, error });
+      }
+    }
+  }
+
   function persistRuntime(match: GameMatch): Promise<void> {
     const matchId = match.matchId;
     const state = match.currentState === "FINISHED" || match.currentState === "CANCELLED"
@@ -245,7 +258,10 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
   }
 
   function asDifferences(value: unknown): Difference[] {
-    if (!Array.isArray(value) || value.length !== GAME_CONFIG.differenceCount) {
+    if (
+      !Array.isArray(value) || value.length < 1 ||
+      value.length > GAME_CONFIG.differenceCount
+    ) {
       return invalidInput("차이점 데이터가 올바르지 않습니다.");
     }
     for (const item of value) {
@@ -338,6 +354,7 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
     for (const state of restoredMatches) {
       const match = registry.restore(state);
       if (match.expire(Date.now())) {
+        await attachAutoFillOverlays(match);
         emitSnapshots(match);
         void persistIfFinished(match);
         continue;
@@ -582,11 +599,23 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
     });
   });
 
+  let expiryRunning = false;
   const expiryTimer = setInterval(() => {
-    for (const match of registry.expire(Date.now())) {
-      emitSnapshots(match);
-      void persistIfFinished(match);
-    }
+    if (expiryRunning) return;
+    expiryRunning = true;
+    void (async () => {
+      try {
+        for (const match of registry.expire(Date.now())) {
+          await attachAutoFillOverlays(match);
+          emitSnapshots(match);
+          void persistIfFinished(match);
+        }
+      } catch (error) {
+        app.log.error({ event: "match_expiry_failed", error });
+      } finally {
+        expiryRunning = false;
+      }
+    })();
   }, 250);
   expiryTimer.unref();
 
