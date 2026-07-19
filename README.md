@@ -63,3 +63,5 @@ pnpm --filter @spot-battle/server db:migrate
 `DATABASE_URL`이 설정되면 서버는 경기 결과, 게스트와 신고를 PostgreSQL에 저장합니다. 설정하지 않은 로컬 환경에서는 메모리 저장소를 사용합니다. 필요한 환경변수는 `.env.example`을 참고합니다.
 
 PostgreSQL 저장소를 사용하는 경우 진행 중인 경기 상태도 매 변경마다 저장됩니다. 서버가 재시작되면 게스트 토큰과 활성 경기를 복원하고 기존 재접속 유예시간을 적용합니다. 메모리 저장소를 사용하는 기본 로컬 실행은 프로세스 재시작 후 상태가 유지되지 않습니다.
+
+실제 PostgreSQL 복구 테스트는 `DATABASE_URL`을 설정한 뒤 `pnpm --filter @spot-battle/server exec vitest run test/postgres-restart.integration.test.ts`로 실행합니다.
