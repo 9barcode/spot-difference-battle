@@ -1,6 +1,11 @@
 import cors from "@fastify/cors";
 import { GameMatch, GameRuleError } from "@spot-battle/game-core";
-import { GAME_CONFIG, type ClientToServerEvents, type ServerToClientEvents } from "@spot-battle/shared";
+import {
+  GAME_CONFIG,
+  PROBLEM_IMAGE_LIMITS,
+  type ClientToServerEvents,
+  type ServerToClientEvents,
+} from "@spot-battle/shared";
 import Fastify, { type FastifyInstance } from "fastify";
 import { randomUUID } from "node:crypto";
 import { Server, type Socket } from "socket.io";
@@ -47,7 +52,11 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
     ServerToClientEvents,
     Record<string, never>,
     SocketData
-  >(app.server, { cors: { origin: options.webOrigin } });
+  >(app.server, {
+    cors: { origin: options.webOrigin },
+    // 제작자가 렌더한 문제 이미지가 오간다. 게임 코어가 다시 한 번 용량을 검증한다.
+    maxHttpBufferSize: PROBLEM_IMAGE_LIMITS.maxBytes + 256 * 1024,
+  });
   const registry = new MatchRegistry();
   const sessionsByToken = new Map<string, GuestSession>();
   const sessionsByPlayer = new Map<string, GuestSession>();
@@ -275,11 +284,17 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
       }
     });
 
-    socket.on("game:submit", ({ matchId, differences, expectedState, expectedStateVersion }) => {
+    socket.on("game:submit", ({ matchId, differences, renderedImage, autoFilled, expectedState, expectedStateVersion }) => {
       try {
         const match = registry.getForPlayer(matchId, session.playerId);
         assertClientState(match, session.playerId, expectedState, expectedStateVersion, true);
-        match.submitDifferences(session.playerId, differences, Date.now());
+        match.submitDifferences(
+          session.playerId,
+          differences,
+          renderedImage,
+          Date.now(),
+          Boolean(autoFilled),
+        );
         emitSnapshots(match);
       } catch (error) {
         handleActionError(socket, matchId, error);

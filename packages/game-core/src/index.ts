@@ -1,5 +1,6 @@
 import {
   GAME_CONFIG,
+  PROBLEM_IMAGE_LIMITS,
   type AnswerRegion,
   type Difference,
   type NormalizedPoint,
@@ -79,6 +80,30 @@ export function validateDifferences(
         errors.push(`${left + 1}번과 ${right + 1}번 차이점이 너무 가깝습니다.`);
       }
     }
+  }
+
+  return { valid: errors.length === 0, errors };
+}
+
+/**
+ * 제작자가 올린 문제 이미지를 검증한다.
+ * 서버는 픽셀을 해석하지 않으므로 형식과 용량만 확인한다.
+ */
+export function validateProblemImage(image: unknown): DifferenceValidationResult {
+  if (typeof image !== "string") {
+    return { valid: false, errors: ["문제 이미지가 없습니다."] };
+  }
+  if (!PROBLEM_IMAGE_LIMITS.allowedPrefixes.some((prefix) => image.startsWith(prefix))) {
+    return { valid: false, errors: ["허용되지 않은 문제 이미지 형식입니다."] };
+  }
+
+  const payload = image.slice(image.indexOf(",") + 1);
+  const approximateBytes = Math.floor((payload.length * 3) / 4);
+  const errors: string[] = [];
+
+  if (approximateBytes <= 0) errors.push("문제 이미지가 비어 있습니다.");
+  if (approximateBytes > PROBLEM_IMAGE_LIMITS.maxBytes) {
+    errors.push("문제 이미지 용량이 허용치를 넘었습니다.");
   }
 
   return { valid: errors.length === 0, errors };

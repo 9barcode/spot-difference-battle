@@ -1,12 +1,8 @@
 import { GameMatch, GameRuleError } from "@spot-battle/game-core";
-import type { Difference } from "@spot-battle/shared";
 
-const FALLBACK_DIFFERENCES: Difference[] = [
-  { id: "fallback-a", kind: "ADD", region: { x: 0.2, y: 0.2, radius: 0.05 } },
-  { id: "fallback-b", kind: "COVER", region: { x: 0.5, y: 0.5, radius: 0.05 } },
-  { id: "fallback-c", kind: "COLOR", region: { x: 0.8, y: 0.8, radius: 0.05 } },
-];
-
+// 서버측 자동 보충 후보는 두지 않는다.
+// 서버가 차이점을 주입해도 그에 맞는 문제 이미지를 렌더할 수 없기 때문이다.
+// 자동 보충은 제작자 클라이언트가 마감 직전에 수행한다.
 export class MatchRegistry {
   private readonly matches = new Map<string, GameMatch>();
   private readonly playerMatches = new Map<string, string>();
@@ -18,7 +14,7 @@ export class MatchRegistry {
       { playerId: string; nickname: string },
     ],
   ): GameMatch {
-    const match = new GameMatch(matchId, "prototype-room", players, FALLBACK_DIFFERENCES);
+    const match = new GameMatch(matchId, "prototype-room", players);
     this.matches.set(matchId, match);
     for (const player of players) this.playerMatches.set(player.playerId, matchId);
     return match;

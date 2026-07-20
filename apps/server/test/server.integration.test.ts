@@ -15,6 +15,9 @@ import { InMemoryMatchStore } from "../src/match-store.js";
 
 type TestSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 
+/** 제작자가 렌더해 올리는 문제 이미지 대역 */
+const PROBLEM_IMAGE = `data:image/webp;base64,${"A".repeat(512)}`;
+
 const differences: Difference[] = [
   { id: "a", kind: "ADD", region: { x: 0.2, y: 0.2, radius: 0.05 } },
   { id: "b", kind: "COVER", region: { x: 0.5, y: 0.5, radius: 0.05 } },
@@ -113,8 +116,8 @@ describe("game server", () => {
 
       const finding = waitForState(first, "FINDING");
       const editingContext = { expectedState: editingSnapshot.state, expectedStateVersion: editingSnapshot.stateVersion };
-      first.emit("game:submit", { matchId: firstMatch.matchId, differences, ...editingContext });
-      second.emit("game:submit", { matchId: secondMatch.matchId, differences, ...editingContext });
+      first.emit("game:submit", { matchId: firstMatch.matchId, differences, renderedImage: PROBLEM_IMAGE, ...editingContext });
+      second.emit("game:submit", { matchId: secondMatch.matchId, differences, renderedImage: PROBLEM_IMAGE, ...editingContext });
       const findingSnapshot = await finding;
       expect(findingSnapshot).toMatchObject({ state: "FINDING" });
 

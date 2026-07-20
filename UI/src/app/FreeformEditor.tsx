@@ -96,6 +96,103 @@ function drawSelectionOutline(output: ImageData, mask: Uint8Array, width: number
   }
 }
 
+const RENDER_MAX_WIDTH = 1000;
+
+function sceneSize(image: HTMLImageElement) {
+  const width = Math.min(RENDER_MAX_WIDTH, image.naturalWidth);
+  return { width, height: Math.round((width * image.naturalHeight) / image.naturalWidth) };
+}
+
+function loadSceneImage(): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("원본 그림을 불러오지 못했습니다."));
+    image.src = gameSceneImg;
+  });
+}
+
+/** 원본 위에 얹을 효과만 담은 투명 캔버스를 만든다. 화면 표시와 이미지 내보내기가 함께 쓴다. */
+function drawEffectLayer(
+  image: HTMLImageElement,
+  differences: Difference[],
+  selectedId?: string,
+  selectionOnly = false,
+): HTMLCanvasElement | null {
+  const { width, height } = sceneSize(image);
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d");
+  if (!context) return null;
+
+  const sourceCanvas = document.createElement("canvas");
+  sourceCanvas.width = width;
+  sourceCanvas.height = height;
+  const sourceContext = sourceCanvas.getContext("2d", { willReadFrequently: true });
+  if (!sourceContext) return null;
+  sourceContext.drawImage(image, 0, 0, width, height);
+  const source = sourceContext.getImageData(0, 0, width, height);
+  const output = context.createImageData(width, height);
+
+  let selectedMask: Uint8Array | null = null;
+  differences.forEach((difference) => {
+    if (!difference.fill) return;
+    const isSelected = difference.id === selectedId;
+    const mask = paintConnectedRegion(source, output, difference.fill, !(isSelected && selectionOnly));
+    if (isSelected) selectedMask = mask;
+  });
+  if (selectedMask) drawSelectionOutline(output, selectedMask, width, height);
+  context.putImageData(output, 0, 0);
+
+  differences.flatMap((difference) => difference.strokes ?? []).forEach((stroke) => {
+    if (!stroke.points.length) return;
+    context.save();
+    context.globalCompositeOperation = stroke.tool === "ERASER" ? "destination-out" : "source-over";
+    context.strokeStyle = stroke.color;
+    context.lineWidth = stroke.width * 3;
+    context.lineCap = "round";
+    context.lineJoin = "round";
+    context.beginPath();
+    stroke.points.forEach((point, index) => {
+      const x = point.x * width;
+      const y = point.y * height;
+      if (index === 0) context.moveTo(x, y);
+      else context.lineTo(x, y);
+    });
+    if (stroke.points.length === 1) {
+      context.lineTo(stroke.points[0]!.x * width + 0.1, stroke.points[0]!.y * height);
+    }
+    context.stroke();
+    context.restore();
+  });
+
+  return canvas;
+}
+
+/**
+ * 원본과 효과를 하나로 합쳐 문제 이미지를 만든다.
+ *
+ * 제작 명령을 상대 클라이언트로 보내면 개발자도구에서 정답 위치가 그대로 보이므로,
+ * 제작자 쪽에서 합성까지 끝내고 결과 이미지만 서버로 올린다.
+ */
+export async function renderProblemImage(differences: Difference[]): Promise<string> {
+  const image = await loadSceneImage();
+  const { width, height } = sceneSize(image);
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("문제 이미지를 만들 수 없습니다.");
+
+  context.drawImage(image, 0, 0, width, height);
+  const layer = drawEffectLayer(image, differences);
+  if (layer) context.drawImage(layer, 0, 0);
+
+  const webp = canvas.toDataURL("image/webp", 0.85);
+  return webp.startsWith("data:image/webp") ? webp : canvas.toDataURL("image/png");
+}
+
 export function DifferenceEffects({
   differences,
   selectedId,
@@ -109,61 +206,68 @@ export function DifferenceEffects({
   const effectsKey = JSON.stringify(differences);
 
   useEffect(() => {
-    const image = new Image();
-    image.src = gameSceneImg;
-    image.onload = () => {
+    let cancelled = false;
+    void loadSceneImage().then((image) => {
       const canvas = canvasRef.current;
-      if (!canvas) return;
-      const width = Math.min(1000, image.naturalWidth);
-      const height = Math.round(width * image.naturalHeight / image.naturalWidth);
-      canvas.width = width;
-      canvas.height = height;
+      if (cancelled || !canvas) return;
+      const layer = drawEffectLayer(image, differences, selectedId, selectionOnly);
+      if (!layer) return;
+      canvas.width = layer.width;
+      canvas.height = layer.height;
       const context = canvas.getContext("2d");
       if (!context) return;
-
-      const sourceCanvas = document.createElement("canvas");
-      sourceCanvas.width = width;
-      sourceCanvas.height = height;
-      const sourceContext = sourceCanvas.getContext("2d", { willReadFrequently: true });
-      if (!sourceContext) return;
-      sourceContext.drawImage(image, 0, 0, width, height);
-      const source = sourceContext.getImageData(0, 0, width, height);
-      const output = context.createImageData(width, height);
-
-      let selectedMask: Uint8Array | null = null;
-      differences.forEach((difference) => {
-        if (!difference.fill) return;
-        const isSelected = difference.id === selectedId;
-        const mask = paintConnectedRegion(source, output, difference.fill, !(isSelected && selectionOnly));
-        if (isSelected) selectedMask = mask;
-      });
-      if (selectedMask) drawSelectionOutline(output, selectedMask, width, height);
-      context.clearRect(0, 0, width, height);
-      context.putImageData(output, 0, 0);
-
-      differences.flatMap((difference) => difference.strokes ?? []).forEach((stroke) => {
-        if (!stroke.points.length) return;
-        context.save();
-        context.globalCompositeOperation = stroke.tool === "ERASER" ? "destination-out" : "source-over";
-        context.strokeStyle = stroke.color;
-        context.lineWidth = stroke.width * 3;
-        context.lineCap = "round";
-        context.lineJoin = "round";
-        context.beginPath();
-        stroke.points.forEach((point, index) => {
-          const x = point.x * width;
-          const y = point.y * height;
-          if (index === 0) context.moveTo(x, y);
-          else context.lineTo(x, y);
-        });
-        if (stroke.points.length === 1) context.lineTo(stroke.points[0]!.x * width + 0.1, stroke.points[0]!.y * height);
-        context.stroke();
-        context.restore();
-      });
+      context.clearRect(0, 0, layer.width, layer.height);
+      context.drawImage(layer, 0, 0);
+    });
+    return () => {
+      cancelled = true;
     };
   }, [effectsKey, selectedId, selectionOnly]);
 
   return <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 h-full w-full" />;
+}
+
+/**
+ * 자동 보충 후보.
+ * 서로 충분히 떨어져 있고 경계에서 안전한 좌표만 고른다.
+ * 서버가 아니라 여기서 채우는 이유는 문제 이미지를 렌더할 수 있는 쪽이 클라이언트뿐이기 때문이다.
+ */
+const AUTO_FILL_CANDIDATES: { seed: NormalizedPoint; color: string }[] = [
+  { seed: { x: 0.18, y: 0.3 }, color: "#ef2b2d" },
+  { seed: { x: 0.82, y: 0.28 }, color: "#1775e5" },
+  { seed: { x: 0.3, y: 0.74 }, color: "#18a83a" },
+  { seed: { x: 0.68, y: 0.76 }, color: "#ffd400" },
+  { seed: { x: 0.5, y: 0.48 }, color: "#6522a8" },
+];
+
+const MINIMUM_GAP = 0.03;
+
+function overlaps(candidate: Difference, existing: Difference[]): boolean {
+  return existing.some((difference) => {
+    const gap = Math.hypot(
+      difference.region.x - candidate.region.x,
+      difference.region.y - candidate.region.y,
+    );
+    return gap < difference.region.radius + candidate.region.radius + MINIMUM_GAP;
+  });
+}
+
+/** 제한시간이 끝날 때 부족한 차이점을 후보로 채워 정확히 differenceCount개를 만든다. */
+export function buildAutoFilledDifferences(current: Difference[]): Difference[] {
+  const filled = [...current];
+  for (const candidate of AUTO_FILL_CANDIDATES) {
+    if (filled.length >= GAME_CONFIG.differenceCount) break;
+    const fill: DifferenceFill = { seed: candidate.seed, color: candidate.color, tolerance: 34 };
+    const difference: Difference = {
+      id: `auto-${filled.length}-${candidate.seed.x}-${candidate.seed.y}`,
+      kind: "COLOR",
+      region: regionFromDifference(fill, []),
+      fill,
+    };
+    if (overlaps(difference, filled)) continue;
+    filled.push(difference);
+  }
+  return filled;
 }
 
 export function FreeformEditor({
