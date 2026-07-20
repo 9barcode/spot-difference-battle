@@ -1,6 +1,8 @@
 import type {
+  AnswerRegion,
   ClientToServerEvents,
   Difference,
+  FoundMark,
   GameErrorPayload,
   GameSnapshot,
   GuessResult,
@@ -33,6 +35,7 @@ export function useGameClient() {
   const [snapshot, setSnapshot] = useState<GameSnapshot | null>(null);
   const [lastGuess, setLastGuess] = useState<GuessResult | null>(null);
   const [foundIds, setFoundIds] = useState<Set<string>>(new Set());
+  const [foundMarks, setFoundMarks] = useState<FoundMark[]>([]);
   const [hintArea, setHintArea] = useState<HintResult["area"] | null>(null);
   const [error, setError] = useState<GameErrorPayload | null>(null);
   const [reportId, setReportId] = useState<string | null>(null);
@@ -53,6 +56,7 @@ export function useGameClient() {
       setMatch(payload);
       setPhase("IN_GAME");
       setFoundIds(new Set());
+      setFoundMarks([]);
       setLastGuess(null);
       setReportId(null);
     });
@@ -60,11 +64,20 @@ export function useGameClient() {
       snapshotRef.current = nextSnapshot;
       setSnapshot(nextSnapshot);
       setFoundIds(new Set(nextSnapshot.myFoundIds));
+      // 재접속 시에도 이미 맞힌 표시가 복원되도록 서버 스냅샷을 그대로 따른다.
+      setFoundMarks(nextSnapshot.foundMarks);
     });
     socket.on("game:guess-result", (result) => {
       setLastGuess(result);
-      if (result.correct && result.differenceId) {
-        setFoundIds((current) => new Set(current).add(result.differenceId!));
+      if (result.correct && result.differenceId && result.region) {
+        const differenceId = result.differenceId;
+        const region: AnswerRegion = result.region;
+        setFoundIds((current) => new Set(current).add(differenceId));
+        setFoundMarks((current) =>
+          current.some((mark) => mark.differenceId === differenceId)
+            ? current
+            : [...current, { differenceId, region }],
+        );
       }
     });
     socket.on("game:hint-result", (result) => {
@@ -112,6 +125,7 @@ export function useGameClient() {
     setMatch(null);
     setSnapshot(null);
     setFoundIds(new Set());
+    setFoundMarks([]);
     setReportId(null);
     setPhase("LOBBY");
   }, []);
@@ -131,6 +145,7 @@ export function useGameClient() {
     snapshot,
     lastGuess,
     foundIds,
+    foundMarks,
     hintArea,
     error,
     reportId,
@@ -139,9 +154,17 @@ export function useGameClient() {
     startMatching,
     cancelMatching,
     ready: () => match && socketRef.current?.emit("game:ready", { matchId: match.matchId }),
-    submit: (differences: Difference[]) => {
+    submit: (differences: Difference[], renderedImage: string, autoFilled = false) => {
       const context = actionContext();
-      if (match && context) socketRef.current?.emit("game:submit", { matchId: match.matchId, differences, ...context });
+      if (match && context) {
+        socketRef.current?.emit("game:submit", {
+          matchId: match.matchId,
+          differences,
+          renderedImage,
+          autoFilled,
+          ...context,
+        });
+      }
     },
     guess: (point: NormalizedPoint) => {
       const context = actionContext();
