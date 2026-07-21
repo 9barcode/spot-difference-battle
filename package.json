@@ -5,8 +5,11 @@
   "packageManager": "pnpm@11.9.0",
   "scripts": {
     "build": "pnpm -r --if-present build",
+    "build:packages": "pnpm --filter @spot-battle/shared --filter @spot-battle/game-core build",
     "check": "pnpm -r --if-present check",
+    "predev": "pnpm build:packages",
     "dev": "pnpm --parallel --filter @spot-battle/web --filter @spot-battle/server dev",
+    "setup": "pnpm install && pnpm build:packages",
     "test": "pnpm -r --if-present test"
   },
   "devDependencies": {
