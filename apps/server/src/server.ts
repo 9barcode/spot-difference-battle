@@ -8,9 +8,11 @@ import {
 } from "@spot-battle/shared";
 import Fastify, { type FastifyInstance } from "fastify";
 import { randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { Server, type Socket } from "socket.io";
 import { MatchRegistry } from "./match-registry.js";
 import { InMemoryMatchStore, type MatchStore } from "./match-store.js";
+import { validateProblemImageCoordinates } from "./problem-image-validation.js";
 
 export interface GameServerOptions {
   webOrigin: string;
@@ -42,6 +44,7 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
   const app = Fastify({ logger: false });
   await app.register(cors, { origin: options.webOrigin });
   const matchStore = options.matchStore ?? new InMemoryMatchStore();
+  const originalProblemImage = await readFile(new URL("../../../UI/src/imports/image.png", import.meta.url));
   app.get("/health", async () => {
     const database = await matchStore.health();
     return { status: database ? "ok" : "degraded", server: "ok", database };
@@ -284,10 +287,18 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
       }
     });
 
-    socket.on("game:submit", ({ matchId, differences, renderedImage, autoFilled, expectedState, expectedStateVersion }) => {
+    socket.on("game:submit", async ({ matchId, differences, renderedImage, autoFilled, expectedState, expectedStateVersion }) => {
       try {
         const match = registry.getForPlayer(matchId, session.playerId);
         assertClientState(match, session.playerId, expectedState, expectedStateVersion, true);
+        try {
+          validateProblemImageCoordinates(originalProblemImage, renderedImage, differences);
+        } catch (error) {
+          throw new GameRuleError(
+            "INVALID_PROBLEM_COORDINATES",
+            error instanceof Error ? error.message : "문제 이미지와 정답 좌표가 일치하지 않습니다.",
+          );
+        }
         match.submitDifferences(
           session.playerId,
           differences,
