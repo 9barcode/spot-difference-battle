@@ -84,7 +84,7 @@ describe("GameMatch lifecycle", () => {
     expect(match.snapshot().players[1]?.connectionStatus).toBe("FORFEITED");
   });
 
-  it("tracks correct, duplicate and wrong guesses with server time", () => {
+  it("does not penalize a player for selecting an already found difference", () => {
     const match = createMatch();
     startFinding(match);
 
@@ -93,12 +93,15 @@ describe("GameMatch lifecycle", () => {
       differenceId: "a",
       remainingTimeMs: 59_000,
     });
+    const versionAfterFirstGuess = match.version;
+
     expect(match.guess("p1", { x: 0.2, y: 0.2 }, 4_000)).toMatchObject({
-      correct: false,
-      differenceId: null,
-      remainingTimeMs: 55_000,
+      correct: true,
+      differenceId: "a",
+      remainingTimeMs: 58_000,
     });
-    expect(match.snapshot().players[0]).toMatchObject({ foundCount: 1, wrongAnswerCount: 1 });
+    expect(match.version).toBe(versionAfterFirstGuess);
+    expect(match.snapshot().players[0]).toMatchObject({ foundCount: 1, wrongAnswerCount: 0 });
   });
 
   it("applies another three-second penalty for every wrong guess and still allows a hint", () => {

@@ -146,18 +146,19 @@ export class GameMatch {
     const player = this.getPlayer(playerId);
     const target = this.getOpponent(playerId);
     const differences = target.differences ?? [];
-    const hit = differences.find(
-      (difference) =>
-        !player.foundIds.has(difference.id) && isPointInAnswerRegion(point, difference.region),
+    const hit = differences.find((difference) =>
+      isPointInAnswerRegion(point, difference.region),
     );
+    const alreadyFound = hit ? player.foundIds.has(hit.id) : false;
 
-    if (hit) {
+    if (hit && !alreadyFound) {
       player.foundIds.add(hit.id);
       player.lastCorrectAtMs = nowMs;
-    } else {
+      this.bumpVersion();
+    } else if (!hit) {
       player.wrongAnswerCount += 1;
+      this.bumpVersion();
     }
-    this.bumpVersion();
 
     const remainingTimeMs = this.getPlayerRemainingTime(player, nowMs);
     if (player.foundIds.size === GAME_CONFIG.differenceCount) {
