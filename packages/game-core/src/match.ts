@@ -163,8 +163,6 @@ export class GameMatch {
     const remainingTimeMs = this.getPlayerRemainingTime(player, nowMs);
     if (player.foundIds.size === GAME_CONFIG.differenceCount) {
       this.finish(playerId, "COMPLETED");
-    } else if (remainingTimeMs === 0) {
-      this.finishByScore();
     }
 
     return {
@@ -312,7 +310,9 @@ export class GameMatch {
     if (this.state === "FINDING") {
       const player = this.getPlayer(playerId);
       if (this.getPlayerRemainingTime(player, nowMs) > 0) return;
-      this.finishByScore();
+      if (this.players.every((candidate) => this.getPlayerRemainingTime(candidate, nowMs) === 0)) {
+        this.finishByScore();
+      }
       throw new GameRuleError("DEADLINE_EXPIRED", "이 단계의 제한시간이 종료되었습니다.");
     } else if (nowMs < this.deadlineMs) {
       return;

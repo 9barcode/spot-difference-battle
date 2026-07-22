@@ -152,7 +152,7 @@ describe("GameMatch lifecycle", () => {
     expect(match.snapshot()).toMatchObject({ state: "FINISHED", winnerId: "p2" });
   });
 
-  it("finishes when wrong-answer penalties consume all remaining time", () => {
+  it("keeps the match running for the opponent when one player loses all time to penalties", () => {
     const match = createMatch();
     startFinding(match, 2_000);
 
@@ -160,7 +160,19 @@ describe("GameMatch lifecycle", () => {
       match.guess("p1", { x: 0.01, y: 0.99 }, 2_000);
     }
 
-    expect(match.snapshot()).toMatchObject({ state: "FINISHED", winnerId: "p2" });
+    expect(match.snapshot()).toMatchObject({ state: "FINDING", winnerId: null });
+    expect(() => match.guess("p1", { x: 0.2, y: 0.2 }, 2_000)).toThrowError(GameRuleError);
+    expect(match.currentState).toBe("FINDING");
+
+    match.guess("p2", { x: 0.2, y: 0.2 }, 3_000);
+    match.guess("p2", { x: 0.5, y: 0.5 }, 4_000);
+    match.guess("p2", { x: 0.8, y: 0.8 }, 5_000);
+
+    expect(match.snapshot()).toMatchObject({
+      state: "FINISHED",
+      winnerId: "p2",
+      endReason: "COMPLETED",
+    });
   });
 
   it("tracks reconnecting players and restores their connection", () => {
