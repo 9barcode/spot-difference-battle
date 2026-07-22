@@ -189,8 +189,8 @@ export async function renderProblemImage(differences: Difference[]): Promise<str
   const layer = drawEffectLayer(image, differences);
   if (layer) context.drawImage(layer, 0, 0);
 
-  const webp = canvas.toDataURL("image/webp", 0.85);
-  return webp.startsWith("data:image/webp") ? webp : canvas.toDataURL("image/png");
+  // 서버가 원본과 픽셀을 비교할 수 있도록 무손실 PNG로 제출한다.
+  return canvas.toDataURL("image/png");
 }
 
 export function DifferenceEffects({
