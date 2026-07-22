@@ -9,7 +9,7 @@ const fallback: Difference[] = [
 ];
 
 /** 제작자가 렌더해 올리는 문제 이미지 대역. 서버는 형식과 용량만 검증한다. */
-const IMAGE = `data:image/webp;base64,${"A".repeat(512)}`;
+const IMAGE = `data:image/png;base64,${"A".repeat(512)}`;
 
 function createMatch(): GameMatch {
   return new GameMatch("match-1", "image-1", [
