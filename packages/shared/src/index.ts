@@ -14,7 +14,7 @@ export const GAME_CONFIG = {
  * 서버는 픽셀을 해석하지 않고 형식과 크기만 검증한다.
  */
 export const PROBLEM_IMAGE_LIMITS = {
-  allowedPrefixes: ["data:image/webp;base64,", "data:image/png;base64,"],
+  allowedPrefixes: ["data:image/png;base64,"],
   maxBytes: 3 * 1024 * 1024,
 } as const;
 
