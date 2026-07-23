@@ -281,6 +281,32 @@ describe("GameMatch lifecycle", () => {
     expect(match.snapshot().players[1]).toMatchObject({ submitted: true, autoFilled: false });
   });
 
+  it("restores the complete active match state without exposing new answers", () => {
+    const match = createMatch();
+    startEditing(match, 1_000);
+    match.submitDifferences("p1", fallback, IMAGE, 2_000, true);
+    match.submitDifferences("p2", fallback, IMAGE, 2_000);
+    match.guess("p1", { x: 0.2, y: 0.2 }, 3_000);
+    match.useHint("p1", 3_500);
+
+    const state = match.serialize();
+    const restored = GameMatch.restore(state);
+
+    expect(restored.serialize()).toEqual(state);
+    expect(restored.snapshot("p1")).toMatchObject({
+      state: "FINDING",
+      problemImage: IMAGE,
+      myFoundIds: ["a"],
+      foundMarks: [{ differenceId: "a", region: fallback[0]!.region }],
+      revealedDifferences: null,
+    });
+    expect(restored.snapshot("p1").players[0]).toMatchObject({
+      autoFilled: true,
+      foundCount: 1,
+      hintsRemaining: 0,
+    });
+  });
+
   it("awards a forfeit win to the opponent", () => {
     const match = createMatch();
     startEditing(match);

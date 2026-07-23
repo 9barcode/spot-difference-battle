@@ -1,4 +1,5 @@
 import type { GameSnapshot } from "@spot-battle/shared";
+import { GameMatch } from "@spot-battle/game-core";
 import { describe, expect, it } from "vitest";
 import { InMemoryMatchStore } from "../src/match-store.js";
 
@@ -61,5 +62,23 @@ describe("InMemoryMatchStore", () => {
 
     await expect(store.createReport(report)).resolves.toBeTypeOf("string");
     await expect(store.createReport(report)).rejects.toThrow("DUPLICATE_REPORT");
+  });
+
+  it("stores cloned active state and removes it after completion", async () => {
+    const store = new InMemoryMatchStore();
+    const match = new GameMatch(snapshot.matchId, snapshot.imageId, [
+      { playerId: snapshot.players[0].playerId, nickname: snapshot.players[0].nickname },
+      { playerId: snapshot.players[1].playerId, nickname: snapshot.players[1].nickname },
+    ]);
+    const state = match.serialize();
+
+    await store.saveActiveMatch(state);
+    state.players[0].nickname = "변경됨";
+
+    await expect(store.loadActiveMatches()).resolves.toMatchObject([
+      { matchId: snapshot.matchId, players: [{ nickname: "첫째" }, { nickname: "둘째" }] },
+    ]);
+    await store.deleteActiveMatch(snapshot.matchId);
+    await expect(store.loadActiveMatches()).resolves.toEqual([]);
   });
 });

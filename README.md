@@ -60,4 +60,10 @@ docker compose up -d postgres
 pnpm --filter @spot-battle/server db:migrate
 ```
 
-`DATABASE_URL`이 설정되면 서버는 경기 결과, 게스트와 신고를 PostgreSQL에 저장합니다. 설정하지 않은 로컬 환경에서는 메모리 저장소를 사용합니다. 필요한 환경변수는 `.env.example`을 참고합니다.
+`DATABASE_URL`이 설정되면 서버는 경기 결과, 게스트와 신고뿐 아니라 진행 중인 경기 상태도 PostgreSQL에 저장합니다. 서버가 재시작되면 게스트 토큰으로 기존 경기와 제한시간을 복구하며, 접속하지 않은 플레이어에게는 재접속 유예시간이 적용됩니다. 설정하지 않은 로컬 환경에서는 메모리 저장소를 사용합니다. 필요한 환경변수는 `.env.example`을 참고합니다.
+
+실제 PostgreSQL 재시작 복구 테스트는 데이터베이스를 준비한 뒤 실행합니다.
+
+```sh
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/spot_difference_battle pnpm --filter @spot-battle/server test
+```
