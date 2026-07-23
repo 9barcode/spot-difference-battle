@@ -1,0 +1,5 @@
+CREATE TABLE IF NOT EXISTS active_matches (
+  match_id UUID PRIMARY KEY,
+  state JSONB NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
