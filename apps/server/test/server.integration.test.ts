@@ -12,17 +12,16 @@ import { io as createClient, type Socket } from "socket.io-client";
 import { afterEach, describe, expect, it } from "vitest";
 import { createGameServer } from "../src/server.js";
 import { InMemoryMatchStore } from "../src/match-store.js";
+import { createProblemImageFixture } from "./png-fixture.js";
 
 type TestSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
-
-/** 제작자가 렌더해 올리는 문제 이미지 대역 */
-const PROBLEM_IMAGE = `data:image/webp;base64,${"A".repeat(512)}`;
 
 const differences: Difference[] = [
   { id: "a", kind: "ADD", region: { x: 0.2, y: 0.2, radius: 0.05 } },
   { id: "b", kind: "COVER", region: { x: 0.5, y: 0.5, radius: 0.05 } },
   { id: "c", kind: "COLOR", region: { x: 0.8, y: 0.8, radius: 0.05 } },
 ];
+const problemImageFixture = createProblemImageFixture(differences);
 
 const sockets: TestSocket[] = [];
 
@@ -91,6 +90,7 @@ describe("game server", () => {
       webOrigin: "http://localhost:5173",
       matchStore,
       inputCooldownMs: 0,
+      originalProblemImage: problemImageFixture.originalImage,
     });
     await app.listen({ host: "127.0.0.1", port: 0 });
 
@@ -116,8 +116,8 @@ describe("game server", () => {
 
       const finding = waitForState(first, "FINDING");
       const editingContext = { expectedState: editingSnapshot.state, expectedStateVersion: editingSnapshot.stateVersion };
-      first.emit("game:submit", { matchId: firstMatch.matchId, differences, renderedImage: PROBLEM_IMAGE, ...editingContext });
-      second.emit("game:submit", { matchId: secondMatch.matchId, differences, renderedImage: PROBLEM_IMAGE, ...editingContext });
+      first.emit("game:submit", { matchId: firstMatch.matchId, differences, renderedImage: problemImageFixture.renderedImage, ...editingContext });
+      second.emit("game:submit", { matchId: secondMatch.matchId, differences, renderedImage: problemImageFixture.renderedImage, ...editingContext });
       const findingSnapshot = await finding;
       expect(findingSnapshot).toMatchObject({ state: "FINDING" });
 
