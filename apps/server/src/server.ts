@@ -19,6 +19,8 @@ export interface GameServerOptions {
   reconnectGraceMs?: number;
   inputCooldownMs?: number;
   matchStore?: MatchStore;
+  /** 테스트에서 원본과 수정 이미지의 좌표 검증을 함께 실행하기 위한 원본 이미지 대역. */
+  originalProblemImage?: Buffer;
 }
 
 interface SocketData {
@@ -44,7 +46,9 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
   const app = Fastify({ logger: false });
   await app.register(cors, { origin: options.webOrigin });
   const matchStore = options.matchStore ?? new InMemoryMatchStore();
-  const originalProblemImage = await readFile(new URL("../../../UI/src/imports/image.png", import.meta.url));
+  const originalProblemImage =
+    options.originalProblemImage ??
+    await readFile(new URL("../../../UI/src/imports/image.png", import.meta.url));
   app.get("/health", async () => {
     const database = await matchStore.health();
     return { status: database ? "ok" : "degraded", server: "ok", database };
