@@ -69,10 +69,21 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
   const sessionsByPlayer = new Map<string, GuestSession>();
   const reconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
   const persistedMatches = new Set<string>();
+  const runtimeWrites = new Map<string, Promise<void>>();
+  const guestWrites = new Set<Promise<void>>();
   const reconnectGraceMs =
     options.reconnectGraceMs ?? GAME_CONFIG.reconnectGraceSeconds * 1_000;
   const inputCooldownMs = options.inputCooldownMs ?? 120;
   let waitingPlayer: { playerId: string; socketId: string; nickname: string } | null = null;
+  let closing = false;
+
+  function persistGuest(session: GuestSession): void {
+    const write = matchStore
+      .upsertGuest(session)
+      .catch((error) => app.log.error(error));
+    guestWrites.add(write);
+    void write.finally(() => guestWrites.delete(write));
+  }
 
   function createSession(): GuestSession {
     const session: GuestSession = {
@@ -83,7 +94,7 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
     };
     sessionsByToken.set(session.guestToken, session);
     sessionsByPlayer.set(session.playerId, session);
-    void matchStore.upsertGuest(session).catch((error) => app.log.error(error));
+    persistGuest(session);
     return session;
   }
 
@@ -101,6 +112,28 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
     for (const player of match.snapshot().players) {
       io.to(player.playerId).emit("game:snapshot", match.snapshot(player.playerId));
     }
+    void persistRuntime(match);
+  }
+
+  function persistRuntime(match: GameMatch): Promise<void> {
+    const matchId = match.matchId;
+    const state =
+      match.currentState === "FINISHED" || match.currentState === "CANCELLED"
+        ? null
+        : match.serialize();
+    const previous = runtimeWrites.get(matchId) ?? Promise.resolve();
+    const next = previous
+      .catch(() => undefined)
+      .then(async () => {
+        if (state) await matchStore.saveActiveMatch(state);
+        else await matchStore.deleteActiveMatch(matchId);
+      })
+      .catch((error) => app.log.error(error));
+    runtimeWrites.set(matchId, next);
+    void next.finally(() => {
+      if (runtimeWrites.get(matchId) === next) runtimeWrites.delete(matchId);
+    });
+    return next;
   }
 
   async function persistIfFinished(match: GameMatch): Promise<void> {
@@ -195,6 +228,33 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
     reconnectTimers.set(session.playerId, timer);
   }
 
+  try {
+    const restoredGuests = await matchStore.loadGuests();
+    for (const guest of restoredGuests) {
+      const session: GuestSession = { ...guest, socketId: null };
+      sessionsByToken.set(session.guestToken, session);
+      sessionsByPlayer.set(session.playerId, session);
+    }
+
+    const restoredMatches = await matchStore.loadActiveMatches();
+    for (const state of restoredMatches) {
+      const match = registry.restore(state);
+      if (match.expire(Date.now())) {
+        await persistRuntime(match);
+        await persistIfFinished(match);
+        continue;
+      }
+      for (const player of state.players) {
+        match.setConnectionStatus(player.playerId, "RECONNECTING");
+        const session = sessionsByPlayer.get(player.playerId);
+        if (session) scheduleForfeit(session);
+      }
+      await persistRuntime(match);
+    }
+  } catch (error) {
+    app.log.error(error);
+  }
+
   io.on("connection", (socket) => {
     const lastInputAt = new Map<string, number>();
     const enforceCooldown = (action: string) => {
@@ -232,7 +292,7 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
         return;
       }
       session.nickname = normalizedNickname;
-      void matchStore.upsertGuest(session).catch((error) => app.log.error(error));
+      persistGuest(session);
 
       if (!waitingPlayer || waitingPlayer.playerId === session.playerId) {
         waitingPlayer = {
@@ -393,7 +453,7 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
       }
       match.setConnectionStatus(session.playerId, "RECONNECTING");
       emitSnapshots(match);
-      scheduleForfeit(session);
+      if (!closing) scheduleForfeit(session);
     });
   });
 
@@ -406,9 +466,11 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
   expiryTimer.unref();
 
   app.addHook("onClose", async () => {
+    closing = true;
     clearInterval(expiryTimer);
     for (const timer of reconnectTimers.values()) clearTimeout(timer);
-    io.close();
+    await new Promise<void>((resolve) => io.close(() => resolve()));
+    await Promise.allSettled([...runtimeWrites.values(), ...guestWrites]);
     await matchStore.close();
   });
 

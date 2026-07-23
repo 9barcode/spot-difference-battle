@@ -146,6 +146,7 @@ describe("game server", () => {
       expect(result.players.find((player) => player.playerId === firstMatch.playerId)?.foundCount).toBe(3);
       await new Promise((resolve) => setTimeout(resolve, 0));
       expect(matchStore.matches.has(firstMatch.matchId)).toBe(true);
+      expect(matchStore.activeMatches.has(firstMatch.matchId)).toBe(false);
 
       const reportResult = once<{ reportId: string }>(first, "game:report-result");
       const finishedContext = { expectedState: result.state, expectedStateVersion: result.stateVersion };
@@ -215,6 +216,85 @@ describe("game server", () => {
     } finally {
       for (const socket of sockets.splice(0)) socket.disconnect();
       await app.close();
+    }
+  });
+
+  it("restores guest sessions and an active match after a server restart", async () => {
+    const matchStore = new InMemoryMatchStore();
+    const firstApp = await createGameServer({
+      webOrigin: "http://localhost:5173",
+      matchStore,
+      reconnectGraceMs: 5_000,
+    });
+    await firstApp.listen({ host: "127.0.0.1", port: 0 });
+
+    let secondApp: Awaited<ReturnType<typeof createGameServer>> | null = null;
+    try {
+      const firstPort = (firstApp.server.address() as AddressInfo).port;
+      const first = createClient(`http://127.0.0.1:${firstPort}`, { autoConnect: false }) as TestSocket;
+      const second = createClient(`http://127.0.0.1:${firstPort}`, { autoConnect: false }) as TestSocket;
+      sockets.push(first, second);
+      const firstConnected = once(first, "connect");
+      const secondConnected = once(second, "connect");
+      const firstSessionPromise = once<SessionReadyPayload>(first, "session:ready");
+      const secondSessionPromise = once<SessionReadyPayload>(second, "session:ready");
+      first.connect();
+      second.connect();
+      await Promise.all([firstConnected, secondConnected]);
+      const [firstSession, secondSession] = await Promise.all([
+        firstSessionPromise,
+        secondSessionPromise,
+      ]);
+
+      const firstFound = once<MatchFoundPayload>(first, "match:found");
+      const secondFound = once<MatchFoundPayload>(second, "match:found");
+      first.emit("queue:join", { nickname: "재시작첫째" });
+      second.emit("queue:join", { nickname: "재시작둘째" });
+      const [firstMatch, secondMatch] = await Promise.all([firstFound, secondFound]);
+      const editing = waitForState(first, "EDITING");
+      first.emit("game:ready", { matchId: firstMatch.matchId });
+      second.emit("game:ready", { matchId: secondMatch.matchId });
+      await editing;
+
+      first.disconnect();
+      second.disconnect();
+      await firstApp.close();
+
+      secondApp = await createGameServer({
+        webOrigin: "http://localhost:5173",
+        matchStore,
+        reconnectGraceMs: 5_000,
+      });
+      await secondApp.listen({ host: "127.0.0.1", port: 0 });
+      const secondPort = (secondApp.server.address() as AddressInfo).port;
+      const restoredFirst = createClient(`http://127.0.0.1:${secondPort}`, {
+        autoConnect: false,
+        auth: { guestToken: firstSession.guestToken },
+      }) as TestSocket;
+      const restoredSecond = createClient(`http://127.0.0.1:${secondPort}`, {
+        autoConnect: false,
+        auth: { guestToken: secondSession.guestToken },
+      }) as TestSocket;
+      sockets.push(restoredFirst, restoredSecond);
+      const restoredFirstConnected = once(restoredFirst, "connect");
+      const restoredSecondConnected = once(restoredSecond, "connect");
+      const restoredFirstSession = once<SessionReadyPayload>(restoredFirst, "session:ready");
+      const restoredFirstMatch = once<MatchFoundPayload>(restoredFirst, "match:found");
+      const restoredEditing = waitForState(restoredFirst, "EDITING");
+      restoredFirst.connect();
+      restoredSecond.connect();
+      await Promise.all([restoredFirstConnected, restoredSecondConnected]);
+
+      await expect(restoredFirstSession).resolves.toMatchObject({ playerId: firstSession.playerId });
+      await expect(restoredFirstMatch).resolves.toMatchObject({ matchId: firstMatch.matchId });
+      await expect(restoredEditing).resolves.toMatchObject({
+        state: "EDITING",
+        matchId: firstMatch.matchId,
+      });
+    } finally {
+      for (const socket of sockets.splice(0)) socket.disconnect();
+      if (secondApp) await secondApp.close();
+      else await firstApp.close();
     }
   });
 
