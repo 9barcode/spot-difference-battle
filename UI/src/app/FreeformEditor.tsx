@@ -345,6 +345,9 @@ export function FreeformEditor({
         <img src={gameSceneImg} alt="따뜻한 거실과 귀여운 고양이" className="block h-auto w-full select-none" draggable={false}/>
         <DifferenceEffects differences={preview} selectedId={current?.fill ? "current-edit" : undefined} selectionOnly={selectionOnly}/>
         <svg
+          data-testid="editor-board"
+          data-selection-x={fill?.seed.x}
+          data-selection-y={fill?.seed.y}
           viewBox="0 0 1000 562.5"
           preserveAspectRatio="none"
           className={`absolute inset-0 h-full w-full touch-none ${disabled ? "cursor-not-allowed" : "cursor-pointer"}`}

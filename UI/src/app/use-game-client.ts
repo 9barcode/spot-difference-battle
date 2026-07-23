@@ -15,6 +15,7 @@ import type {
 } from "@spot-battle/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { io, type Socket } from "socket.io-client";
+import { shouldAcceptGameSnapshot } from "./game-snapshot.js";
 
 type GameSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 type LobbyPhase = "NICKNAME" | "LOBBY" | "MATCHING" | "IN_GAME";
@@ -53,7 +54,9 @@ export function useGameClient() {
     socket.on("connect", () => setConnected(true));
     socket.on("disconnect", () => setConnected(false));
     socket.on("match:found", (payload) => {
+      snapshotRef.current = null;
       setMatch(payload);
+      setSnapshot(null);
       setPhase("IN_GAME");
       setFoundIds(new Set());
       setFoundMarks([]);
@@ -61,6 +64,7 @@ export function useGameClient() {
       setReportId(null);
     });
     socket.on("game:snapshot", (nextSnapshot) => {
+      if (!shouldAcceptGameSnapshot(snapshotRef.current, nextSnapshot)) return;
       snapshotRef.current = nextSnapshot;
       setSnapshot(nextSnapshot);
       setFoundIds(new Set(nextSnapshot.myFoundIds));
