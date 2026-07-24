@@ -10,18 +10,18 @@ import {
 interface EditingMatch {
   firstContext: BrowserContext;
   secondContext: BrowserContext;
-  first: Page;
-  second: Page;
+  creator: Page;
+  finder: Page;
 }
 
 async function enterEditingMatch(
   browser: Browser,
   nicknameSuffix: string,
-  firstOptions: BrowserContextOptions = {},
-  secondOptions: BrowserContextOptions = {},
+  creatorOptions: BrowserContextOptions = {},
+  finderOptions: BrowserContextOptions = {},
 ): Promise<EditingMatch> {
-  const firstContext = await browser.newContext(firstOptions);
-  const secondContext = await browser.newContext(secondOptions);
+  const firstContext = await browser.newContext(creatorOptions);
+  const secondContext = await browser.newContext(finderOptions);
   const first = await firstContext.newPage();
   const second = await secondContext.newPage();
 
@@ -38,66 +38,54 @@ async function enterEditingMatch(
     expect(first.getByTestId("matchmaking-start")).toBeEnabled(),
     expect(second.getByTestId("matchmaking-start")).toBeEnabled(),
   ]);
-  await Promise.all([
-    first.getByTestId("matchmaking-start").click(),
-    second.getByTestId("matchmaking-start").click(),
-  ]);
+
+  // 먼저 대기열 요청을 보낸 뒤 두 번째 플레이어를 참가시킨다.
+  await first.getByTestId("matchmaking-start").click();
+  await expect(first.getByTestId("matching-screen")).toBeVisible();
+  await second.getByTestId("matchmaking-start").click();
 
   await Promise.all([
     expect(first.getByTestId("ready-screen")).toBeVisible(),
     expect(second.getByTestId("ready-screen")).toBeVisible(),
   ]);
+
+  // 네트워크 전달 순서가 바뀌어도 실제 서버가 부여한 역할을 기준으로 테스트한다.
+  const firstIsCreator = await first.getByText("내 역할: 문제 제작자").isVisible();
+  const creator = firstIsCreator ? first : second;
+  const finder = firstIsCreator ? second : first;
+
   await Promise.all([
-    first.getByTestId("ready-button").click(),
-    second.getByTestId("ready-button").click(),
+    creator.getByTestId("ready-button").click(),
+    finder.getByTestId("ready-button").click(),
   ]);
 
   await Promise.all([
-    expect(first.getByTestId("editing-screen")).toBeVisible(),
-    expect(second.getByTestId("editing-screen")).toBeVisible(),
+    expect(creator.getByTestId("editing-screen")).toBeVisible(),
+    expect(finder.getByTestId("editing-screen")).toBeVisible(),
   ]);
 
-  return { firstContext, secondContext, first, second };
+  return { firstContext, secondContext, creator, finder };
 }
 
-async function expectNormalizedSelection(
-  page: Page,
-  xRatio: number,
-  yRatio: number,
-): Promise<void> {
-  const board = page.getByTestId("editor-board");
-  const bounds = await board.boundingBox();
-  if (!bounds) throw new Error("Editor board is not visible");
-  const position = {
-    x: Math.round(bounds.width * xRatio),
-    y: Math.round(bounds.height * yRatio),
-  };
-
-  await board.click({ position });
-  await expect(board).toHaveAttribute("data-selection-x", /.+/);
-  await expect(board).toHaveAttribute("data-selection-y", /.+/);
-
-  const actualX = Number(await board.getAttribute("data-selection-x"));
-  const actualY = Number(await board.getAttribute("data-selection-y"));
-  expect(actualX).toBeCloseTo(position.x / bounds.width, 2);
-  expect(actualY).toBeCloseTo(position.y / bounds.height, 2);
+async function saveObjectEdit(page: Page, objectId: string, effectLabel: string): Promise<void> {
+  await page.getByTestId(`scene-object-${objectId}`).click();
+  await page.getByRole("button", { name: effectLabel }).click();
+  await page.getByRole("button", { name: "차이점 저장" }).click();
 }
 
-test("two independent players match, become ready, and receive opposite forfeit results", async ({
-  browser,
-}) => {
-  const { firstContext, secondContext, first, second } = await enterEditingMatch(
+test("two independent players match and receive opposite forfeit results", async ({ browser }) => {
+  const { firstContext, secondContext, creator, finder } = await enterEditingMatch(
     browser,
     "E2E",
   );
 
   try {
-    first.once("dialog", (dialog) => dialog.accept());
-    await first.getByTestId("forfeit-button").click();
+    creator.once("dialog", (dialog) => dialog.accept());
+    await creator.getByTestId("forfeit-button").click();
 
     await Promise.all([
-      expect(first.getByTestId("finished-screen")).toContainText("아쉽게 패배했습니다"),
-      expect(second.getByTestId("finished-screen")).toContainText("승리했습니다!"),
+      expect(creator.getByTestId("finished-screen")).toContainText("아쉽게 패배했습니다"),
+      expect(finder.getByTestId("finished-screen")).toContainText("승리했습니다!"),
     ]);
   } finally {
     await firstContext.close();
@@ -105,24 +93,38 @@ test("two independent players match, become ready, and receive opposite forfeit 
   }
 });
 
-test("desktop and mobile editors preserve normalized click coordinates", async ({ browser }) => {
+test("finder cannot see the editor until the creator finishes, and objects are selected independently", async ({
+  browser,
+}) => {
   const desktop = { viewport: { width: 1280, height: 900 } };
   const mobile = {
     viewport: { width: 390, height: 844 },
     deviceScaleFactor: 3,
   };
-  const { firstContext, secondContext, first, second } = await enterEditingMatch(
+  const { firstContext, secondContext, creator, finder } = await enterEditingMatch(
     browser,
-    "좌표",
+    "비공개",
     desktop,
     mobile,
   );
 
   try {
-    await Promise.all([
-      expectNormalizedSelection(first, 0.32, 0.68),
-      expectNormalizedSelection(second, 0.32, 0.68),
-    ]);
+    await expect(creator.getByTestId("editor-board")).toBeVisible();
+    await expect(finder.getByTestId("editor-board")).toHaveCount(0);
+    await expect(finder.getByTestId("editing-screen")).toContainText("수정 완료 대기 중");
+    await expect(finder.getByRole("img", { name: /게임 원본 그림|상대가 수정한 그림/ })).toHaveCount(0);
+
+    await saveObjectEdit(creator, "cat", "줄무늬");
+    await saveObjectEdit(creator, "ball", "점무늬");
+    await saveObjectEdit(creator, "clock", "윤곽 변경");
+
+    await expect(creator.getByText("완료 3/3")).toBeVisible();
+    await creator.getByTestId("submit-problem").click();
+
+    await expect(finder.getByTestId("finding-screen")).toBeVisible();
+    await expect(finder.getByRole("img", { name: "게임 원본 그림" })).toBeVisible();
+    await expect(finder.getByRole("img", { name: "상대가 수정한 그림" })).toBeVisible();
+    await expect(creator.getByTestId("finding-screen")).toContainText("상대가 차이점을 찾고 있습니다");
   } finally {
     await firstContext.close();
     await secondContext.close();

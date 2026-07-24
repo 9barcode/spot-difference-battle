@@ -84,7 +84,7 @@ function waitForConnection(
 }
 
 describe("game server", () => {
-  it("lets two clients complete a server-authoritative match", async () => {
+  it("lets a creator submit privately and a finder complete the match", async () => {
     const matchStore = new InMemoryMatchStore();
     const app = await createGameServer({
       webOrigin: "http://localhost:5173",
@@ -96,76 +96,82 @@ describe("game server", () => {
 
     try {
       const port = (app.server.address() as AddressInfo).port;
-      const first = createClient(`http://127.0.0.1:${port}`) as TestSocket;
-      const second = createClient(`http://127.0.0.1:${port}`) as TestSocket;
-      sockets.push(first, second);
-      await Promise.all([once(first, "connect"), once(second, "connect")]);
+      const creator = createClient(`http://127.0.0.1:${port}`) as TestSocket;
+      const finder = createClient(`http://127.0.0.1:${port}`) as TestSocket;
+      sockets.push(creator, finder);
+      await Promise.all([once(creator, "connect"), once(finder, "connect")]);
 
-      const firstFound = once<MatchFoundPayload>(first, "match:found");
-      const secondFound = once<MatchFoundPayload>(second, "match:found");
-      first.emit("queue:join", { nickname: "첫째" });
-      second.emit("queue:join", { nickname: "둘째" });
-      const [firstMatch, secondMatch] = await Promise.all([firstFound, secondFound]);
-      expect(firstMatch.matchId).toBe(secondMatch.matchId);
+      const creatorFound = once<MatchFoundPayload>(creator, "match:found");
+      const finderFound = once<MatchFoundPayload>(finder, "match:found");
+      creator.emit("queue:join", { nickname: "제작자" });
+      finder.emit("queue:join", { nickname: "찾는사람" });
+      const [creatorMatch, finderMatch] = await Promise.all([creatorFound, finderFound]);
+      expect(creatorMatch.matchId).toBe(finderMatch.matchId);
 
-      const editing = waitForState(first, "EDITING");
-      first.emit("game:ready", { matchId: firstMatch.matchId });
-      second.emit("game:ready", { matchId: secondMatch.matchId });
-      const editingSnapshot = await editing;
-      expect(editingSnapshot).toMatchObject({ state: "EDITING" });
+      const editingForCreator = waitForState(creator, "EDITING");
+      const editingForFinder = waitForState(finder, "EDITING");
+      creator.emit("game:ready", { matchId: creatorMatch.matchId });
+      finder.emit("game:ready", { matchId: finderMatch.matchId });
+      const [creatorEditing, finderEditing] = await Promise.all([editingForCreator, editingForFinder]);
+      expect(finderEditing.problemImage).toBeNull();
+      expect(finderEditing.revealedDifferences).toBeNull();
 
-      const finding = waitForState(first, "FINDING");
-      const editingContext = { expectedState: editingSnapshot.state, expectedStateVersion: editingSnapshot.stateVersion };
-      first.emit("game:submit", { matchId: firstMatch.matchId, differences, renderedImage: problemImageFixture.renderedImage, ...editingContext });
-      second.emit("game:submit", { matchId: secondMatch.matchId, differences, renderedImage: problemImageFixture.renderedImage, ...editingContext });
+      const finding = waitForState(finder, "FINDING");
+      const editingContext = { expectedState: creatorEditing.state, expectedStateVersion: creatorEditing.stateVersion };
+      creator.emit("game:submit", {
+        matchId: creatorMatch.matchId,
+        differences,
+        renderedImage: problemImageFixture.renderedImage,
+        ...editingContext,
+      });
       const findingSnapshot = await finding;
-      expect(findingSnapshot).toMatchObject({ state: "FINDING" });
+      expect(findingSnapshot).toMatchObject({ state: "FINDING", problemImage: problemImageFixture.renderedImage });
 
-      const staleError = once<GameErrorPayload>(first, "game:error");
-      first.emit("game:hint", {
-        matchId: firstMatch.matchId,
+      const staleError = once<GameErrorPayload>(finder, "game:error");
+      finder.emit("game:hint", {
+        matchId: finderMatch.matchId,
         expectedState: "EDITING",
-        expectedStateVersion: editingSnapshot.stateVersion,
+        expectedStateVersion: finderEditing.stateVersion,
       });
       await expect(staleError).resolves.toMatchObject({ code: "STALE_STATE" });
 
       let findingContext = { expectedState: findingSnapshot.state, expectedStateVersion: findingSnapshot.stateVersion };
-      let nextSnapshot = waitForNewerVersion(first, findingContext.expectedStateVersion);
-      first.emit("game:guess", { matchId: firstMatch.matchId, point: { x: 0.2, y: 0.2 }, ...findingContext });
+      let nextSnapshot = waitForNewerVersion(finder, findingContext.expectedStateVersion);
+      finder.emit("game:guess", { matchId: finderMatch.matchId, point: { x: 0.2, y: 0.2 }, ...findingContext });
       const afterFirstGuess = await nextSnapshot;
       const delayedGuessContext = findingContext;
       findingContext = { expectedState: afterFirstGuess.state, expectedStateVersion: afterFirstGuess.stateVersion };
-      nextSnapshot = waitForNewerVersion(first, findingContext.expectedStateVersion);
-      first.emit("game:guess", { matchId: firstMatch.matchId, point: { x: 0.5, y: 0.5 }, ...findingContext });
+      nextSnapshot = waitForNewerVersion(finder, findingContext.expectedStateVersion);
+      finder.emit("game:guess", { matchId: finderMatch.matchId, point: { x: 0.5, y: 0.5 }, ...findingContext });
       const afterSecondGuess = await nextSnapshot;
 
-      const delayedDuplicateGuessError = once<GameErrorPayload>(first, "game:error");
-      first.emit("game:guess", {
-        matchId: firstMatch.matchId,
+      const delayedDuplicateGuessError = once<GameErrorPayload>(finder, "game:error");
+      finder.emit("game:guess", {
+        matchId: finderMatch.matchId,
         point: { x: 0.2, y: 0.2 },
         ...delayedGuessContext,
       });
       await expect(delayedDuplicateGuessError).resolves.toMatchObject({ code: "STALE_STATE" });
 
       findingContext = { expectedState: afterSecondGuess.state, expectedStateVersion: afterSecondGuess.stateVersion };
-      const finished = waitForState(first, "FINISHED");
-      first.emit("game:guess", { matchId: firstMatch.matchId, point: { x: 0.8, y: 0.8 }, ...findingContext });
+      const finished = waitForState(finder, "FINISHED");
+      finder.emit("game:guess", { matchId: finderMatch.matchId, point: { x: 0.8, y: 0.8 }, ...findingContext });
 
       const result = await finished;
-      expect(result).toMatchObject({ state: "FINISHED", winnerId: firstMatch.playerId });
-      expect(result.players.find((player) => player.playerId === firstMatch.playerId)?.foundCount).toBe(3);
-      expect(result.players.find((player) => player.playerId === firstMatch.playerId)?.wrongAnswerCount).toBe(0);
+      expect(result).toMatchObject({ state: "FINISHED", winnerId: finderMatch.playerId });
+      expect(result.players.find((player) => player.playerId === finderMatch.playerId)?.foundCount).toBe(3);
+      expect(result.players.find((player) => player.playerId === creatorMatch.playerId)?.submitted).toBe(true);
       await new Promise((resolve) => setTimeout(resolve, 0));
-      expect(matchStore.matches.has(firstMatch.matchId)).toBe(true);
-      expect(matchStore.activeMatches.has(firstMatch.matchId)).toBe(false);
+      expect(matchStore.matches.has(creatorMatch.matchId)).toBe(true);
+      expect(matchStore.activeMatches.has(creatorMatch.matchId)).toBe(false);
 
-      const reportResult = once<{ reportId: string }>(first, "game:report-result");
+      const reportResult = once<{ reportId: string }>(finder, "game:report-result");
       const finishedContext = { expectedState: result.state, expectedStateVersion: result.stateVersion };
-      first.emit("game:report", { matchId: firstMatch.matchId, reason: "UNFAIR", ...finishedContext });
+      finder.emit("game:report", { matchId: finderMatch.matchId, reason: "UNFAIR", ...finishedContext });
       await expect(reportResult).resolves.toMatchObject({ reportId: expect.any(String) });
 
-      const duplicateError = once<GameErrorPayload>(first, "game:error");
-      first.emit("game:report", { matchId: firstMatch.matchId, reason: "UNFAIR", ...finishedContext });
+      const duplicateError = once<GameErrorPayload>(finder, "game:error");
+      finder.emit("game:report", { matchId: finderMatch.matchId, reason: "UNFAIR", ...finishedContext });
       await expect(duplicateError).resolves.toMatchObject({ code: "DUPLICATE_REPORT" });
     } finally {
       for (const socket of sockets.splice(0)) socket.disconnect();

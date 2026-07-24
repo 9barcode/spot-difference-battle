@@ -10,11 +10,9 @@ import {
   type HintResult,
   type NormalizedPoint,
   type PlayerProgress,
-  type PlayerResult,
   type RevealedDifference,
 } from "@spot-battle/shared";
 import {
-  determineWinner,
   getRemainingTimeMs,
   isPointInAnswerRegion,
   validateDifferences,
@@ -86,7 +84,7 @@ export class GameMatch {
    * 자동 보충(부족한 차이점 채우기)은 클라이언트에서 처리한다.
    * 서버는 픽셀을 렌더하지 않으므로 서버가 차이점을 주입하면
    * 그에 맞는 문제 이미지를 만들 수 없기 때문이다.
-   * 마감까지 아무것도 제출하지 않은 플레이어는 기권으로 처리한다.
+   * 마감까지 문제를 제출하지 않은 제작자는 기권으로 처리한다.
    */
   constructor(
     public readonly matchId: string,
@@ -188,8 +186,11 @@ export class GameMatch {
     autoFilled = false,
   ): void {
     this.requireState("EDITING");
-    this.requireBeforeDeadline(playerId, nowMs);
     const player = this.getPlayer(playerId);
+    if (player.playerId !== this.getCreator().playerId) {
+      throw new GameRuleError("NOT_CREATOR", "문제 제작자만 그림을 수정할 수 있습니다.");
+    }
+    this.requireBeforeDeadline(playerId, nowMs);
     if (player.differences) {
       throw new GameRuleError("ALREADY_SUBMITTED", "이미 차이점을 제출했습니다.");
     }
@@ -208,16 +209,18 @@ export class GameMatch {
     player.renderedImage = renderedImage;
     player.autoFilled = autoFilled;
     this.bumpVersion();
-    if (this.players.every((candidate) => candidate.differences !== null)) {
-      this.startFinding(nowMs);
-    }
+    // 찾는 사람은 편집 결과를 받지 않고 대기한다. 제작자가 수정 완료를 누르는 순간 바로 풀이를 시작한다.
+    this.startFinding(nowMs);
   }
 
   guess(playerId: string, point: NormalizedPoint, nowMs: number): GuessResult {
     this.requireState("FINDING");
-    this.requireBeforeDeadline(playerId, nowMs);
     const player = this.getPlayer(playerId);
-    const target = this.getOpponent(playerId);
+    if (player.playerId !== this.getFinder().playerId) {
+      throw new GameRuleError("NOT_FINDER", "찾는 사람만 정답을 선택할 수 있습니다.");
+    }
+    this.requireBeforeDeadline(playerId, nowMs);
+    const target = this.getCreator();
     const differences = target.differences ?? [];
     const hit = differences.find((difference) =>
       isPointInAnswerRegion(point, difference.region),
@@ -249,13 +252,16 @@ export class GameMatch {
 
   useHint(playerId: string, nowMs: number): HintResult {
     this.requireState("FINDING");
-    this.requireBeforeDeadline(playerId, nowMs);
     const player = this.getPlayer(playerId);
+    if (player.playerId !== this.getFinder().playerId) {
+      throw new GameRuleError("NOT_FINDER", "찾는 사람만 힌트를 사용할 수 있습니다.");
+    }
+    this.requireBeforeDeadline(playerId, nowMs);
     if (player.hintsUsed >= GAME_CONFIG.hintsPerGame) {
       throw new GameRuleError("NO_HINTS", "사용할 수 있는 힌트가 없습니다.");
     }
 
-    const target = this.getOpponent(playerId);
+    const target = this.getCreator();
     const difference = target.differences?.find((item) => !player.foundIds.has(item.id));
     if (!difference) {
       throw new GameRuleError("NO_HINT_TARGET", "힌트를 표시할 차이점이 없습니다.");
@@ -273,25 +279,16 @@ export class GameMatch {
     if (this.deadlineMs === null || nowMs < this.deadlineMs) return false;
 
     if (this.state === "EDITING") {
-      const submitted = this.players.filter((player) => player.differences !== null);
-      if (submitted.length === this.players.length) return false;
-
-      if (submitted.length === 0) {
-        // 둘 다 문제를 못 만들었으면 겨룰 대상이 없다. 승패를 남기지 않는다.
-        this.cancel("제한시간 안에 양쪽 모두 차이점을 제출하지 않았습니다.");
-        return true;
-      }
-
-      // 제출하지 않은 쪽은 기권. 클라이언트 자동 보충이 동작했다면 여기까지 오지 않는다.
-      for (const player of this.players) {
-        if (player.differences === null) player.connectionStatus = "FORFEITED";
-      }
-      this.finish(submitted[0]!.playerId, "FORFEIT");
+      const creator = this.getCreator();
+      if (creator.differences !== null) return false;
+      creator.connectionStatus = "FORFEITED";
+      this.finish(this.getFinder().playerId, "FORFEIT");
       return true;
     }
 
     if (this.state === "FINDING") {
-      this.finishByScore("TIMEOUT");
+      // 제한시간 안에 모두 찾지 못하면 문제 제작자가 승리한다.
+      this.finish(this.getCreator().playerId, "TIMEOUT");
       return true;
     }
 
@@ -308,9 +305,10 @@ export class GameMatch {
    */
   snapshot(viewerId?: string): GameSnapshot {
     const viewer = viewerId ? this.getPlayer(viewerId) : null;
-    const problemOwner = viewerId ? this.getOpponent(viewerId) : null;
+    const creator = this.getCreator();
+    const finder = this.getFinder();
     const canViewProblem = this.state === "FINDING" || this.state === "FINISHED";
-    const opponentDifferences = problemOwner?.differences ?? [];
+    const creatorDifferences = creator.differences ?? [];
 
     return {
       matchId: this.matchId,
@@ -323,12 +321,12 @@ export class GameMatch {
         PlayerProgress,
       ],
       winnerId: this.winnerId,
-      problemImage: canViewProblem ? problemOwner?.renderedImage ?? null : null,
-      myFoundIds: viewer ? [...viewer.foundIds] : [],
-      foundMarks: viewer ? this.toFoundMarks(viewer, opponentDifferences) : [],
+      problemImage: canViewProblem ? creator.renderedImage : null,
+      myFoundIds: viewer?.playerId === finder.playerId ? [...finder.foundIds] : [],
+      foundMarks: viewer?.playerId === finder.playerId ? this.toFoundMarks(finder, creatorDifferences) : [],
       revealedDifferences:
         this.state === "FINISHED" && viewer
-          ? this.toRevealed(viewer, opponentDifferences)
+          ? this.toRevealed(finder, creatorDifferences)
           : null,
       endReason: this.endReason,
       cancelReason: this.cancelReason,
@@ -371,21 +369,13 @@ export class GameMatch {
     this.transition("FINISHED", null);
   }
 
-  private finishByScore(reason: GameEndReason = "TIMEOUT"): void {
-    this.finish(
-      determineWinner(this.toResult(this.players[0]), this.toResult(this.players[1])),
-      reason,
-    );
-  }
 
   private requireBeforeDeadline(playerId: string, nowMs: number): void {
     if (this.deadlineMs === null) return;
     if (this.state === "FINDING") {
       const player = this.getPlayer(playerId);
       if (this.getPlayerRemainingTime(player, nowMs) > 0) return;
-      if (this.players.every((candidate) => this.getPlayerRemainingTime(candidate, nowMs) === 0)) {
-        this.finishByScore();
-      }
+      this.finish(this.getCreator().playerId, "TIMEOUT");
       throw new GameRuleError("DEADLINE_EXPIRED", "이 단계의 제한시간이 종료되었습니다.");
     } else if (nowMs < this.deadlineMs) {
       return;
@@ -413,6 +403,14 @@ export class GameMatch {
   private getOpponent(playerId: string): InternalPlayer {
     this.getPlayer(playerId);
     return this.players.find((candidate) => candidate.playerId !== playerId)!;
+  }
+
+  private getCreator(): InternalPlayer {
+    return this.players[0];
+  }
+
+  private getFinder(): InternalPlayer {
+    return this.players[1];
   }
 
   private getPlayerRemainingTime(player: InternalPlayer, nowMs: number): number {
@@ -444,14 +442,6 @@ export class GameMatch {
     };
   }
 
-  private toResult(player: InternalPlayer): PlayerResult {
-    return {
-      playerId: player.playerId,
-      foundCount: player.foundIds.size,
-      wrongAnswerCount: player.wrongAnswerCount,
-      lastCorrectAtMs: player.lastCorrectAtMs,
-    };
-  }
 
   /** 뷰어가 이미 맞힌 차이점만 위치와 함께 돌려준다. */
   private toFoundMarks(viewer: InternalPlayer, differences: Difference[]): FoundMark[] {

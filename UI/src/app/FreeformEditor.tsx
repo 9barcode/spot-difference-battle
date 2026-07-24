@@ -1,102 +1,27 @@
-import { GAME_CONFIG, type Difference, type DifferenceFill, type DifferenceStroke, type NormalizedPoint } from "@spot-battle/shared";
-import { Check, MousePointer2, Trash2 } from "lucide-react";
-import { useEffect, useRef, useState, type PointerEvent } from "react";
+import {
+  GAME_CONFIG,
+  type Difference,
+  type DifferenceObjectEdit,
+  type ObjectShapeEffect,
+} from "@spot-battle/shared";
+import { Check, MousePointer2, Shapes, Trash2, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type ReactNode, type SVGProps } from "react";
 import gameSceneImg from "@/imports/image.png";
-
+import {
+  SCENE_OBJECTS,
+  SCENE_OBJECTS_BY_ID,
+  type SceneMaskPrimitive,
+  type SceneObjectDefinition,
+} from "./scene-objects";
 
 function hexToRgb(hex: string): [number, number, number] {
   const value = Number.parseInt(hex.slice(1), 16);
   return [(value >> 16) & 255, (value >> 8) & 255, value & 255];
 }
 
-function pointFromPointer(event: PointerEvent<SVGSVGElement>): NormalizedPoint {
-  const rect = event.currentTarget.getBoundingClientRect();
-  return {
-    x: Math.min(0.98, Math.max(0.02, (event.clientX - rect.left) / rect.width)),
-    y: Math.min(0.98, Math.max(0.02, (event.clientY - rect.top) / rect.height)),
-  };
-}
-
-function regionFromDifference(fill: DifferenceFill | null, strokes: DifferenceStroke[]) {
-  const points = [...(fill ? [fill.seed] : []), ...strokes.flatMap((stroke) => stroke.points)];
-  if (!points.length) return { x: 0.5, y: 0.5, radius: 0.05 };
-  const minX = Math.min(...points.map((point) => point.x));
-  const maxX = Math.max(...points.map((point) => point.x));
-  const minY = Math.min(...points.map((point) => point.y));
-  const maxY = Math.max(...points.map((point) => point.y));
-  const x = (minX + maxX) / 2;
-  const y = (minY + maxY) / 2;
-  const measured = Math.hypot(maxX - minX, maxY - minY) / 2 + (fill ? 0.08 : 0.025);
-  const boundary = Math.min(x, 1 - x, y, 1 - y);
-  return { x, y, radius: Math.max(0.02, Math.min(0.11, measured, boundary)) };
-}
-
-function paintConnectedRegion(
-  source: ImageData,
-  output: ImageData,
-  fill: DifferenceFill,
-  applyColor = true,
-): Uint8Array {
-  const { width, height, data } = source;
-  const startX = Math.min(width - 1, Math.max(0, Math.floor(fill.seed.x * width)));
-  const startY = Math.min(height - 1, Math.max(0, Math.floor(fill.seed.y * height)));
-  const start = startY * width + startX;
-  const sourceOffset = start * 4;
-  const baseR = data[sourceOffset]!;
-  const baseG = data[sourceOffset + 1]!;
-  const baseB = data[sourceOffset + 2]!;
-  const [targetR, targetG, targetB] = hexToRgb(fill.color);
-  const visited = new Uint8Array(width * height);
-  const stack = [start];
-  const maxDistance = fill.tolerance * fill.tolerance * 3;
-
-  while (stack.length) {
-    const index = stack.pop()!;
-    if (visited[index]) continue;
-    visited[index] = 1;
-    const offset = index * 4;
-    const dr = data[offset]! - baseR;
-    const dg = data[offset + 1]! - baseG;
-    const db = data[offset + 2]! - baseB;
-    if (dr * dr + dg * dg + db * db > maxDistance) continue;
-
-    if (applyColor) {
-      const luminance = (data[offset]! * 0.299 + data[offset + 1]! * 0.587 + data[offset + 2]! * 0.114) / 255;
-      const shade = 0.35 + luminance * 0.8;
-      output.data[offset] = Math.min(255, targetR * shade);
-      output.data[offset + 1] = Math.min(255, targetG * shade);
-      output.data[offset + 2] = Math.min(255, targetB * shade);
-      output.data[offset + 3] = 235;
-    }
-    visited[index] = 2;
-
-    const x = index % width;
-    if (x > 0) stack.push(index - 1);
-    if (x < width - 1) stack.push(index + 1);
-    if (index >= width) stack.push(index - width);
-    if (index < width * (height - 1)) stack.push(index + width);
-  }
-  return visited;
-}
-
-function drawSelectionOutline(output: ImageData, mask: Uint8Array, width: number, height: number): void {
-  for (let index = 0; index < mask.length; index += 1) {
-    if (mask[index] !== 2) continue;
-    const x = index % width;
-    const boundary =
-      x === 0 || x === width - 1 || index < width || index >= width * (height - 1) ||
-      mask[index - 1] !== 2 || mask[index + 1] !== 2 ||
-      mask[index - width] !== 2 || mask[index + width] !== 2;
-    if (!boundary) continue;
-    const offset = index * 4;
-    output.data[offset] = 124;
-    output.data[offset + 1] = 58;
-    output.data[offset + 2] = 237;
-    output.data[offset + 3] = 255;
-  }
-}
-
 const RENDER_MAX_WIDTH = 1000;
+const SVG_WIDTH = 1000;
+const SVG_HEIGHT = 562.5;
 
 function sceneSize(image: HTMLImageElement) {
   const width = Math.min(RENDER_MAX_WIDTH, image.naturalWidth);
@@ -112,12 +37,197 @@ function loadSceneImage(): Promise<HTMLImageElement> {
   });
 }
 
-/** 원본 위에 얹을 효과만 담은 투명 캔버스를 만든다. 화면 표시와 이미지 내보내기가 함께 쓴다. */
+function tracePrimitive(
+  context: CanvasRenderingContext2D,
+  primitive: SceneMaskPrimitive,
+  width: number,
+  height: number,
+): void {
+  if (primitive.kind === "ellipse") {
+    const rotation = ((primitive.rotate ?? 0) * Math.PI) / 180;
+    const centerX = primitive.cx * width;
+    const centerY = primitive.cy * height;
+    const radiusX = primitive.rx * width;
+    const radiusY = primitive.ry * height;
+    // moveTo로 새 서브패스를 시작하지 않으면 여러 객체 마스크 사이가 직선으로 연결될 수 있다.
+    context.moveTo(centerX + Math.cos(rotation) * radiusX, centerY + Math.sin(rotation) * radiusX);
+    context.ellipse(centerX, centerY, radiusX, radiusY, rotation, 0, Math.PI * 2);
+    return;
+  }
+
+  if (primitive.kind === "rect") {
+    const x = primitive.x * width;
+    const y = primitive.y * height;
+    const rectWidth = primitive.width * width;
+    const rectHeight = primitive.height * height;
+    const radius = (primitive.radius ?? 0) * Math.min(width, height);
+    if (primitive.rotate) {
+      context.save();
+      context.translate(x + rectWidth / 2, y + rectHeight / 2);
+      context.rotate((primitive.rotate * Math.PI) / 180);
+      context.moveTo(-rectWidth / 2, -rectHeight / 2);
+      context.roundRect(-rectWidth / 2, -rectHeight / 2, rectWidth, rectHeight, radius);
+      context.restore();
+    } else {
+      context.moveTo(x, y);
+      context.roundRect(x, y, rectWidth, rectHeight, radius);
+    }
+    return;
+  }
+
+  const [first, ...rest] = primitive.points;
+  if (!first) return;
+  context.moveTo(first[0] * width, first[1] * height);
+  rest.forEach(([x, y]) => context.lineTo(x * width, y * height));
+  context.closePath();
+}
+
+function traceObjectMask(
+  context: CanvasRenderingContext2D,
+  object: SceneObjectDefinition,
+  width: number,
+  height: number,
+): void {
+  context.beginPath();
+  object.masks.forEach((primitive) => tracePrimitive(context, primitive, width, height));
+}
+
+function createObjectMask(
+  object: SceneObjectDefinition,
+  width: number,
+  height: number,
+): HTMLCanvasElement {
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d");
+  if (!context) return canvas;
+  context.fillStyle = "#fff";
+  // 각 primitive를 개별 경로로 채워 서로 떨어진 객체 조각 사이에 연결 면이 생기지 않게 한다.
+  object.masks.forEach((primitive) => {
+    context.beginPath();
+    tracePrimitive(context, primitive, width, height);
+    context.fill();
+  });
+  if (object.excludeMasks?.length) {
+    context.globalCompositeOperation = "destination-out";
+    object.excludeMasks.forEach((primitive) => {
+      context.beginPath();
+      tracePrimitive(context, primitive, width, height);
+      context.fill();
+    });
+    context.globalCompositeOperation = "source-over";
+  }
+  return canvas;
+}
+
+function drawStar(
+  context: CanvasRenderingContext2D,
+  centerX: number,
+  centerY: number,
+  radius: number,
+): void {
+  context.beginPath();
+  for (let index = 0; index < 10; index += 1) {
+    const angle = -Math.PI / 2 + (index * Math.PI) / 5;
+    const currentRadius = index % 2 === 0 ? radius : radius * 0.42;
+    const x = centerX + Math.cos(angle) * currentRadius;
+    const y = centerY + Math.sin(angle) * currentRadius;
+    if (index === 0) context.moveTo(x, y);
+    else context.lineTo(x, y);
+  }
+  context.closePath();
+}
+
+function drawShapeEffect(
+  context: CanvasRenderingContext2D,
+  object: SceneObjectDefinition,
+  edit: DifferenceObjectEdit,
+  width: number,
+  height: number,
+  maskCanvas: HTMLCanvasElement,
+): void {
+  if (["NONE", "WIDE", "TALL"].includes(edit.shapeEffect)) return;
+
+  const effectCanvas = document.createElement("canvas");
+  effectCanvas.width = width;
+  effectCanvas.height = height;
+  const effectContext = effectCanvas.getContext("2d");
+  if (!effectContext) return;
+  effectContext.globalAlpha = 0.9;
+  effectContext.strokeStyle = "rgba(255,255,255,.9)";
+  effectContext.fillStyle = "rgba(255,255,255,.86)";
+  effectContext.lineWidth = Math.max(3, width * 0.006);
+
+  if (edit.shapeEffect === "STRIPES") {
+    for (let x = -height; x < width + height; x += Math.max(18, width * 0.035)) {
+      effectContext.beginPath();
+      effectContext.moveTo(x, 0);
+      effectContext.lineTo(x + height, height);
+      effectContext.stroke();
+    }
+  } else if (edit.shapeEffect === "DOTS") {
+    const gap = Math.max(24, width * 0.045);
+    const radius = Math.max(4, width * 0.006);
+    for (let y = gap / 2; y < height; y += gap) {
+      for (let x = gap / 2; x < width; x += gap) {
+        effectContext.beginPath();
+        effectContext.arc(x, y, radius, 0, Math.PI * 2);
+        effectContext.fill();
+      }
+    }
+  } else if (edit.shapeEffect === "STAR") {
+    const radius = Math.max(14, Math.min(width, height) * object.region.radius * 0.7);
+    drawStar(effectContext, object.region.x * width, object.region.y * height, radius);
+    effectContext.fill();
+  } else if (edit.shapeEffect === "OUTLINE") {
+    traceObjectMask(effectContext, object, width, height);
+    effectContext.lineJoin = "round";
+    effectContext.strokeStyle = "rgba(255,255,255,.95)";
+    effectContext.lineWidth = Math.max(5, width * 0.008);
+    effectContext.stroke();
+  }
+
+  effectContext.globalCompositeOperation = "destination-in";
+  effectContext.globalAlpha = 1;
+  effectContext.drawImage(maskCanvas, 0, 0);
+  context.drawImage(effectCanvas, 0, 0);
+}
+
+function drawObjectWithShapeTransform(
+  target: CanvasRenderingContext2D,
+  source: HTMLCanvasElement,
+  shapeEffect: ObjectShapeEffect,
+  centerX: number,
+  centerY: number,
+): void {
+  if (shapeEffect !== "WIDE" && shapeEffect !== "TALL") {
+    target.drawImage(source, 0, 0);
+    return;
+  }
+
+  const transformed = document.createElement("canvas");
+  transformed.width = source.width;
+  transformed.height = source.height;
+  const context = transformed.getContext("2d");
+  if (!context) {
+    target.drawImage(source, 0, 0);
+    return;
+  }
+
+  const scaleX = shapeEffect === "WIDE" ? 1.22 : 1;
+  const scaleY = shapeEffect === "TALL" ? 1.22 : 1;
+  context.translate(centerX, centerY);
+  context.scale(scaleX, scaleY);
+  context.translate(-centerX, -centerY);
+  context.drawImage(source, 0, 0);
+  target.drawImage(transformed, 0, 0);
+}
+
+/** 원본 위에 얹을 객체별 효과만 담은 투명 캔버스를 만든다. */
 function drawEffectLayer(
   image: HTMLImageElement,
   differences: Difference[],
-  selectedId?: string,
-  selectionOnly = false,
 ): HTMLCanvasElement | null {
   const { width, height } = sceneSize(image);
   const canvas = document.createElement("canvas");
@@ -133,49 +243,62 @@ function drawEffectLayer(
   if (!sourceContext) return null;
   sourceContext.drawImage(image, 0, 0, width, height);
   const source = sourceContext.getImageData(0, 0, width, height);
-  const output = context.createImageData(width, height);
 
-  let selectedMask: Uint8Array | null = null;
   differences.forEach((difference) => {
-    if (!difference.fill) return;
-    const isSelected = difference.id === selectedId;
-    const mask = paintConnectedRegion(source, output, difference.fill, !(isSelected && selectionOnly));
-    if (isSelected) selectedMask = mask;
-  });
-  if (selectedMask) drawSelectionOutline(output, selectedMask, width, height);
-  context.putImageData(output, 0, 0);
+    const edit = difference.objectEdit;
+    if (!edit) return;
+    const object = SCENE_OBJECTS_BY_ID.get(edit.objectId);
+    if (!object) return;
 
-  differences.flatMap((difference) => difference.strokes ?? []).forEach((stroke) => {
-    if (!stroke.points.length) return;
-    context.save();
-    context.globalCompositeOperation = stroke.tool === "ERASER" ? "destination-out" : "source-over";
-    context.strokeStyle = stroke.color;
-    context.lineWidth = stroke.width * 3;
-    context.lineCap = "round";
-    context.lineJoin = "round";
-    context.beginPath();
-    stroke.points.forEach((point, index) => {
-      const x = point.x * width;
-      const y = point.y * height;
-      if (index === 0) context.moveTo(x, y);
-      else context.lineTo(x, y);
-    });
-    if (stroke.points.length === 1) {
-      context.lineTo(stroke.points[0]!.x * width + 0.1, stroke.points[0]!.y * height);
+    const maskCanvas = createObjectMask(object, width, height);
+    const maskContext = maskCanvas.getContext("2d", { willReadFrequently: true });
+    if (!maskContext) return;
+    const mask = maskContext.getImageData(0, 0, width, height).data;
+    const objectCanvas = document.createElement("canvas");
+    objectCanvas.width = width;
+    objectCanvas.height = height;
+    const objectContext = objectCanvas.getContext("2d");
+    if (!objectContext) return;
+    const output = objectContext.createImageData(width, height);
+    const [targetR, targetG, targetB] = hexToRgb(edit.color);
+    let minX = width;
+    let maxX = 0;
+    let minY = height;
+    let maxY = 0;
+
+    for (let offset = 0; offset < source.data.length; offset += 4) {
+      const alpha = mask[offset + 3] ?? 0;
+      if (alpha === 0) continue;
+      const pixelIndex = offset / 4;
+      const x = pixelIndex % width;
+      const y = Math.floor(pixelIndex / width);
+      minX = Math.min(minX, x);
+      maxX = Math.max(maxX, x);
+      minY = Math.min(minY, y);
+      maxY = Math.max(maxY, y);
+      const luminance =
+        (source.data[offset]! * 0.299 +
+          source.data[offset + 1]! * 0.587 +
+          source.data[offset + 2]! * 0.114) /
+        255;
+      const shade = 0.28 + luminance * 0.92;
+      output.data[offset] = Math.min(255, targetR * shade);
+      output.data[offset + 1] = Math.min(255, targetG * shade);
+      output.data[offset + 2] = Math.min(255, targetB * shade);
+      output.data[offset + 3] = Math.round(alpha * 0.88);
     }
-    context.stroke();
-    context.restore();
+
+    objectContext.putImageData(output, 0, 0);
+    drawShapeEffect(objectContext, object, edit, width, height, maskCanvas);
+    const centerX = minX <= maxX ? (minX + maxX) / 2 : object.region.x * width;
+    const centerY = minY <= maxY ? (minY + maxY) / 2 : object.region.y * height;
+    drawObjectWithShapeTransform(context, objectCanvas, edit.shapeEffect, centerX, centerY);
   });
 
   return canvas;
 }
 
-/**
- * 원본과 효과를 하나로 합쳐 문제 이미지를 만든다.
- *
- * 제작 명령을 상대 클라이언트로 보내면 개발자도구에서 정답 위치가 그대로 보이므로,
- * 제작자 쪽에서 합성까지 끝내고 결과 이미지만 서버로 올린다.
- */
+/** 원본과 객체별 효과를 합쳐 문제 이미지를 만든다. */
 export async function renderProblemImage(differences: Difference[]): Promise<string> {
   const image = await loadSceneImage();
   const { width, height } = sceneSize(image);
@@ -188,21 +311,11 @@ export async function renderProblemImage(differences: Difference[]): Promise<str
   context.drawImage(image, 0, 0, width, height);
   const layer = drawEffectLayer(image, differences);
   if (layer) context.drawImage(layer, 0, 0);
-
-  // 서버가 원본과 픽셀을 비교할 수 있도록 무손실 PNG로 제출한다.
   return canvas.toDataURL("image/png");
 }
 
-export function DifferenceEffects({
-  differences,
-  selectedId,
-  selectionOnly = false,
-}: {
-  differences: Difference[];
-  selectedId?: string;
-  selectionOnly?: boolean;
-}) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+export function DifferenceEffects({ differences }: { differences: Difference[] }) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const effectsKey = JSON.stringify(differences);
 
   useEffect(() => {
@@ -210,7 +323,7 @@ export function DifferenceEffects({
     void loadSceneImage().then((image) => {
       const canvas = canvasRef.current;
       if (cancelled || !canvas) return;
-      const layer = drawEffectLayer(image, differences, selectedId, selectionOnly);
+      const layer = drawEffectLayer(image, differences);
       if (!layer) return;
       canvas.width = layer.width;
       canvas.height = layer.height;
@@ -222,25 +335,10 @@ export function DifferenceEffects({
     return () => {
       cancelled = true;
     };
-  }, [effectsKey, selectedId, selectionOnly]);
+  }, [effectsKey]);
 
   return <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 h-full w-full" />;
 }
-
-/**
- * 자동 보충 후보.
- * 서로 충분히 떨어져 있고 경계에서 안전한 좌표만 고른다.
- * 서버가 아니라 여기서 채우는 이유는 문제 이미지를 렌더할 수 있는 쪽이 클라이언트뿐이기 때문이다.
- */
-const AUTO_FILL_CANDIDATES: { seed: NormalizedPoint; color: string }[] = [
-  { seed: { x: 0.18, y: 0.3 }, color: "#ef2b2d" },
-  { seed: { x: 0.82, y: 0.28 }, color: "#1775e5" },
-  { seed: { x: 0.3, y: 0.74 }, color: "#18a83a" },
-  { seed: { x: 0.68, y: 0.76 }, color: "#ffd400" },
-  { seed: { x: 0.5, y: 0.48 }, color: "#6522a8" },
-];
-
-const MINIMUM_GAP = 0.03;
 
 function overlaps(candidate: Difference, existing: Difference[]): boolean {
   return existing.some((difference) => {
@@ -248,27 +346,112 @@ function overlaps(candidate: Difference, existing: Difference[]): boolean {
       difference.region.x - candidate.region.x,
       difference.region.y - candidate.region.y,
     );
-    return gap < difference.region.radius + candidate.region.radius + MINIMUM_GAP;
+    return gap < difference.region.radius + candidate.region.radius + 0.012;
   });
 }
 
-/** 제한시간이 끝날 때 부족한 차이점을 후보로 채워 정확히 differenceCount개를 만든다. */
+const AUTO_FILL_OBJECTS = ["clock", "ball", "cloud", "pillow", "vase", "picture", "cat"];
+const AUTO_FILL_COLORS = ["#ef2b2d", "#1775e5", "#18a83a", "#ffd400", "#6522a8"];
+const AUTO_FILL_SHAPES: ObjectShapeEffect[] = ["WIDE", "TALL", "STRIPES", "DOTS", "OUTLINE", "NONE"];
+
+/** 제한시간이 끝날 때 부족한 차이점을 서로 다른 고정 객체로 채운다. */
 export function buildAutoFilledDifferences(current: Difference[]): Difference[] {
   const filled = [...current];
-  for (const candidate of AUTO_FILL_CANDIDATES) {
+  const used = new Set(filled.map((difference) => difference.objectEdit?.objectId).filter(Boolean));
+
+  for (const [index, objectId] of AUTO_FILL_OBJECTS.entries()) {
     if (filled.length >= GAME_CONFIG.differenceCount) break;
-    const fill: DifferenceFill = { seed: candidate.seed, color: candidate.color, tolerance: 34 };
+    if (used.has(objectId)) continue;
+    const object = SCENE_OBJECTS_BY_ID.get(objectId);
+    if (!object) continue;
     const difference: Difference = {
-      id: `auto-${filled.length}-${candidate.seed.x}-${candidate.seed.y}`,
+      id: `auto-${object.id}-${filled.length}`,
       kind: "COLOR",
-      region: regionFromDifference(fill, []),
-      fill,
+      region: { ...object.region },
+      objectEdit: {
+        objectId: object.id,
+        objectLabel: object.label,
+        color: AUTO_FILL_COLORS[index % AUTO_FILL_COLORS.length]!,
+        shapeEffect: AUTO_FILL_SHAPES[index % AUTO_FILL_SHAPES.length]!,
+      },
     };
     if (overlaps(difference, filled)) continue;
     filled.push(difference);
+    used.add(objectId);
   }
   return filled;
 }
+
+type ScenePrimitiveSvgProps = SVGProps<SVGElement> & { "data-testid"?: string };
+
+function renderSvgPrimitive(
+  primitive: SceneMaskPrimitive,
+  key: string,
+  props: ScenePrimitiveSvgProps,
+): ReactNode {
+  if (primitive.kind === "ellipse") {
+    const cx = primitive.cx * SVG_WIDTH;
+    const cy = primitive.cy * SVG_HEIGHT;
+    return (
+      <ellipse
+        key={key}
+        cx={cx}
+        cy={cy}
+        rx={primitive.rx * SVG_WIDTH}
+        ry={primitive.ry * SVG_HEIGHT}
+        transform={primitive.rotate ? `rotate(${primitive.rotate} ${cx} ${cy})` : undefined}
+        {...(props as SVGProps<SVGEllipseElement>)}
+      />
+    );
+  }
+  if (primitive.kind === "rect") {
+    const x = primitive.x * SVG_WIDTH;
+    const y = primitive.y * SVG_HEIGHT;
+    const width = primitive.width * SVG_WIDTH;
+    const height = primitive.height * SVG_HEIGHT;
+    const centerX = x + width / 2;
+    const centerY = y + height / 2;
+    return (
+      <rect
+        key={key}
+        x={x}
+        y={y}
+        width={width}
+        height={height}
+        rx={(primitive.radius ?? 0) * Math.min(SVG_WIDTH, SVG_HEIGHT)}
+        transform={primitive.rotate ? `rotate(${primitive.rotate} ${centerX} ${centerY})` : undefined}
+        {...(props as SVGProps<SVGRectElement>)}
+      />
+    );
+  }
+  return (
+    <polygon
+      key={key}
+      points={primitive.points.map(([x, y]) => `${x * SVG_WIDTH},${y * SVG_HEIGHT}`).join(" ")}
+      {...(props as SVGProps<SVGPolygonElement>)}
+    />
+  );
+}
+
+const PALETTE = [
+  { name: "빨강", value: "#ef2b2d" },
+  { name: "주황", value: "#ff9418" },
+  { name: "노랑", value: "#ffd400" },
+  { name: "초록", value: "#18a83a" },
+  { name: "파랑", value: "#1775e5" },
+  { name: "남색", value: "#173568" },
+  { name: "보라", value: "#6522a8" },
+];
+
+const SHAPE_EFFECTS: Array<{ value: ObjectShapeEffect; label: string }> = [
+  { value: "NONE", label: "색상만" },
+  { value: "WIDE", label: "가로로 넓게" },
+  { value: "TALL", label: "세로로 길게" },
+  { value: "STRIPES", label: "줄무늬" },
+  { value: "DOTS", label: "점무늬" },
+  { value: "STAR", label: "별 무늬" },
+  { value: "OUTLINE", label: "윤곽 변경" },
+];
 
 export function FreeformEditor({
   value,
@@ -279,121 +462,157 @@ export function FreeformEditor({
   onChange: (next: Difference[]) => void;
   disabled?: boolean;
 }) {
-  const [color, setColor] = useState("#ef4444");
-  const [selectionOnly, setSelectionOnly] = useState(false);
-  const [tolerance, setTolerance] = useState(34);
-  const [fill, setFill] = useState<DifferenceFill | null>(null);
+  const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
+  const [color, setColor] = useState("#ef2b2d");
+  const [shapeEffect, setShapeEffect] = useState<ObjectShapeEffect>("NONE");
+  const selectedObject = selectedObjectId ? SCENE_OBJECTS_BY_ID.get(selectedObjectId) ?? null : null;
+  const usedObjectIds = useMemo(
+    () => new Set(value.map((difference) => difference.objectEdit?.objectId).filter(Boolean)),
+    [value],
+  );
 
-  const current: Difference | null = fill
+  const current: Difference | null = selectedObject
     ? {
         id: "current-edit",
-        kind: "COLOR",
-        region: regionFromDifference(fill, []),
-        fill,
+        kind: shapeEffect === "NONE" ? "COLOR" : "DRAW",
+        region: { ...selectedObject.region },
+        objectEdit: {
+          objectId: selectedObject.id,
+          objectLabel: selectedObject.label,
+          color,
+          shapeEffect,
+        },
       }
     : null;
   const preview = current ? [...value, current] : value;
 
-  const clearCurrent = () => {
-    setFill(null);
-    setSelectionOnly(false);
+  const selectObject = (object: SceneObjectDefinition) => {
+    if (disabled || value.length >= GAME_CONFIG.differenceCount || usedObjectIds.has(object.id)) return;
+    setSelectedObjectId(object.id);
   };
 
-  const selectRegion = (event: PointerEvent<SVGSVGElement>) => {
-    if (disabled || value.length >= GAME_CONFIG.differenceCount) return;
-    const point = pointFromPointer(event);
-    setFill({ seed: point, color, tolerance });
-    setSelectionOnly(true);
-  };
-
-  const chooseColor = (nextColor: string) => {
-    setColor(nextColor);
-    setFill((currentFill) => currentFill ? { ...currentFill, color: nextColor } : currentFill);
-    if (fill) setSelectionOnly(false);
-  };
+  const clearCurrent = () => setSelectedObjectId(null);
 
   const saveCurrent = () => {
-    if (!current || selectionOnly || value.length >= GAME_CONFIG.differenceCount) return;
-    onChange([...value, { ...current, id: `edit-${crypto.randomUUID()}` }]);
+    if (!current || value.length >= GAME_CONFIG.differenceCount) return;
+    onChange([...value, { ...current, id: `object-${crypto.randomUUID()}` }]);
     clearCurrent();
   };
 
-  const paletteColors = [
-    { name: "빨강", value: "#ef2b2d", position: "left-[25%] top-[8%]" },
-    { name: "주황", value: "#ff9418", position: "right-[20%] top-[10%]" },
-    { name: "노랑", value: "#ffd400", position: "right-[5%] top-[38%]" },
-    { name: "초록", value: "#18a83a", position: "bottom-[18%] right-[10%]" },
-    { name: "파랑", value: "#1775e5", position: "bottom-[5%] right-[32%]" },
-    { name: "남색", value: "#173568", position: "bottom-[6%] left-[30%]" },
-    { name: "보라", value: "#6522a8", position: "bottom-[25%] left-[7%]" },
-  ];
+  const removeSaved = (id: string) => {
+    if (disabled) return;
+    onChange(value.filter((difference) => difference.id !== id));
+  };
 
   return (
     <div>
-      <div className="mb-3 flex flex-wrap items-center justify-center gap-3 rounded-2xl bg-white p-3 shadow">
-        <span className="inline-flex items-center gap-1 rounded-xl bg-violet-600 px-4 py-2 text-sm font-black text-white">
-          <MousePointer2 size={16}/>영역 색상 변경
-        </span>
-        <label className="flex items-center gap-2 text-xs font-bold">
-          선택 범위
-          <input type="range" min="12" max="70" value={tolerance} onChange={(event) => setTolerance(Number(event.target.value))}/>
-        </label>
-        <span className="text-xs font-bold text-slate-500">그림의 바꿀 부분을 먼저 클릭하세요.</span>
+      <div className="mb-3 rounded-2xl bg-white p-4 shadow">
+        <div className="flex flex-wrap items-center justify-center gap-3">
+          <span className="inline-flex items-center gap-1 rounded-xl bg-violet-600 px-4 py-2 text-sm font-black text-white">
+            <MousePointer2 size={16} /> 객체 직접 선택
+          </span>
+          <span className="text-sm font-bold text-slate-600">
+            고양이·화분·공·창문·구름·베개·소파·전등 등이 서로 다른 객체로 분리되어 있습니다.
+          </span>
+        </div>
+        {selectedObject && (
+          <div className="mt-4 grid gap-4 border-t pt-4 md:grid-cols-[1fr_1fr_auto] md:items-end">
+            <div>
+              <p className="mb-2 text-xs font-black text-slate-500">선택 객체: {selectedObject.label}</p>
+              <div className="flex flex-wrap gap-2">
+                {PALETTE.map((candidate) => (
+                  <button
+                    key={candidate.value}
+                    type="button"
+                    title={candidate.name}
+                    aria-label={candidate.name}
+                    onClick={() => setColor(candidate.value)}
+                    className={`h-9 w-9 rounded-full border-4 transition hover:scale-110 ${
+                      color === candidate.value ? "border-slate-900" : "border-white shadow"
+                    }`}
+                    style={{ backgroundColor: candidate.value }}
+                  />
+                ))}
+              </div>
+            </div>
+            <div>
+              <p className="mb-2 flex items-center gap-1 text-xs font-black text-slate-500"><Shapes size={14}/>모양 변경</p>
+              <div className="flex flex-wrap gap-2">
+                {SHAPE_EFFECTS.map((effect) => (
+                  <button
+                    key={effect.value}
+                    type="button"
+                    onClick={() => setShapeEffect(effect.value)}
+                    className={`rounded-lg px-3 py-2 text-xs font-black ${
+                      shapeEffect === effect.value ? "bg-violet-600 text-white" : "bg-slate-100 text-slate-600"
+                    }`}
+                  >
+                    {effect.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button type="button" onClick={clearCurrent} className="rounded-xl bg-red-50 p-3 text-red-600" title="선택 취소">
+                <Trash2 size={18} />
+              </button>
+              <button type="button" onClick={saveCurrent} className="inline-flex items-center gap-1 rounded-xl bg-emerald-500 px-5 py-3 font-black text-white">
+                <Check size={17} />차이점 저장
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="relative overflow-hidden rounded-3xl border-4 border-white bg-white shadow-xl">
-        <img src={gameSceneImg} alt="따뜻한 거실과 귀여운 고양이" className="block h-auto w-full select-none" draggable={false}/>
-        <DifferenceEffects differences={preview} selectedId={current?.fill ? "current-edit" : undefined} selectionOnly={selectionOnly}/>
+        <img src={gameSceneImg} alt="따뜻한 거실과 귀여운 고양이" className="block h-auto w-full select-none" draggable={false} />
+        <DifferenceEffects differences={preview} />
         <svg
           data-testid="editor-board"
-          data-selection-x={fill?.seed.x}
-          data-selection-y={fill?.seed.y}
-          viewBox="0 0 1000 562.5"
+          viewBox={`0 0 ${SVG_WIDTH} ${SVG_HEIGHT}`}
           preserveAspectRatio="none"
           className={`absolute inset-0 h-full w-full touch-none ${disabled ? "cursor-not-allowed" : "cursor-pointer"}`}
-          onPointerDown={selectRegion}
-        />
-
-        <aside
-          aria-label="나무 색상 팔레트"
-          className="absolute right-2 top-2 z-20 h-28 w-40 rounded-[48%] border-[5px] border-[#9a5b24] shadow-2xl sm:right-4 sm:top-4 sm:h-36 sm:w-52"
-          style={{
-            background:
-              "radial-gradient(circle at 35% 28%, #f7d38b 0 8%, transparent 9%), repeating-linear-gradient(12deg, #dca65a 0 8px, #cf9148 9px 12px, #e3b56c 13px 20px)",
-          }}
         >
-          <div className="absolute left-[3%] top-[34%] h-[30%] w-[18%] rounded-full bg-white/90 shadow-inner ring-2 ring-[#a56a32]" aria-hidden="true"/>
-          {paletteColors.map((candidate) => (
-            <button
-              key={candidate.name}
-              type="button"
-              title={candidate.name}
-              aria-label={candidate.name}
-              onPointerDown={(event) => event.stopPropagation()}
-              onClick={() => chooseColor(candidate.value)}
-              className={`absolute h-[20%] w-[18%] rounded-[45%_55%_48%_52%] border-2 transition hover:scale-110 ${candidate.position} ${color === candidate.value ? "border-white ring-2 ring-slate-900" : "border-white/60"}`}
-              style={{
-                background: `radial-gradient(circle at 35% 25%, rgba(255,255,255,.75), transparent 22%), ${candidate.value}`,
-                boxShadow: "0 3px 4px rgba(91,48,16,.35)",
-              }}
-            />
-          ))}
-          <span className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#82501f]/75 px-2 py-1 text-[9px] font-black text-white sm:text-[10px]">
-            {selectionOnly ? "색 선택" : "7 COLORS"}
-          </span>
-        </aside>
+          {SCENE_OBJECTS.flatMap((object) => {
+            const isCurrent = object.id === selectedObjectId;
+            const isSaved = usedObjectIds.has(object.id);
+            return object.masks.map((primitive, index) =>
+              renderSvgPrimitive(primitive, `${object.id}-${index}`, {
+                fill: isCurrent ? "rgba(124,58,237,.22)" : isSaved ? "rgba(16,185,129,.12)" : "rgba(255,255,255,.001)",
+                stroke: isCurrent ? "#7c3aed" : isSaved ? "#10b981" : "transparent",
+                strokeWidth: isCurrent || isSaved ? 4 : 0,
+                vectorEffect: "non-scaling-stroke",
+                "data-testid": index === 0 ? `scene-object-${object.id}` : undefined,
+                "aria-label": index === 0 ? `${object.label} 선택` : undefined,
+                role: index === 0 ? "button" : undefined,
+                tabIndex: index === 0 ? 0 : undefined,
+                onKeyDown: (event) => {
+                  if (event.key !== "Enter" && event.key !== " ") return;
+                  event.preventDefault();
+                  selectObject(object);
+                },
+                onPointerDown: (event) => {
+                  event.stopPropagation();
+                  selectObject(object);
+                },
+              }),
+            );
+          })}
+        </svg>
       </div>
 
       <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
-        <button type="button" disabled={!current} onClick={clearCurrent} className="inline-flex items-center gap-1 rounded-xl bg-red-50 px-4 py-2 text-sm font-bold text-red-600 disabled:opacity-40">
-          <Trash2 size={16}/>현재 작업 삭제
-        </button>
-        <button type="button" disabled={!current || selectionOnly || value.length >= GAME_CONFIG.differenceCount} onClick={saveCurrent} className="inline-flex items-center gap-1 rounded-xl bg-emerald-500 px-5 py-2 font-black text-white disabled:opacity-40">
-          <Check size={17}/>차이점으로 저장
-        </button>
+        {value.map((difference, index) => (
+          <span key={difference.id} className="inline-flex items-center gap-2 rounded-full bg-emerald-100 px-3 py-2 text-sm font-black text-emerald-800">
+            {index + 1}. {difference.objectEdit?.objectLabel ?? "객체"}
+            <button type="button" onClick={() => removeSaved(difference.id)} disabled={disabled} aria-label="저장한 차이점 삭제" className="rounded-full bg-white/70 p-1 disabled:opacity-30">
+              <X size={13}/>
+            </button>
+          </span>
+        ))}
       </div>
       <p className="mt-3 text-center text-sm font-bold text-violet-700">
-        {selectionOnly ? "하이라이트된 영역을 확인하고 나무 팔레트에서 색을 선택하세요." : "영역을 클릭하고 7가지 색 중 하나로 바꾸세요."} · 완료 {value.length}/{GAME_CONFIG.differenceCount}
+        그림 속 객체를 클릭한 뒤 색상과 모양·무늬 효과를 선택하세요. · 완료 {value.length}/{GAME_CONFIG.differenceCount}
       </p>
     </div>
   );

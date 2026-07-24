@@ -7,7 +7,7 @@ import {
   type ReportReason,
   type RevealedDifference,
 } from "@spot-battle/shared";
-import { Clock, Eye, Flag, LoaderCircle, LogOut, RotateCcw, Search, Send, WifiOff, X } from "lucide-react";
+import { ArrowLeft, Clock, Eye, Flag, LoaderCircle, LogOut, Play, RotateCcw, Send, UserRound, UsersRound, WifiOff, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import gameSceneImg from "@/imports/image.png";
 import { FreeformEditor, buildAutoFilledDifferences, renderProblemImage } from "./FreeformEditor";
@@ -160,13 +160,158 @@ function Shell({ children }: { children: React.ReactNode }) {
   );
 }
 
+function isPointInside(point: NormalizedPoint, region: AnswerRegion): boolean {
+  return Math.hypot(point.x - region.x, point.y - region.y) <= region.radius;
+}
+
+function SoloTestMode({
+  header,
+  onExit,
+}: {
+  header: React.ReactNode;
+  onExit: () => void;
+}) {
+  const [stage, setStage] = useState<"EDITING" | "READY" | "FINDING" | "FINISHED">("EDITING");
+  const [draft, setDraft] = useState<Difference[]>([]);
+  const [problemImage, setProblemImage] = useState<string | null>(null);
+  const [foundIds, setFoundIds] = useState<Set<string>>(new Set());
+  const [foundMarks, setFoundMarks] = useState<FoundMark[]>([]);
+  const [wrongAnswerCount, setWrongAnswerCount] = useState(0);
+  const [deadlineMs, setDeadlineMs] = useState<number | null>(null);
+  const [hintArea, setHintArea] = useState<AnswerRegion | null>(null);
+  const [hintRemaining, setHintRemaining] = useState(1);
+  const [lastGuessCorrect, setLastGuessCorrect] = useState<boolean | null>(null);
+  const [rendering, setRendering] = useState(false);
+  const remaining = useRemainingSeconds(deadlineMs, wrongAnswerCount);
+
+  useEffect(() => {
+    if (stage === "FINDING" && remaining === 0) setStage("FINISHED");
+  }, [stage, remaining]);
+
+  const finishEditing = async () => {
+    if (draft.length !== GAME_CONFIG.differenceCount || rendering) return;
+    setRendering(true);
+    try {
+      setProblemImage(await renderProblemImage(draft));
+      setStage("READY");
+    } finally {
+      setRendering(false);
+    }
+  };
+
+  const startFinding = () => {
+    setFoundIds(new Set());
+    setFoundMarks([]);
+    setWrongAnswerCount(0);
+    setHintRemaining(1);
+    setLastGuessCorrect(null);
+    setDeadlineMs(Date.now() + GAME_CONFIG.findingDurationSeconds * 1_000);
+    setStage("FINDING");
+  };
+
+  const guess = (point: NormalizedPoint) => {
+    if (stage !== "FINDING") return;
+    const hit = draft.find((difference) => isPointInside(point, difference.region));
+    if (!hit) {
+      setWrongAnswerCount((current) => current + 1);
+      setLastGuessCorrect(false);
+      return;
+    }
+    setLastGuessCorrect(true);
+    if (foundIds.has(hit.id)) return;
+    const next = new Set(foundIds).add(hit.id);
+    setFoundIds(next);
+    setFoundMarks((current) => [...current, { differenceId: hit.id, region: hit.region }]);
+    if (next.size === GAME_CONFIG.differenceCount) setStage("FINISHED");
+  };
+
+  const useHint = () => {
+    if (!hintRemaining) return;
+    const target = draft.find((difference) => !foundIds.has(difference.id));
+    if (!target) return;
+    setHintRemaining(0);
+    setHintArea({ ...target.region, radius: Math.min(target.region.radius * 2.3, 0.25) });
+    window.setTimeout(() => setHintArea(null), 2_000);
+  };
+
+  return (
+    <Shell>
+      {header}
+      <div className="mb-5 flex items-center justify-between rounded-2xl bg-white px-5 py-3 shadow-sm">
+        <span className="inline-flex items-center gap-2 font-black text-violet-700"><UserRound size={18}/>1인 테스트 모드</span>
+        <button onClick={onExit} className="inline-flex items-center gap-1 rounded-xl bg-slate-100 px-4 py-2 text-sm font-bold"><ArrowLeft size={16}/>로비</button>
+      </div>
+
+      {stage === "EDITING" && (
+        <section>
+          <div className="mb-4 text-center">
+            <h2 className="text-2xl font-black">객체 3개를 수정하세요</h2>
+            <p className="text-sm text-slate-500">수정 완료를 누르면 편집 화면이 완전히 닫히고 찾기 단계가 시작됩니다.</p>
+          </div>
+          <div className="mx-auto max-w-5xl"><FreeformEditor value={draft} onChange={setDraft}/></div>
+          <div className="mt-5 text-center">
+            <button disabled={draft.length !== GAME_CONFIG.differenceCount || rendering} onClick={() => void finishEditing()} className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-7 py-3 font-black text-white disabled:opacity-40">
+              {rendering ? <LoaderCircle className="animate-spin" size={18}/> : <Send size={18}/>}
+              {rendering ? "문제 이미지 만드는 중" : `수정 완료 ${draft.length}/${GAME_CONFIG.differenceCount}`}
+            </button>
+          </div>
+        </section>
+      )}
+
+      {stage === "READY" && (
+        <section className="mx-auto max-w-xl rounded-3xl bg-white p-10 text-center shadow-xl">
+          <div className="text-6xl">🙈</div>
+          <h2 className="mt-4 text-2xl font-black">수정이 완료되었습니다</h2>
+          <p className="mt-2 text-slate-500">편집 화면과 선택 정보는 숨겨졌습니다. 준비되면 찾기를 시작하세요.</p>
+          <button onClick={startFinding} className="mt-7 inline-flex items-center gap-2 rounded-2xl bg-amber-400 px-8 py-4 font-black text-slate-900"><Play size={19}/>찾기 시작</button>
+        </section>
+      )}
+
+      {stage === "FINDING" && (
+        <section>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 text-center">
+            <div><h2 className="text-2xl font-black">수정된 객체를 찾으세요</h2><p className="text-sm text-slate-500">오답은 3초 차감됩니다.</p></div>
+            <span className={`flex items-center gap-2 rounded-full px-4 py-2 font-black ${(remaining ?? 0) <= 10 ? "bg-red-100 text-red-600" : "bg-violet-100 text-violet-700"}`}><Clock size={18}/>{remaining ?? 0}초 · {foundIds.size}/{GAME_CONFIG.differenceCount}</span>
+          </div>
+          <div className="grid gap-5 lg:grid-cols-2">
+            <div><p className="mb-2 text-center text-sm font-black">원본</p><OriginalBoard/></div>
+            <div><p className="mb-2 text-center text-sm font-black">수정 그림</p><ProblemBoard imageSrc={problemImage} foundMarks={foundMarks} hintArea={hintArea} onSelect={guess}/></div>
+          </div>
+          <div className="mt-5 flex justify-center gap-3">
+            <button disabled={!hintRemaining} onClick={useHint} className="inline-flex items-center gap-2 rounded-xl bg-amber-400 px-5 py-3 font-black disabled:opacity-40"><Eye size={18}/>힌트 {hintRemaining}</button>
+            {lastGuessCorrect !== null && <span className={`rounded-xl px-5 py-3 font-black ${lastGuessCorrect ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-600"}`}>{lastGuessCorrect ? "정답!" : "오답 · 3초 차감"}</span>}
+          </div>
+        </section>
+      )}
+
+      {stage === "FINISHED" && (
+        <section className="mx-auto max-w-2xl rounded-3xl bg-white p-10 text-center shadow-xl">
+          <div className="text-7xl">{foundIds.size === GAME_CONFIG.differenceCount ? "🎉" : "⏰"}</div>
+          <h2 className="mt-4 text-3xl font-black">{foundIds.size === GAME_CONFIG.differenceCount ? "모두 찾았습니다!" : "테스트 시간이 끝났습니다"}</h2>
+          <p className="mt-3 font-bold text-slate-600">정답 {foundIds.size}/{GAME_CONFIG.differenceCount} · 오답 {wrongAnswerCount}</p>
+          {problemImage && <div className="mt-6"><ProblemBoard imageSrc={problemImage} foundMarks={foundMarks} reveal={draft.map((difference) => ({ id: difference.id, kind: difference.kind, region: difference.region, found: foundIds.has(difference.id) }))}/></div>}
+          <div className="mt-7 flex justify-center gap-3">
+            <button onClick={() => { setStage("EDITING"); setDraft([]); setProblemImage(null); }} className="inline-flex items-center gap-2 rounded-2xl bg-violet-600 px-7 py-4 font-black text-white"><RotateCcw size={19}/>다시 테스트</button>
+            <button onClick={onExit} className="rounded-2xl bg-slate-100 px-7 py-4 font-black">로비로</button>
+          </div>
+        </section>
+      )}
+    </Shell>
+  );
+}
+
 export default function MvpApp() {
   const game = useGameClient();
   const [nicknameInput, setNicknameInput] = useState(game.nickname);
+  const [soloMode, setSoloMode] = useState(false);
   const [draft, setDraft] = useState<Difference[]>([]);
   const [reportReason, setReportReason] = useState<ReportReason>("UNFAIR");
   const me = game.snapshot?.players.find((player) => player.playerId === game.match?.playerId);
   const opponent = game.snapshot?.players.find((player) => player.playerId !== game.match?.playerId);
+  const meIndex = game.snapshot?.players.findIndex((player) => player.playerId === game.match?.playerId) ?? -1;
+  // 매칭 대기열에 먼저 들어온 플레이어가 제작자, 두 번째 플레이어가 찾는 사람이다.
+  const isCreator = meIndex === 0;
+  const isFinder = meIndex === 1;
   const remaining = useRemainingSeconds(game.snapshot?.deadlineMs, me?.wrongAnswerCount ?? 0);
 
   const [submitPhase, setSubmitPhase] = useState<"IDLE" | "RENDERING" | "SENT" | "ERROR">("IDLE");
@@ -205,11 +350,11 @@ export default function MvpApp() {
   // 마감 직전에 부족한 차이점을 채워 자동 제출한다.
   // 여기서 실패하면 서버가 미제출로 보고 기권 처리한다.
   useEffect(() => {
-    if (game.snapshot?.state !== "EDITING" || me?.submitted || autoSubmittedRef.current) return;
+    if (!isCreator || game.snapshot?.state !== "EDITING" || me?.submitted || autoSubmittedRef.current) return;
     if (remaining === null || remaining > GAME_CONFIG.autoSubmitLeadSeconds) return;
     autoSubmittedRef.current = true;
     void submitProblem(buildAutoFilledDifferences(draft), true);
-  }, [game.snapshot?.state, me?.submitted, remaining, draft, submitProblem]);
+  }, [isCreator, game.snapshot?.state, me?.submitted, remaining, draft, submitProblem]);
 
   const header = useMemo(
     () => (
@@ -225,8 +370,26 @@ export default function MvpApp() {
     return <Shell>{header}<section className="mx-auto max-w-md rounded-3xl bg-white p-8 text-center shadow-xl"><div className="mb-4 text-5xl">👋</div><h2 className="text-2xl font-black">닉네임을 정해주세요</h2><p className="mt-2 text-sm text-slate-500">계정 없이 바로 시작할 수 있습니다.</p><input data-testid="nickname-input" aria-label="닉네임" autoFocus value={nicknameInput} onChange={(event) => setNicknameInput(event.target.value)} onKeyDown={(event) => event.key === "Enter" && game.saveNickname(nicknameInput)} maxLength={16} placeholder="2~16자 닉네임" className="mt-6 w-full rounded-2xl border-2 border-violet-200 px-4 py-3 text-center font-bold outline-none focus:border-violet-500"/><button data-testid="nickname-submit" onClick={() => game.saveNickname(nicknameInput)} className="mt-3 w-full rounded-2xl bg-violet-600 py-3 font-black text-white hover:bg-violet-700">시작하기</button></section></Shell>;
   }
 
+  if (soloMode) {
+    return <SoloTestMode header={header} onExit={() => setSoloMode(false)} />;
+  }
+
   if (game.phase === "LOBBY") {
-    return <Shell>{header}<section className="mx-auto max-w-2xl rounded-3xl bg-violet-700 p-10 text-center text-white shadow-xl"><div className="text-6xl">⚔️</div><h2 className="mt-4 text-3xl font-black">빠른 대전</h2><p className="mt-2 text-violet-200">차이점 3개를 만들고 상대보다 먼저 찾아보세요.</p><div className="mt-6 grid grid-cols-3 gap-3 text-sm"><span className="rounded-xl bg-white/10 p-3">제작 30초</span><span className="rounded-xl bg-white/10 p-3">풀이 60초</span><span className="rounded-xl bg-white/10 p-3">힌트 1회</span></div><button data-testid="matchmaking-start" disabled={!game.connected} onClick={game.startMatching} className="mt-8 inline-flex items-center gap-2 rounded-2xl bg-amber-400 px-8 py-4 font-black text-slate-900 disabled:opacity-40"><Search size={20}/>{game.connected ? "상대 찾기" : "서버 연결 중"}</button></section></Shell>;
+    return (
+      <Shell>
+        {header}
+        <section className="mx-auto max-w-3xl rounded-3xl bg-violet-700 p-10 text-center text-white shadow-xl">
+          <div className="text-6xl">⚔️</div>
+          <h2 className="mt-4 text-3xl font-black">틀린그림찾기 시작</h2>
+          <p className="mt-2 text-violet-200">온라인에서는 한 명이 문제를 만들고, 다른 한 명은 수정 완료 후에만 그림을 볼 수 있습니다.</p>
+          <div className="mt-6 grid grid-cols-3 gap-3 text-sm"><span className="rounded-xl bg-white/10 p-3">객체별 수정</span><span className="rounded-xl bg-white/10 p-3">풀이 60초</span><span className="rounded-xl bg-white/10 p-3">힌트 1회</span></div>
+          <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
+            <button data-testid="matchmaking-start" disabled={!game.connected} onClick={game.startMatching} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-amber-400 px-8 py-4 font-black text-slate-900 disabled:opacity-40"><UsersRound size={20}/>{game.connected ? "온라인 상대 찾기" : "서버 연결 중"}</button>
+            <button onClick={() => setSoloMode(true)} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-8 py-4 font-black text-violet-700"><UserRound size={20}/>1인 테스트 모드</button>
+          </div>
+        </section>
+      </Shell>
+    );
   }
 
   if (game.phase === "MATCHING") {
@@ -240,79 +403,91 @@ export default function MvpApp() {
   return (
     <Shell>
       {header}
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-white px-5 py-3 shadow-sm"><div><span className="font-black">나 {me?.foundCount ?? 0}/3 · 오답 {me?.wrongAnswerCount ?? 0}</span><span className="mx-3 text-slate-300">vs</span><span className="font-black">{opponent?.nickname} {opponent?.foundCount ?? 0}/3</span></div><div className="flex items-center gap-2">{remaining !== null && <span className={`flex items-center gap-2 rounded-full px-4 py-2 font-black ${remaining <= 10 ? "bg-red-100 text-red-600" : "bg-violet-100 text-violet-700"}`}><Clock size={18}/>{remaining}초</span>}{game.snapshot.state !== "FINISHED" && <button data-testid="forfeit-button" onClick={() => window.confirm("경기를 나가면 기권패로 처리됩니다. 나갈까요?") && game.forfeit()} className="rounded-full bg-slate-100 p-2 text-slate-500 hover:bg-red-100 hover:text-red-600" title="경기 나가기"><LogOut size={18}/></button>}</div></div>
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-white px-5 py-3 shadow-sm">
+        <div>
+          <span className="rounded-full bg-violet-100 px-3 py-1 text-xs font-black text-violet-700">{isCreator ? "문제 제작자" : "찾는 사람"}</span>
+          <span className="ml-3 font-black">{isFinder ? `찾은 수 ${me?.foundCount ?? 0}/${GAME_CONFIG.differenceCount} · 오답 ${me?.wrongAnswerCount ?? 0}` : `${opponent?.nickname ?? "상대"}가 찾은 수 ${opponent?.foundCount ?? 0}/${GAME_CONFIG.differenceCount}`}</span>
+        </div>
+        <div className="flex items-center gap-2">{remaining !== null && <span className={`flex items-center gap-2 rounded-full px-4 py-2 font-black ${remaining <= 10 ? "bg-red-100 text-red-600" : "bg-violet-100 text-violet-700"}`}><Clock size={18}/>{remaining}초</span>}{game.snapshot.state !== "FINISHED" && <button data-testid="forfeit-button" onClick={() => window.confirm("경기를 나가면 기권패로 처리됩니다. 나갈까요?") && game.forfeit()} className="rounded-full bg-slate-100 p-2 text-slate-500 hover:bg-red-100 hover:text-red-600" title="경기 나가기"><LogOut size={18}/></button>}</div>
+      </div>
 
       {opponent?.connectionStatus === "RECONNECTING" && <div className="mb-5 rounded-2xl bg-amber-100 px-5 py-4 text-center font-bold text-amber-800">상대의 연결이 끊겼습니다. 10초 동안 복귀를 기다립니다.</div>}
 
-      {game.snapshot.state === "READY" && <section data-testid="ready-screen" className="rounded-3xl bg-white p-10 text-center shadow-xl"><div className="text-6xl">🤝</div><h2 className="mt-4 text-2xl font-black">상대: {game.match.opponentNickname}</h2><p className="mt-2 text-slate-500">두 플레이어가 준비하면 제작을 시작합니다.</p><button data-testid="ready-button" disabled={me?.ready} onClick={game.ready} className="mt-6 rounded-2xl bg-violet-600 px-8 py-4 font-black text-white disabled:bg-emerald-500">{me?.ready ? "준비 완료 · 상대 대기 중" : "준비 완료"}</button></section>}
+      {game.snapshot.state === "READY" && <section data-testid="ready-screen" className="rounded-3xl bg-white p-10 text-center shadow-xl"><div className="text-6xl">{isCreator ? "🎨" : "🔎"}</div><h2 className="mt-4 text-2xl font-black">상대: {game.match.opponentNickname}</h2><p className="mt-2 font-black text-violet-700">내 역할: {isCreator ? "문제 제작자" : "찾는 사람"}</p><p className="mt-2 text-slate-500">{isCreator ? "객체 3개를 수정한 뒤 수정 완료를 눌러주세요." : "상대가 수정하는 동안 그림은 표시되지 않습니다."}</p><button data-testid="ready-button" disabled={me?.ready} onClick={game.ready} className="mt-6 rounded-2xl bg-violet-600 px-8 py-4 font-black text-white disabled:bg-emerald-500">{me?.ready ? "준비 완료 · 상대 대기 중" : "준비 완료"}</button></section>}
 
       {game.snapshot.state === "EDITING" && (
-        <section data-testid="editing-screen">
-          <div className="mb-4 text-center">
-            <h2 className="text-2xl font-black">그림에 차이점 3개를 직접 만드세요</h2>
-            <p className="text-sm text-slate-500">그림의 영역을 선택하고 나무 팔레트의 색으로 변경하세요.</p>
-            {remaining !== null && remaining <= GAME_CONFIG.autoSubmitLeadSeconds + 5 && !me?.submitted && (
-              <p className="mt-2 text-sm font-bold text-amber-600">
-                마감 {GAME_CONFIG.autoSubmitLeadSeconds}초 전에는 남은 차이점이 자동으로 채워져 제출됩니다.
-              </p>
-            )}
-          </div>
-
-          <div className="mx-auto max-w-5xl">
-            <FreeformEditor value={draft} onChange={setDraft} disabled={Boolean(me?.submitted) || submitPhase !== "IDLE"} />
-          </div>
-
-          <div className="mt-5 flex flex-col items-center gap-3">
-            <button
-              disabled={draft.length !== GAME_CONFIG.differenceCount || Boolean(me?.submitted) || submitPhase === "RENDERING"}
-              onClick={() => void submitProblem(draft, false)}
-              className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-6 py-3 font-black text-white disabled:opacity-40"
-            >
-              {submitPhase === "RENDERING" ? <LoaderCircle className="animate-spin" size={18} /> : <Send size={18} />}
-              {submitPhase === "RENDERING"
-                ? "문제 이미지를 만드는 중"
-                : me?.submitted
-                  ? "제출 완료 · 상대 대기 중"
-                  : `제출 ${draft.length}/${GAME_CONFIG.differenceCount}`}
-            </button>
-
-            {me?.submitted && me.autoFilled && (
-              <p className="rounded-xl bg-amber-100 px-4 py-2 text-sm font-bold text-amber-800">
-                시간이 끝나 남은 차이점을 자동으로 채워 제출했습니다.
-              </p>
-            )}
-            {me?.submitted && !opponent?.submitted && (
-              <p className="flex items-center gap-2 text-sm font-bold text-slate-500">
-                <LoaderCircle className="animate-spin" size={16} />
-                상대가 제출하기를 기다리는 중입니다.
-              </p>
-            )}
-            {submitPhase === "ERROR" && (
-              <div className="rounded-xl bg-red-100 px-4 py-3 text-center text-sm font-bold text-red-700">
-                {submitError}
-                <button
-                  onClick={() => void submitProblem(draft.length === GAME_CONFIG.differenceCount ? draft : buildAutoFilledDifferences(draft), true)}
-                  className="ml-3 rounded-lg bg-red-600 px-3 py-1 font-black text-white"
-                >
-                  다시 시도
-                </button>
-              </div>
-            )}
-          </div>
-        </section>
+        isCreator ? (
+          <section data-testid="editing-screen">
+            <div className="mb-4 text-center">
+              <h2 className="text-2xl font-black">객체 3개를 수정하세요</h2>
+              <p className="text-sm text-slate-500">상대 화면에는 현재 그림과 선택 정보가 전혀 표시되지 않습니다.</p>
+              {remaining !== null && remaining <= GAME_CONFIG.autoSubmitLeadSeconds + 5 && !me?.submitted && (
+                <p className="mt-2 text-sm font-bold text-amber-600">마감 {GAME_CONFIG.autoSubmitLeadSeconds}초 전에는 남은 차이점이 자동으로 채워집니다.</p>
+              )}
+            </div>
+            <div className="mx-auto max-w-5xl"><FreeformEditor value={draft} onChange={setDraft} disabled={Boolean(me?.submitted) || submitPhase !== "IDLE"} /></div>
+            <div className="mt-5 flex flex-col items-center gap-3">
+              <button data-testid="submit-problem" disabled={draft.length !== GAME_CONFIG.differenceCount || Boolean(me?.submitted) || submitPhase === "RENDERING"} onClick={() => void submitProblem(draft, false)} className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-7 py-3 font-black text-white disabled:opacity-40">
+                {submitPhase === "RENDERING" ? <LoaderCircle className="animate-spin" size={18}/> : <Send size={18}/>}
+                {submitPhase === "RENDERING" ? "문제 이미지 만드는 중" : me?.submitted ? "수정 완료" : `수정 완료 ${draft.length}/${GAME_CONFIG.differenceCount}`}
+              </button>
+              {me?.submitted && <p className="flex items-center gap-2 text-sm font-bold text-emerald-700"><LoaderCircle className="animate-spin" size={16}/>상대의 찾기 화면을 여는 중입니다.</p>}
+              {me?.submitted && me.autoFilled && <p className="rounded-xl bg-amber-100 px-4 py-2 text-sm font-bold text-amber-800">시간이 끝나 남은 객체가 자동으로 채워졌습니다.</p>}
+              {submitPhase === "ERROR" && <div className="rounded-xl bg-red-100 px-4 py-3 text-center text-sm font-bold text-red-700">{submitError}<button onClick={() => void submitProblem(draft.length === GAME_CONFIG.differenceCount ? draft : buildAutoFilledDifferences(draft), true)} className="ml-3 rounded-lg bg-red-600 px-3 py-1 font-black text-white">다시 시도</button></div>}
+            </div>
+          </section>
+        ) : (
+          <section data-testid="editing-screen" className="mx-auto max-w-xl rounded-3xl bg-white p-10 text-center shadow-xl">
+            <div className="text-7xl">🙈</div>
+            <h2 className="mt-4 text-2xl font-black">상대가 그림을 수정하고 있습니다</h2>
+            <p className="mt-3 text-slate-500">수정 중인 그림, 선택 객체, 정답 위치는 이 화면으로 전송되지 않습니다.</p>
+            <div className="mt-7 inline-flex items-center gap-2 rounded-full bg-violet-100 px-5 py-3 font-black text-violet-700"><LoaderCircle className="animate-spin" size={18}/>수정 완료 대기 중</div>
+          </section>
+        )
       )}
 
       {game.snapshot.state === "SWAPPING" && (
         <section className="rounded-3xl bg-white p-10 text-center shadow-xl">
           <LoaderCircle className="mx-auto animate-spin text-violet-600" size={48} />
-          <h2 className="mt-4 text-2xl font-black">문제를 교환하는 중입니다</h2>
-          <p className="mt-2 text-sm text-slate-500">두 문제가 모두 확인되면 풀이가 시작됩니다.</p>
+          <h2 className="mt-4 text-2xl font-black">수정 완료를 처리하는 중입니다</h2>
+          <p className="mt-2 text-sm text-slate-500">찾는 사람에게 합성된 결과 이미지 한 장만 전달합니다.</p>
         </section>
       )}
 
-      {game.snapshot.state === "FINDING" && <section><div className="mb-4 text-center"><h2 className="text-2xl font-black">상대가 만든 차이를 찾으세요</h2><p className="text-sm text-slate-500">오른쪽 수정 그림을 클릭하세요. 오답은 3초가 차감됩니다.</p></div><div className="grid gap-5 lg:grid-cols-2"><div><p className="mb-2 text-center text-sm font-black">원본</p><OriginalBoard/></div><div><p className="mb-2 text-center text-sm font-black">상대의 수정 그림</p><ProblemBoard imageSrc={game.snapshot.problemImage} foundMarks={game.foundMarks} hintArea={game.hintArea} onSelect={game.snapshot.problemImage ? game.guess : undefined}/></div></div><div className="mt-5 flex justify-center gap-3"><button disabled={!me?.hintsRemaining} onClick={game.hint} className="inline-flex items-center gap-2 rounded-xl bg-amber-400 px-5 py-3 font-black disabled:opacity-40"><Eye size={18}/>힌트 {me?.hintsRemaining ?? 0}</button>{game.lastGuess && <span className={`rounded-xl px-5 py-3 font-black ${game.lastGuess.correct ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-600"}`}>{game.lastGuess.correct ? "정답!" : "오답 · 3초 차감"}</span>}</div></section>}
+      {game.snapshot.state === "FINDING" && (
+        isFinder ? (
+          <section data-testid="finding-screen">
+            <div className="mb-4 text-center"><h2 className="text-2xl font-black">상대가 만든 차이를 찾으세요</h2><p className="text-sm text-slate-500">수정 완료 후 전달된 결과 이미지만 표시됩니다. 오답은 3초가 차감됩니다.</p></div>
+            <div className="grid gap-5 lg:grid-cols-2"><div><p className="mb-2 text-center text-sm font-black">원본</p><OriginalBoard/></div><div><p className="mb-2 text-center text-sm font-black">상대의 수정 그림</p><ProblemBoard imageSrc={game.snapshot.problemImage} foundMarks={game.foundMarks} hintArea={game.hintArea} onSelect={game.snapshot.problemImage ? game.guess : undefined}/></div></div>
+            <div className="mt-5 flex justify-center gap-3"><button disabled={!me?.hintsRemaining} onClick={game.hint} className="inline-flex items-center gap-2 rounded-xl bg-amber-400 px-5 py-3 font-black disabled:opacity-40"><Eye size={18}/>힌트 {me?.hintsRemaining ?? 0}</button>{game.lastGuess && <span className={`rounded-xl px-5 py-3 font-black ${game.lastGuess.correct ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-600"}`}>{game.lastGuess.correct ? "정답!" : "오답 · 3초 차감"}</span>}</div>
+          </section>
+        ) : (
+          <section data-testid="finding-screen" className="mx-auto max-w-xl rounded-3xl bg-white p-10 text-center shadow-xl">
+            <div className="text-7xl">👀</div><h2 className="mt-4 text-2xl font-black">상대가 차이점을 찾고 있습니다</h2><p className="mt-3 text-slate-500">찾기 진행 상황만 표시되며, 제작자는 풀이에 참여하지 않습니다.</p><div className="mt-7 rounded-2xl bg-violet-50 p-5"><p className="text-sm text-slate-500">상대 진행</p><p className="mt-1 text-3xl font-black text-violet-700">{opponent?.foundCount ?? 0}/{GAME_CONFIG.differenceCount}</p><p className="mt-1 text-xs text-slate-500">오답 {opponent?.wrongAnswerCount ?? 0}</p></div>
+          </section>
+        )
+      )}
 
-      {game.snapshot.state === "FINISHED" && <section data-testid="finished-screen" className="mx-auto max-w-2xl rounded-3xl bg-white p-10 text-center shadow-xl"><div className="text-7xl">{game.snapshot.winnerId === game.match.playerId ? "🏆" : game.snapshot.winnerId ? "😿" : "🤝"}</div><h2 className="mt-4 text-3xl font-black">{game.snapshot.winnerId === game.match.playerId ? "승리했습니다!" : game.snapshot.winnerId ? "아쉽게 패배했습니다" : "무승부입니다"}</h2>{game.snapshot.endReason === "FORFEIT" && <p className="mt-2 font-bold text-amber-600">{game.snapshot.winnerId === game.match.playerId ? "상대가 경기를 이탈했습니다." : "경기 이탈로 기권 처리되었습니다."}</p>}<div className="mt-6 grid grid-cols-2 gap-3"><div className="rounded-2xl bg-violet-50 p-4"><p className="text-sm text-slate-500">내 결과</p><p className="text-xl font-black">{me?.foundCount}/{GAME_CONFIG.differenceCount} · 오답 {me?.wrongAnswerCount}</p><p className="mt-1 text-xs text-slate-500">힌트 {GAME_CONFIG.hintsPerGame - (me?.hintsRemaining ?? 0)}회 사용</p></div><div className="rounded-2xl bg-slate-50 p-4"><p className="text-sm text-slate-500">상대 결과</p><p className="text-xl font-black">{opponent?.foundCount}/{GAME_CONFIG.differenceCount} · 오답 {opponent?.wrongAnswerCount}</p><p className="mt-1 text-xs text-slate-500">힌트 {GAME_CONFIG.hintsPerGame - (opponent?.hintsRemaining ?? 0)}회 사용</p></div></div>{game.snapshot.revealedDifferences && game.snapshot.problemImage && (<div className="mt-6"><p className="mb-2 text-sm font-black">상대가 만든 차이점 전체</p><ProblemBoard imageSrc={game.snapshot.problemImage} foundMarks={game.foundMarks} reveal={game.snapshot.revealedDifferences}/><p className="mt-2 text-xs text-slate-500">초록 ✓ 찾은 곳 · 빨강 ✗ 놓친 곳</p></div>)}<button onClick={game.returnToLobby} className="mt-7 inline-flex items-center gap-2 rounded-2xl bg-violet-600 px-7 py-4 font-black text-white"><RotateCcw size={19}/>로비로 돌아가기</button></section>}
+      {game.snapshot.state === "FINISHED" && (
+        <section data-testid="finished-screen" className="mx-auto max-w-2xl rounded-3xl bg-white p-10 text-center shadow-xl">
+          <div className="text-7xl">{game.snapshot.winnerId === game.match.playerId ? "🏆" : game.snapshot.winnerId ? "😿" : "🤝"}</div>
+          <h2 className="mt-4 text-3xl font-black">{game.snapshot.winnerId === game.match.playerId ? "승리했습니다!" : game.snapshot.winnerId ? "아쉽게 패배했습니다" : "무승부입니다"}</h2>
+          {game.snapshot.endReason === "FORFEIT" && <p className="mt-2 font-bold text-amber-600">{game.snapshot.winnerId === game.match.playerId ? "상대가 경기를 이탈했습니다." : "경기 이탈로 기권 처리되었습니다."}</p>}
+          <div className="mt-6 rounded-2xl bg-violet-50 p-5">
+            <p className="text-sm text-slate-500">{isFinder ? "내 찾기 결과" : "상대의 찾기 결과"}</p>
+            <p className="mt-1 text-2xl font-black">{isFinder ? me?.foundCount : opponent?.foundCount}/{GAME_CONFIG.differenceCount} · 오답 {isFinder ? me?.wrongAnswerCount : opponent?.wrongAnswerCount}</p>
+            <p className="mt-1 text-xs text-slate-500">힌트 {GAME_CONFIG.hintsPerGame - ((isFinder ? me?.hintsRemaining : opponent?.hintsRemaining) ?? 0)}회 사용</p>
+          </div>
+          {game.snapshot.revealedDifferences && game.snapshot.problemImage && (
+            <div className="mt-6">
+              <p className="mb-2 text-sm font-black">{isFinder ? "제작자가 만든 차이점 전체" : "내가 만든 차이점과 상대 결과"}</p>
+              <ProblemBoard imageSrc={game.snapshot.problemImage} foundMarks={game.foundMarks} reveal={game.snapshot.revealedDifferences}/>
+              <p className="mt-2 text-xs text-slate-500">초록 ✓ 찾은 곳 · 빨강 ✗ 놓친 곳</p>
+            </div>
+          )}
+          <button onClick={game.returnToLobby} className="mt-7 inline-flex items-center gap-2 rounded-2xl bg-violet-600 px-7 py-4 font-black text-white"><RotateCcw size={19}/>로비로 돌아가기</button>
+        </section>
+      )}
 
       {game.snapshot.state === "CANCELLED" && <section className="mx-auto max-w-2xl rounded-3xl bg-white p-10 text-center shadow-xl"><div className="text-7xl">🛠️</div><h2 className="mt-4 text-3xl font-black">경기가 취소되었습니다</h2><p className="mt-2 text-slate-500">{game.snapshot.cancelReason ?? "서버 오류로 경기를 계속할 수 없습니다."}</p><p className="mt-2 font-bold text-emerald-600">이 경기는 승패 기록에 포함되지 않습니다.</p><button onClick={game.returnToLobby} className="mt-7 inline-flex items-center gap-2 rounded-2xl bg-violet-600 px-7 py-4 font-black text-white"><RotateCcw size={19}/>로비로 돌아가기</button></section>}
 

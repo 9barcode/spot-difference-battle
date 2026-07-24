@@ -52,12 +52,23 @@ export interface DifferenceFill {
   tolerance: number;
 }
 
+export type ObjectShapeEffect = "NONE" | "WIDE" | "TALL" | "STRIPES" | "DOTS" | "STAR" | "OUTLINE";
+
+export interface DifferenceObjectEdit {
+  /** UI에 정의된 고정 오브젝트 ID. 래스터 이미지에서 객체별 선택 범위를 안정적으로 유지한다. */
+  objectId: string;
+  objectLabel: string;
+  color: string;
+  shapeEffect: ObjectShapeEffect;
+}
+
 export interface Difference {
   id: string;
   kind: DifferenceKind;
   region: AnswerRegion;
   strokes?: DifferenceStroke[];
   fill?: DifferenceFill;
+  objectEdit?: DifferenceObjectEdit;
 }
 
 /**
@@ -121,7 +132,7 @@ export interface GameSnapshot {
   players: [PlayerProgress, PlayerProgress];
   winnerId: string | null;
   /**
-   * 상대가 렌더해 제출한 문제 이미지. FINDING·FINISHED에서만 채워진다.
+   * 제작자가 렌더해 제출한 문제 이미지. FINDING·FINISHED에서만 채워진다.
    * 제작 명령(strokes/fill)과 정답 좌표는 절대 포함하지 않는다.
    */
   problemImage: string | null;
