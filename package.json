@@ -10,11 +10,14 @@
     "check": "pnpm -r --if-present check",
     "predev": "pnpm build:packages",
     "dev": "pnpm --parallel --filter @spot-battle/web --filter @spot-battle/server dev",
+    "e2e": "playwright test",
+    "e2e:install": "playwright install chromium firefox webkit",
     "setup": "pnpm install && pnpm build:packages",
     "pretest": "pnpm build:packages",
     "test": "pnpm -r --if-present test"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "typescript": "^5.9.3",
     "vitest": "^3.2.4"
   }

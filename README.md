@@ -51,6 +51,17 @@ pnpm dev
 
 전체 타입 검사와 게임 규칙 테스트는 각각 `pnpm check`, `pnpm test`로 실행합니다. UI만 실행하려면 [UI/README.md](UI/README.md)를 참고합니다.
 
+## 브라우저 E2E 테스트
+
+처음 한 번 Playwright용 Chromium, Firefox와 WebKit을 설치한 뒤 브라우저 E2E 테스트를 실행합니다.
+
+```sh
+pnpm e2e:install
+pnpm e2e
+```
+
+E2E 테스트는 격리된 로컬 포트에서 웹과 서버를 자동 실행합니다. Chromium·Firefox·WebKit에서 독립된 브라우저 컨텍스트 두 개의 매칭과 결과 동기화, 모바일·데스크톱 좌표 정확도, 키보드 탐색과 포커스 표시를 검증합니다.
+
 ## 로컬 데이터베이스
 
 Docker가 설치되어 있다면 PostgreSQL을 다음과 같이 준비할 수 있습니다.
@@ -65,5 +76,5 @@ pnpm --filter @spot-battle/server db:migrate
 실제 PostgreSQL 재시작 복구 테스트는 데이터베이스를 준비한 뒤 실행합니다.
 
 ```sh
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/spot_difference_battle pnpm --filter @spot-battle/server test
+DATABASE_URL=postgresql://postgres:spot-battle-local-only@localhost:5432/spot_difference_battle pnpm --filter @spot-battle/server test
 ```

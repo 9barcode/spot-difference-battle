@@ -1,3 +1,8 @@
 @import './fonts.css';
 @import './tailwind.css';
 @import './theme.css';
+
+:where(button, input, select, [tabindex]):focus-visible {
+  outline: 3px solid #7c3aed;
+  outline-offset: 3px;
+}

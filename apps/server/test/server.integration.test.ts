@@ -133,10 +133,20 @@ describe("game server", () => {
       let nextSnapshot = waitForNewerVersion(first, findingContext.expectedStateVersion);
       first.emit("game:guess", { matchId: firstMatch.matchId, point: { x: 0.2, y: 0.2 }, ...findingContext });
       const afterFirstGuess = await nextSnapshot;
+      const delayedGuessContext = findingContext;
       findingContext = { expectedState: afterFirstGuess.state, expectedStateVersion: afterFirstGuess.stateVersion };
       nextSnapshot = waitForNewerVersion(first, findingContext.expectedStateVersion);
       first.emit("game:guess", { matchId: firstMatch.matchId, point: { x: 0.5, y: 0.5 }, ...findingContext });
       const afterSecondGuess = await nextSnapshot;
+
+      const delayedDuplicateGuessError = once<GameErrorPayload>(first, "game:error");
+      first.emit("game:guess", {
+        matchId: firstMatch.matchId,
+        point: { x: 0.2, y: 0.2 },
+        ...delayedGuessContext,
+      });
+      await expect(delayedDuplicateGuessError).resolves.toMatchObject({ code: "STALE_STATE" });
+
       findingContext = { expectedState: afterSecondGuess.state, expectedStateVersion: afterSecondGuess.stateVersion };
       const finished = waitForState(first, "FINISHED");
       first.emit("game:guess", { matchId: firstMatch.matchId, point: { x: 0.8, y: 0.8 }, ...findingContext });
@@ -144,6 +154,7 @@ describe("game server", () => {
       const result = await finished;
       expect(result).toMatchObject({ state: "FINISHED", winnerId: firstMatch.playerId });
       expect(result.players.find((player) => player.playerId === firstMatch.playerId)?.foundCount).toBe(3);
+      expect(result.players.find((player) => player.playerId === firstMatch.playerId)?.wrongAnswerCount).toBe(0);
       await new Promise((resolve) => setTimeout(resolve, 0));
       expect(matchStore.matches.has(firstMatch.matchId)).toBe(true);
       expect(matchStore.activeMatches.has(firstMatch.matchId)).toBe(false);
