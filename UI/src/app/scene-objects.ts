@@ -146,6 +146,22 @@ export const SCENE_OBJECTS: SceneObjectDefinition[] = [
     ],
   },
   {
+    id: "rug",
+    label: "카펫",
+    region: { x: 0.42, y: 0.88, radius: 0.06 },
+    masks: [
+      { kind: "ellipse", cx: 0.50, cy: 0.86, rx: 0.32, ry: 0.135 },
+    ],
+    excludeMasks: [
+      { kind: "ellipse", cx: 0.515, cy: 0.64, rx: 0.045, ry: 0.075 },
+      { kind: "ellipse", cx: 0.505, cy: 0.76, rx: 0.055, ry: 0.12 },
+      { kind: "polygon", points: [[0.47,0.60],[0.48,0.55],[0.50,0.60]] },
+      { kind: "polygon", points: [[0.53,0.59],[0.55,0.55],[0.56,0.61]] },
+      { kind: "ellipse", cx: 0.46, cy: 0.86, rx: 0.055, ry: 0.035, rotate: -10 },
+      { kind: "ellipse", cx: 0.647, cy: 0.895, rx: 0.025, ry: 0.038, rotate: -12 },
+    ],
+  },
+  {
     id: "cabinet",
     label: "서랍장",
     region: { x: 0.83, y: 0.71, radius: 0.07 },
@@ -170,22 +186,6 @@ export const SCENE_OBJECTS: SceneObjectDefinition[] = [
     label: "공",
     region: { x: 0.647, y: 0.895, radius: 0.042 },
     masks: [
-      { kind: "ellipse", cx: 0.647, cy: 0.895, rx: 0.025, ry: 0.038, rotate: -12 },
-    ],
-  },
-  {
-    id: "rug",
-    label: "카펫",
-    region: { x: 0.42, y: 0.88, radius: 0.06 },
-    masks: [
-      { kind: "ellipse", cx: 0.50, cy: 0.86, rx: 0.32, ry: 0.135 },
-    ],
-    excludeMasks: [
-      { kind: "ellipse", cx: 0.515, cy: 0.64, rx: 0.045, ry: 0.075 },
-      { kind: "ellipse", cx: 0.505, cy: 0.76, rx: 0.055, ry: 0.12 },
-      { kind: "polygon", points: [[0.47,0.60],[0.48,0.55],[0.50,0.60]] },
-      { kind: "polygon", points: [[0.53,0.59],[0.55,0.55],[0.56,0.61]] },
-      { kind: "ellipse", cx: 0.46, cy: 0.86, rx: 0.055, ry: 0.035, rotate: -10 },
       { kind: "ellipse", cx: 0.647, cy: 0.895, rx: 0.025, ry: 0.038, rotate: -12 },
     ],
   },

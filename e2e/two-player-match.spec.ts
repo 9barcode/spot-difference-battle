@@ -118,8 +118,9 @@ test("finder cannot see the editor until the creator finishes, and objects are s
     await saveObjectEdit(creator, "ball", "점무늬");
     await saveObjectEdit(creator, "clock", "윤곽 변경");
 
-    await expect(creator.getByText("완료 3/3")).toBeVisible();
-    await creator.getByTestId("submit-problem").click();
+    const submitProblem = creator.getByTestId("submit-problem");
+    await expect(submitProblem).toContainText("완료 3/3");
+    await submitProblem.click();
 
     await expect(finder.getByTestId("finding-screen")).toBeVisible();
     await expect(finder.getByRole("img", { name: "게임 원본 그림" })).toBeVisible();
