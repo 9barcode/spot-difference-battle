@@ -10,6 +10,14 @@ export const GAME_CONFIG = {
 } as const;
 
 /**
+ * 서버와 웹이 공통으로 아는 장면 식별자다.
+ * 실제 이미지와 객체 마스크는 웹의 장면 카탈로그에서 관리한다.
+ */
+export const GAME_SCENE_IDS = ["prototype-room"] as const;
+export type GameSceneId = (typeof GAME_SCENE_IDS)[number];
+export const DEFAULT_GAME_SCENE_ID: GameSceneId = GAME_SCENE_IDS[0];
+
+/**
  * 제작자가 렌더한 문제 이미지의 허용 조건.
  * 서버는 픽셀을 해석하지 않고 형식과 크기만 검증한다.
  */
@@ -127,7 +135,7 @@ export interface GameSnapshot {
   matchId: string;
   state: GameState;
   stateVersion: number;
-  imageId: string;
+  imageId: GameSceneId;
   deadlineMs: number | null;
   players: [PlayerProgress, PlayerProgress];
   winnerId: string | null;

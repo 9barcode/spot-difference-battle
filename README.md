@@ -1,82 +1,135 @@
 # Spot Difference Battle
 
-한 플레이어가 객체별 차이점을 만들고 다른 플레이어가 푸는 실시간 1대1 틀린그림찾기 웹게임입니다. 혼자 제작과 풀이를 확인하는 1인 테스트 모드도 제공합니다.
+> 문서 상태: CURRENT
 
-## 핵심 플레이
+한 플레이어가 객체 3개를 수정해 문제를 만들고 다른 플레이어가 차이를 찾는 실시간 1대1 틀린그림찾기 웹게임입니다. 같은 흐름을 혼자 확인하는 1인 테스트 모드도 제공합니다.
 
-1. 온라인 대전에서는 먼저 매칭된 플레이어가 문제 제작자, 두 번째 플레이어가 찾는 사람이 됩니다.
-2. 제작자는 고양이·화분·공·창문·구름·베개·소파·전등 등 분리된 객체 중 3개를 골라 색상이나 모양·무늬를 변경합니다.
-3. 제작 중에는 찾는 사람에게 그림과 정답 정보가 표시되지 않습니다.
-4. 제작자가 `수정 완료`를 누른 뒤에만 찾는 사람에게 원본과 완성된 문제 이미지가 전달됩니다.
-5. 찾는 사람이 제한시간 안에 3개를 모두 찾으면 승리하고, 시간 안에 찾지 못하면 제작자가 승리합니다.
-6. 1인 테스트 모드에서는 같은 흐름을 혼자 제작한 뒤 바로 풀어볼 수 있습니다.
+## 현재 게임 방식
+
+1. 먼저 매칭된 플레이어가 제작자, 두 번째 플레이어가 찾는 사람이 됩니다.
+2. 양쪽이 준비하면 제작자에게 30초의 편집 시간이 주어집니다.
+3. 제작자는 장면의 서로 다른 객체 3개에 색상·확대·무늬·윤곽 효과를 적용합니다.
+4. 제작 중 찾는 사람에게 그림·선택 객체·정답 위치를 보내지 않습니다.
+5. 제작자가 제출하면 찾는 사람에게 원본과 완성된 PNG 문제 이미지를 제공합니다.
+6. 찾는 사람이 60초 안에 3개를 모두 찾으면 승리합니다.
+7. 시간 안에 완료하지 못하면 제작자가 승리합니다.
+8. 오답은 3초 차감되고 힌트는 한 번 사용할 수 있습니다.
+9. 제작자가 마감까지 제출하지 못하거나 플레이어가 10초 안에 재접속하지 못하면 기권 처리됩니다.
+
+정상 경기에는 동점 비교나 무승부가 없습니다. 결과 화면에서는 현재 로비 이동과 신고를 제공합니다. 재대전과 결과 화면 즉시 새 매칭은 보류 기능입니다.
 
 ## 현재 단계
 
-핵심 재미와 규칙을 검증하는 MVP 기획 단계입니다. 현재 기준 수치는 차이점 제작 30초, 풀이 60초, 오답 시 3초 차감, 경기당 힌트 1회입니다. 테스트 결과에 따라 변경될 수 있습니다.
+핵심 비대칭 경기와 저장·복구·브라우저 테스트가 연결된 세로형 MVP입니다. 아직 출시 후보는 아닙니다.
+
+출시 전에 필요한 주요 작업:
+
+- 라이선스가 확인된 장면 10개
+- 장면별 서버 원본 검증
+- 완료 문제와 정답의 신고 감사용 보관
+- 운영 로그·지표·모니터링
+- 스테이징 배포와 복구 검증
+
+현재 장면 카탈로그에는 라이선스가 확인되지 않은 `prototype-room` 한 개만 있습니다.
 
 ## 프로젝트 구성
 
-- `UI/`: React와 Vite 기반 웹 앱 및 Figma 시안
-- `apps/server/`: Fastify와 Socket.IO 기반 게임 서버
-- `packages/shared/`: 웹과 서버가 공유하는 타입과 게임 설정
-- `packages/game-core/`: 서버 권한 게임 규칙과 판정 로직
-- `docs/`: 게임 기획, 규칙, 화면, 기술 및 테스트 문서
-- `spot_difference_game_mockup_editable.svg`: 편집 가능한 화면 목업
+- `UI/`: 현재 React 웹 앱, 객체 편집기와 비활성 Figma 참고 시안
+- `apps/server/`: Fastify·Socket.IO 서버와 PostgreSQL 저장소
+- `packages/shared/`: 공유 타입, 상태와 게임 수치
+- `packages/game-core/`: 서버 권한 역할·타이머·승패 판정
+- `docs/`: 현재 규칙, 기술, 화면, 테스트와 역사 기록
+- `e2e/`: Playwright 브라우저 테스트
+
+활성 웹 진입점은 `UI/src/main.tsx`이며 `MvpApp`을 렌더합니다. `UI/src/app/App.tsx`는 차이점 5개·랭킹·상점 등이 포함된 비활성 과거 시안으로 구현 기준이 아닙니다.
 
 ## 문서
 
-- [게임 기획](docs/GAME_DESIGN.md)
+- [문서 운영 기준](docs/DOCUMENTATION.md)
+- [MVP 결정 기록](docs/MVP_DECISIONS.md)
 - [게임 규칙](docs/GAME_RULES.md)
+- [게임 상태](docs/GAME_STATE.md)
+- [게임 기획](docs/GAME_DESIGN.md)
 - [사용자 흐름](docs/USER_FLOW.md)
 - [화면 명세](docs/SCREEN_SPEC.md)
-- [게임 상태](docs/GAME_STATE.md)
 - [기술 설계](docs/TECH_SPEC.md)
 - [테스트 계획](docs/TEST_PLAN.md)
-- [MVP 결정 기록](docs/MVP_DECISIONS.md)
-- [UI 시안 점검](docs/UI_AUDIT.md)
 - [구현 백로그](docs/IMPLEMENTATION_BACKLOG.md)
+- [UI 현황 점검](docs/UI_AUDIT.md)
+- [게임 장면 에셋 가이드](docs/GAME_ASSETS.md)
 
-문서 간 내용이 충돌할 경우 실제 판정 수치는 `GAME_RULES.md`, MVP 범위와 제품 방향은 `GAME_DESIGN.md`를 우선합니다.
+제품 방향은 `MVP_DECISIONS.md`, 게임 판정은 `GAME_RULES.md`, 상태 전이는 `GAME_STATE.md`를 우선합니다. 실제 판정 수치는 공유 `GAME_CONFIG`가 실행 기준입니다. 날짜별 `CHANGES_*.md`와 과거 릴리스는 역사 기록이며 현재 규칙보다 우선하지 않습니다.
 
 ## 로컬 실행
 
-Node.js와 pnpm이 필요합니다.
+필요 항목:
 
-```sh
-pnpm install
+- Node.js
+- pnpm 11.9.0
+- 선택 사항: PostgreSQL을 실행할 Docker Desktop
+
+저장소를 처음 준비할 때:
+
+```powershell
+pnpm setup
+```
+
+웹과 서버 실행:
+
+```powershell
 pnpm dev
 ```
 
 - 웹: `http://localhost:5173`
-- 서버 상태 확인: `http://localhost:3001/health`
+- 서버 상태: `http://localhost:3001/health`
 
-전체 타입 검사와 게임 규칙 테스트는 각각 `pnpm check`, `pnpm test`로 실행합니다. UI만 실행하려면 [UI/README.md](UI/README.md)를 참고합니다.
+UI만 실행:
 
-## 브라우저 E2E 테스트
+```powershell
+pnpm --filter @spot-battle/web dev
+```
 
-처음 한 번 Playwright용 Chromium, Firefox와 WebKit을 설치한 뒤 브라우저 E2E 테스트를 실행합니다.
+서버만 실행:
 
-```sh
+```powershell
+pnpm --filter @spot-battle/server dev
+```
+
+## 검사와 테스트
+
+```powershell
+pnpm check
+pnpm test
+pnpm build
+```
+
+`pnpm test`는 `DATABASE_URL`이 없으면 실제 PostgreSQL 재시작 통합 테스트를 건너뜁니다.
+
+브라우저 엔진을 처음 설치하고 E2E를 실행하려면:
+
+```powershell
 pnpm e2e:install
 pnpm e2e
 ```
 
-E2E 테스트는 격리된 로컬 포트에서 웹과 서버를 자동 실행합니다. Chromium·Firefox·WebKit에서 독립된 브라우저 컨텍스트 두 개의 매칭과 결과 동기화, 제작 중 찾는 사람의 화면 비공개, 객체별 선택, 키보드 탐색과 포커스 표시를 검증합니다.
+현재 E2E는 Chromium·Firefox·WebKit에서 닉네임·매칭, 역할·준비, 제작 화면 비공개, 객체 3개 선택, 데스크톱·모바일 조합, 기권 결과 동기화를 확인합니다. 브라우저에서 정답 3개를 직접 찾아 정상 결과까지 완료하는 시나리오는 백로그에 있습니다.
 
-## 로컬 데이터베이스
+## PostgreSQL
 
-Docker가 설치되어 있다면 PostgreSQL을 다음과 같이 준비할 수 있습니다.
+PostgreSQL 없이 실행하면 메모리 저장소를 사용합니다. Docker가 준비된 경우:
 
-```sh
+```powershell
 docker compose up -d postgres
+$env:DATABASE_URL="postgresql://postgres:spot-battle-local-only@127.0.0.1:5432/spot_difference_battle"
 pnpm --filter @spot-battle/server db:migrate
+pnpm dev
 ```
 
-`DATABASE_URL`이 설정되면 서버는 경기 결과, 게스트와 신고뿐 아니라 진행 중인 경기 상태도 PostgreSQL에 저장합니다. 서버가 재시작되면 게스트 토큰으로 기존 경기와 제한시간을 복구하며, 접속하지 않은 플레이어에게는 재접속 유예시간이 적용됩니다. 설정하지 않은 로컬 환경에서는 메모리 저장소를 사용합니다. 필요한 환경변수는 `.env.example`을 참고합니다.
+같은 PowerShell 창에서 실제 PostgreSQL 테스트:
 
-실제 PostgreSQL 재시작 복구 테스트는 데이터베이스를 준비한 뒤 실행합니다.
-
-```sh
-DATABASE_URL=postgresql://postgres:spot-battle-local-only@localhost:5432/spot_difference_battle pnpm --filter @spot-battle/server test
+```powershell
+$env:DATABASE_URL="postgresql://postgres:spot-battle-local-only@127.0.0.1:5432/spot_difference_battle"
+pnpm --filter @spot-battle/server test
 ```
+
+환경변수 전체 목록은 `.env.example`을 참고합니다.

@@ -6,6 +6,7 @@ import {
   type GameSnapshot,
   type GameState,
   type GameEndReason,
+  type GameSceneId,
   type GuessResult,
   type HintResult,
   type NormalizedPoint,
@@ -48,7 +49,7 @@ export interface PersistedMatchPlayer extends MatchPlayer {
 
 export interface PersistedMatchState {
   matchId: string;
-  imageId: string;
+  imageId: GameSceneId;
   state: GameState;
   stateVersion: number;
   deadlineMs: number | null;
@@ -88,7 +89,7 @@ export class GameMatch {
    */
   constructor(
     public readonly matchId: string,
-    public readonly imageId: string,
+    public readonly imageId: GameSceneId,
     players: [MatchPlayer, MatchPlayer],
   ) {
     if (players[0].playerId === players[1].playerId) {

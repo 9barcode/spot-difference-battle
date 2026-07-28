@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import type { Difference } from "@spot-battle/shared";
+import {
+  DEFAULT_GAME_SCENE_ID,
+  type Difference,
+} from "@spot-battle/shared";
 import { GameMatch, GameRuleError } from "../src/index.js";
 
 const differences: Difference[] = [
@@ -11,7 +14,7 @@ const differences: Difference[] = [
 const IMAGE = `data:image/png;base64,${"A".repeat(512)}`;
 
 function createMatch(): GameMatch {
-  return new GameMatch("match-1", "image-1", [
+  return new GameMatch("match-1", DEFAULT_GAME_SCENE_ID, [
     { playerId: "creator", nickname: "제작자" },
     { playerId: "finder", nickname: "찾는사람" },
   ]);
