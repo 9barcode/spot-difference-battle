@@ -327,6 +327,25 @@ export default function MvpApp() {
     }
   }, [game.snapshot?.matchId, game.snapshot?.state, me?.submitted]);
 
+  useEffect(() => {
+    if (submitPhase !== "SENT" || me?.submitted || game.snapshot?.state !== "EDITING") return;
+
+    if (!game.connected || game.error) {
+      setSubmitPhase("ERROR");
+      setSubmitError(
+        game.error?.message ?? "서버에 문제를 전송하지 못했습니다. 연결을 확인하고 다시 시도해주세요.",
+      );
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      setSubmitPhase("ERROR");
+      setSubmitError("서버의 제출 확인이 없습니다. 다시 시도해주세요.");
+    }, 5_000);
+
+    return () => window.clearTimeout(timeout);
+  }, [submitPhase, me?.submitted, game.snapshot?.state, game.connected, game.error]);
+
   /**
    * 제작 결과를 이미지로 합성한 뒤 서버로 올린다.
    * 제작 명령은 서버에서 판정용으로만 쓰이고 상대에게는 이미지만 전달된다.
@@ -337,7 +356,13 @@ export default function MvpApp() {
       setSubmitError(null);
       try {
         const renderedImage = await renderProblemImage(differences);
-        game.submit(differences, renderedImage, autoFilled);
+        game.clearError();
+        const sent = game.submit(differences, renderedImage, autoFilled);
+        if (!sent) {
+          setSubmitPhase("ERROR");
+          setSubmitError("서버에 문제를 전송하지 못했습니다. 연결을 확인하고 다시 시도해주세요.");
+          return;
+        }
         setSubmitPhase("SENT");
       } catch {
         setSubmitPhase("ERROR");
@@ -425,9 +450,9 @@ export default function MvpApp() {
                 <p className="mt-2 text-sm font-bold text-amber-600">마감 {GAME_CONFIG.autoSubmitLeadSeconds}초 전에는 남은 차이점이 자동으로 채워집니다.</p>
               )}
             </div>
-            <div className="mx-auto max-w-5xl"><FreeformEditor value={draft} onChange={setDraft} disabled={Boolean(me?.submitted) || submitPhase !== "IDLE"} /></div>
+            <div className="mx-auto max-w-5xl"><FreeformEditor value={draft} onChange={setDraft} disabled={Boolean(me?.submitted) || submitPhase === "RENDERING" || submitPhase === "SENT"} /></div>
             <div className="mt-5 flex flex-col items-center gap-3">
-              <button data-testid="submit-problem" disabled={draft.length !== GAME_CONFIG.differenceCount || Boolean(me?.submitted) || submitPhase === "RENDERING"} onClick={() => void submitProblem(draft, false)} className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-7 py-3 font-black text-white disabled:opacity-40">
+              <button data-testid="submit-problem" disabled={draft.length !== GAME_CONFIG.differenceCount || Boolean(me?.submitted) || submitPhase === "RENDERING" || submitPhase === "SENT"} onClick={() => void submitProblem(draft, false)} className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-7 py-3 font-black text-white disabled:opacity-40">
                 {submitPhase === "RENDERING" ? <LoaderCircle className="animate-spin" size={18}/> : <Send size={18}/>}
                 {submitPhase === "RENDERING" ? "문제 이미지 만드는 중" : me?.submitted ? "수정 완료" : `수정 완료 ${draft.length}/${GAME_CONFIG.differenceCount}`}
               </button>
