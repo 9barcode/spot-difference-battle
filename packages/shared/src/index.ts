@@ -18,6 +18,31 @@ export type GameSceneId = (typeof GAME_SCENE_IDS)[number];
 export const DEFAULT_GAME_SCENE_ID: GameSceneId = GAME_SCENE_IDS[0];
 
 /**
+ * 서버가 제출된 객체 편집을 독립적으로 검증하기 위한 장면별 허용 객체 ID.
+ * 웹의 실제 마스크 카탈로그는 이 목록과 정확히 일치해야 한다.
+ */
+export const GAME_SCENE_OBJECT_IDS = {
+  "prototype-room": [
+    "plant",
+    "lamp",
+    "sofa",
+    "pillow",
+    "window",
+    "left-curtain",
+    "right-curtain",
+    "cloud",
+    "clock",
+    "picture",
+    "vase",
+    "books",
+    "rug",
+    "cabinet",
+    "cat",
+    "ball",
+  ],
+} as const satisfies Record<GameSceneId, readonly string[]>;
+
+/**
  * 제작자가 렌더한 문제 이미지의 허용 조건.
  * 서버는 픽셀을 해석하지 않고 형식과 크기만 검증한다.
  */
@@ -60,7 +85,16 @@ export interface DifferenceFill {
   tolerance: number;
 }
 
-export type ObjectShapeEffect = "NONE" | "WIDE" | "TALL" | "STRIPES" | "DOTS" | "STAR" | "OUTLINE";
+export const OBJECT_SHAPE_EFFECTS = [
+  "NONE",
+  "WIDE",
+  "TALL",
+  "STRIPES",
+  "DOTS",
+  "STAR",
+  "OUTLINE",
+] as const;
+export type ObjectShapeEffect = (typeof OBJECT_SHAPE_EFFECTS)[number];
 
 export interface DifferenceObjectEdit {
   /** UI에 정의된 고정 오브젝트 ID. 래스터 이미지에서 객체별 선택 범위를 안정적으로 유지한다. */

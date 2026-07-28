@@ -17,9 +17,24 @@ import { createProblemImageFixture } from "./png-fixture.js";
 type TestSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 
 const differences: Difference[] = [
-  { id: "a", kind: "ADD", region: { x: 0.2, y: 0.2, radius: 0.05 } },
-  { id: "b", kind: "COVER", region: { x: 0.5, y: 0.5, radius: 0.05 } },
-  { id: "c", kind: "COLOR", region: { x: 0.8, y: 0.8, radius: 0.05 } },
+  {
+    id: "a",
+    kind: "ADD",
+    region: { x: 0.2, y: 0.2, radius: 0.05 },
+    objectEdit: { objectId: "plant", objectLabel: "화분", color: "#ef2b2d", shapeEffect: "NONE" },
+  },
+  {
+    id: "b",
+    kind: "COVER",
+    region: { x: 0.5, y: 0.5, radius: 0.05 },
+    objectEdit: { objectId: "sofa", objectLabel: "소파", color: "#1775e5", shapeEffect: "WIDE" },
+  },
+  {
+    id: "c",
+    kind: "COLOR",
+    region: { x: 0.8, y: 0.8, radius: 0.05 },
+    objectEdit: { objectId: "cat", objectLabel: "고양이", color: "#18a83a", shapeEffect: "STRIPES" },
+  },
 ];
 const problemImageFixture = createProblemImageFixture(differences);
 

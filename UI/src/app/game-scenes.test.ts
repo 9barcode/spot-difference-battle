@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { GAME_SCENE_IDS } from "@spot-battle/shared";
+import {
+  GAME_SCENE_IDS,
+  GAME_SCENE_OBJECT_IDS,
+} from "@spot-battle/shared";
 import {
   DEFAULT_GAME_SCENE,
   GAME_SCENES,
@@ -14,6 +17,9 @@ describe("game scene catalog", () => {
   it("registers unique objects and valid auto-fill candidates", () => {
     for (const scene of GAME_SCENES.values()) {
       expect(scene.objectsById.size).toBe(scene.objects.length);
+      expect([...scene.objectsById.keys()]).toEqual([
+        ...GAME_SCENE_OBJECT_IDS[scene.id],
+      ]);
       for (const objectId of scene.autoFillObjectIds) {
         expect(scene.objectsById.has(objectId)).toBe(true);
       }
