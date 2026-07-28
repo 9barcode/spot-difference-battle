@@ -160,15 +160,16 @@ export function useGameClient() {
     ready: () => match && socketRef.current?.emit("game:ready", { matchId: match.matchId }),
     submit: (differences: Difference[], renderedImage: string, autoFilled = false) => {
       const context = actionContext();
-      if (match && context) {
-        socketRef.current?.emit("game:submit", {
-          matchId: match.matchId,
-          differences,
-          renderedImage,
-          autoFilled,
-          ...context,
-        });
-      }
+      const socket = socketRef.current;
+      if (!match || !context || !socket?.connected) return false;
+      socket.emit("game:submit", {
+        matchId: match.matchId,
+        differences,
+        renderedImage,
+        autoFilled,
+        ...context,
+      });
+      return true;
     },
     guess: (point: NormalizedPoint) => {
       const context = actionContext();
