@@ -1,6 +1,7 @@
 # Spot Difference Battle
 
 > 문서 상태: CURRENT
+> 이 문서는 입문용 요약이다. 현재 게임 규칙의 유일한 Markdown 정본은 [`docs/GAME_RULES.md`](docs/GAME_RULES.md)다.
 
 한 플레이어가 객체 3개를 수정해 문제를 만들고 다른 플레이어가 차이를 찾는 실시간 1대1 틀린그림찾기 웹게임입니다. 같은 흐름을 혼자 확인하는 1인 테스트 모드도 제공합니다.
 
@@ -57,7 +58,7 @@
 - [UI 현황 점검](docs/UI_AUDIT.md)
 - [게임 장면 에셋 가이드](docs/GAME_ASSETS.md)
 
-제품 방향은 `MVP_DECISIONS.md`, 게임 판정은 `GAME_RULES.md`, 상태 전이는 `GAME_STATE.md`를 우선합니다. 실제 판정 수치는 공유 `GAME_CONFIG`가 실행 기준입니다. 날짜별 `CHANGES_*.md`와 과거 릴리스는 역사 기록이며 현재 규칙보다 우선하지 않습니다.
+게임 규칙의 유일한 Markdown 정본은 `GAME_RULES.md`입니다. `MVP_DECISIONS.md`는 결정 근거, `GAME_STATE.md`는 상태 매핑이며 별도 규칙집이 아닙니다. 실제 판정 수치는 정본을 구현한 공유 `GAME_CONFIG`가 사용합니다. 날짜별 `CHANGES_*.md`와 과거 릴리스는 역사 기록입니다.
 
 ## 로컬 실행
 

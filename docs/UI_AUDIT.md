@@ -1,13 +1,14 @@
 # UI 현황 점검
 
 > 문서 상태: CURRENT
-> 기준일: 2026-07-29
+> 기준일: 2026-07-30
+> 현재 UI를 점검하는 파생 문서이며 게임 규칙은 `GAME_RULES.md` 하나를 따른다.
 
 ## 1. 기준 화면
 
 - 활성 앱: `UI/src/main.tsx`가 렌더하는 `UI/src/app/MvpApp.tsx`
 - 비활성 참고 시안: `UI/src/app/App.tsx`
-- 현재 규칙: `GAME_RULES.md`
+- 유일한 게임 규칙 정본: `GAME_RULES.md`
 - 현재 화면 요구: `SCREEN_SPEC.md`
 
 `App.tsx`는 Figma Make에서 가져온 과거 시안이다. 차이점 5개, 로그인 프로필, 재화, 랭킹, 상점, 시즌과 퀘스트가 포함돼 있으며 현재 앱에서 렌더하지 않는다. 구현 기준이나 완료 기능으로 취급하지 않는다.

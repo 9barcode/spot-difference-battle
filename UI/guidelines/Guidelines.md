@@ -1,7 +1,7 @@
 # UI 구현 기준
 
 > 문서 상태: CURRENT
-> 게임 규칙은 `docs/GAME_RULES.md`, 화면별 요구는 `docs/SCREEN_SPEC.md`를 우선한다.
+> 게임 규칙의 유일한 Markdown 정본은 `../../docs/GAME_RULES.md`다. 화면별 요구는 정본을 매핑한 `../../docs/SCREEN_SPEC.md`를 따른다.
 
 ## 공통
 
