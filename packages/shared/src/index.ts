@@ -13,7 +13,7 @@ export const GAME_CONFIG = {
  * 서버와 웹이 공통으로 아는 장면 식별자다.
  * 실제 이미지와 객체 마스크는 웹의 장면 카탈로그에서 관리한다.
  */
-export const GAME_SCENE_IDS = ["prototype-room"] as const;
+export const GAME_SCENE_IDS = ["prototype-room", "cartoon-laboratory"] as const;
 export type GameSceneId = (typeof GAME_SCENE_IDS)[number];
 export const DEFAULT_GAME_SCENE_ID: GameSceneId = GAME_SCENE_IDS[0];
 
@@ -39,6 +39,26 @@ export const GAME_SCENE_OBJECT_IDS = {
     "cabinet",
     "cat",
     "ball",
+  ],
+  "cartoon-laboratory": [
+    "robot-arm",
+    "laser",
+    "upper-microscope",
+    "large-flask",
+    "pipette",
+    "lab-clock",
+    "desk-lamp",
+    "lower-microscope",
+    "upper-plant",
+    "binders",
+    "books",
+    "monitor",
+    "green-flask",
+    "test-tubes",
+    "lower-plant",
+    "goggles",
+    "toolbox",
+    "bottles",
   ],
 } as const satisfies Record<GameSceneId, readonly string[]>;
 

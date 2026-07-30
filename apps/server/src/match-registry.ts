@@ -12,8 +12,16 @@ export class MatchRegistry {
   private readonly matches = new Map<string, GameMatch>();
   private readonly playerMatches = new Map<string, string>();
 
+  constructor(
+    private readonly sceneIds: readonly GameSceneId[] = GAME_SCENE_IDS,
+  ) {
+    if (sceneIds.length === 0) {
+      throw new Error("하나 이상의 경기 장면이 필요합니다.");
+    }
+  }
+
   private selectSceneId(): GameSceneId {
-    return GAME_SCENE_IDS[Math.floor(Math.random() * GAME_SCENE_IDS.length)]!;
+    return this.sceneIds[Math.floor(Math.random() * this.sceneIds.length)]!;
   }
 
   create(

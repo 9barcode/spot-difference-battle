@@ -3,6 +3,8 @@ import {
   type GameSceneId,
 } from "@spot-battle/shared";
 import livingRoomImage from "@/imports/image.png";
+import laboratoryImage from "@/imports/laboratory.png";
+import { LABORATORY_SCENE_OBJECTS } from "./laboratory-scene-objects";
 import {
   SCENE_OBJECTS,
   type SceneObjectDefinition,
@@ -46,8 +48,29 @@ const prototypeRoom = createScene({
   },
 });
 
+const cartoonLaboratory = createScene({
+  id: "cartoon-laboratory",
+  label: "카툰 연구실",
+  imageSrc: laboratoryImage,
+  imageAlt: "로봇 팔과 실험 도구가 놓인 밝은 카툰 연구실",
+  objects: LABORATORY_SCENE_OBJECTS,
+  autoFillObjectIds: [
+    "lab-clock",
+    "test-tubes",
+    "toolbox",
+    "large-flask",
+    "monitor",
+    "upper-plant",
+  ],
+  asset: {
+    licenseStatus: "UNVERIFIED",
+    source: "User-provided Nano Banana generation, 2026-07-26",
+  },
+});
+
 export const GAME_SCENES: ReadonlyMap<GameSceneId, GameSceneDefinition> = new Map([
   [prototypeRoom.id, prototypeRoom],
+  [cartoonLaboratory.id, cartoonLaboratory],
 ]);
 
 export const DEFAULT_GAME_SCENE =

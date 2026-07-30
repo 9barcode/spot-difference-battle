@@ -524,7 +524,7 @@ export function FreeformEditor({
             <MousePointer2 size={16} /> 객체 직접 선택
           </span>
           <span className="text-sm font-bold text-slate-600">
-            고양이·화분·공·창문·구름·베개·소파·전등 등이 서로 다른 객체로 분리되어 있습니다.
+            {scene.objects.slice(0, 8).map((object) => object.label).join("·")} 등이 서로 다른 객체로 분리되어 있습니다.
           </span>
         </div>
         {selectedObject && (
@@ -585,30 +585,52 @@ export function FreeformEditor({
           preserveAspectRatio="none"
           className={`absolute inset-0 h-full w-full touch-none ${disabled ? "cursor-not-allowed" : "cursor-pointer"}`}
         >
+          <style>{`
+            .coarse-object-hit-target { pointer-events: none; }
+            @media (pointer: coarse) {
+              .coarse-object-hit-target { pointer-events: all; }
+            }
+          `}</style>
           {scene.objects.flatMap((object) => {
             const isCurrent = object.id === selectedObjectId;
             const isSaved = usedObjectIds.has(object.id);
-            return object.masks.map((primitive, index) =>
-              renderSvgPrimitive(primitive, `${object.id}-${index}`, {
-                fill: isCurrent ? "rgba(124,58,237,.22)" : isSaved ? "rgba(16,185,129,.12)" : "rgba(255,255,255,.001)",
-                stroke: isCurrent ? "#7c3aed" : isSaved ? "#10b981" : "transparent",
-                strokeWidth: isCurrent || isSaved ? 4 : 0,
-                vectorEffect: "non-scaling-stroke",
-                "data-testid": index === 0 ? `scene-object-${object.id}` : undefined,
-                "aria-label": index === 0 ? `${object.label} 선택` : undefined,
-                role: index === 0 ? "button" : undefined,
-                tabIndex: index === 0 ? 0 : undefined,
-                onKeyDown: (event) => {
-                  if (event.key !== "Enter" && event.key !== " ") return;
-                  event.preventDefault();
-                  selectObject(object);
-                },
-                onPointerDown: (event) => {
+            return [
+              <circle
+                key={`${object.id}-coarse-hit-target`}
+                className="coarse-object-hit-target"
+                cx={object.region.x * SVG_WIDTH}
+                cy={object.region.y * SVG_HEIGHT}
+                r={Math.max(object.region.radius * SVG_WIDTH, 55)}
+                fill="rgba(255,255,255,.001)"
+                data-testid={`scene-object-hit-${object.id}`}
+                aria-hidden="true"
+                onPointerDown={(event) => {
                   event.stopPropagation();
                   selectObject(object);
-                },
-              }),
-            );
+                }}
+              />,
+              ...object.masks.map((primitive, index) =>
+                renderSvgPrimitive(primitive, `${object.id}-${index}`, {
+                  fill: isCurrent ? "rgba(124,58,237,.22)" : isSaved ? "rgba(16,185,129,.12)" : "rgba(255,255,255,.001)",
+                  stroke: isCurrent ? "#7c3aed" : isSaved ? "#10b981" : "transparent",
+                  strokeWidth: isCurrent || isSaved ? 4 : 0,
+                  vectorEffect: "non-scaling-stroke",
+                  "data-testid": index === 0 ? `scene-object-${object.id}` : undefined,
+                  "aria-label": index === 0 ? `${object.label} 선택` : undefined,
+                  role: index === 0 ? "button" : undefined,
+                  tabIndex: index === 0 ? 0 : undefined,
+                  onKeyDown: (event) => {
+                    if (event.key !== "Enter" && event.key !== " ") return;
+                    event.preventDefault();
+                    selectObject(object);
+                  },
+                  onPointerDown: (event) => {
+                    event.stopPropagation();
+                    selectObject(object);
+                  },
+                }),
+              ),
+            ];
           })}
         </svg>
       </div>
