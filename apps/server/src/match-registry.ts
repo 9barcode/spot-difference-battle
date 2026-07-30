@@ -3,6 +3,7 @@ import {
   GameRuleError,
   type PersistedMatchState,
 } from "@spot-battle/game-core";
+import { GAME_SCENE_IDS, type GameSceneId } from "@spot-battle/shared";
 
 // 서버측 자동 보충 후보는 두지 않는다.
 // 서버가 차이점을 주입해도 그에 맞는 문제 이미지를 렌더할 수 없기 때문이다.
@@ -11,6 +12,10 @@ export class MatchRegistry {
   private readonly matches = new Map<string, GameMatch>();
   private readonly playerMatches = new Map<string, string>();
 
+  private selectSceneId(): GameSceneId {
+    return GAME_SCENE_IDS[Math.floor(Math.random() * GAME_SCENE_IDS.length)]!;
+  }
+
   create(
     matchId: string,
     players: [
@@ -18,7 +23,7 @@ export class MatchRegistry {
       { playerId: string; nickname: string },
     ],
   ): GameMatch {
-    const match = new GameMatch(matchId, "prototype-room", players);
+    const match = new GameMatch(matchId, this.selectSceneId(), players);
     this.matches.set(matchId, match);
     for (const player of players) this.playerMatches.set(player.playerId, matchId);
     return match;

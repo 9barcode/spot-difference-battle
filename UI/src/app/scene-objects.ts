@@ -190,5 +190,3 @@ export const SCENE_OBJECTS: SceneObjectDefinition[] = [
     ],
   },
 ];
-
-export const SCENE_OBJECTS_BY_ID = new Map(SCENE_OBJECTS.map((object) => [object.id, object]));

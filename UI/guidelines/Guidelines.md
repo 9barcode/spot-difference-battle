@@ -1,61 +1,33 @@
-**Add your own guidelines here**
-<!--
+# UI 구현 기준
 
-System Guidelines
+> 문서 상태: CURRENT
+> 게임 규칙의 유일한 Markdown 정본은 `../../docs/GAME_RULES.md`다. 화면별 요구는 정본을 매핑한 `../../docs/SCREEN_SPEC.md`를 따른다.
 
-Use this file to provide the AI with rules and guidelines you want it to follow.
-This template outlines a few examples of things you can add. You can add your own sections and format it to suit your needs
+## 공통
 
-TIP: More context isn't always better. It can confuse the LLM. Try and add the most important rules you need
+- 활성 앱은 `MvpApp`이다. 비활성 Figma 시안의 랭킹·상점·시즌·차이점 5개를 되살리지 않는다.
+- 게임 수치는 공유 `GAME_CONFIG`를 사용하고 화면에 별도 상수로 복제하지 않는다.
+- 서버 스냅샷을 권한 상태로 사용하며 클라이언트 타이머로 승패를 확정하지 않는다.
+- 제작자와 찾는 사람의 입력 권한을 화면에서도 분리한다.
+- 제작 중 찾는 사람에게 원본·수정본·정답 정보를 표시하지 않는다.
 
-# General guidelines
+## 반응형과 입력
 
-Any general rules you want the AI to follow.
-For example:
+- 기본 레이아웃은 flex/grid를 사용하고 고정 픽셀 위치를 핵심 구조에 사용하지 않는다.
+- 이미지 선택 좌표는 표시 크기가 아닌 정규화 좌표로 변환한다.
+- 마우스·터치·키보드 사용자를 함께 지원한다.
+- 처리 중·연결 끊김·종료 상태에서는 중복 입력을 막는다.
 
-* Only use absolute positioning when necessary. Opt for responsive and well structured layouts that use flexbox and grid by default
-* Refactor code as you go to keep code clean
-* Keep file sizes small and put helper functions and components in their own files.
+## 접근성
 
---------------
+- 모든 입력에 접근 가능한 이름과 명확한 포커스 표시를 제공한다.
+- 정답·오답·경고를 색상만으로 전달하지 않는다.
+- 아이콘만 있는 버튼에는 텍스트 이름 또는 `aria-label`을 제공한다.
+- 애니메이션과 소리는 핵심 정보를 전달하는 유일한 수단으로 사용하지 않는다.
 
-# Design system guidelines
-Rules for how the AI should make generations look like your company's design system
+## 컴포넌트
 
-Additionally, if you select a design system to use in the prompt box, you can reference
-your design system's components, tokens, variables and components.
-For example:
-
-* Use a base font-size of 14px
-* Date formats should always be in the format “Jun 10”
-* The bottom toolbar should only ever have a maximum of 4 items
-* Never use the floating action button with the bottom toolbar
-* Chips should always come in sets of 3 or more
-* Don't use a dropdown if there are 2 or fewer options
-
-You can also create sub sections and add more specific details
-For example:
-
-
-## Button
-The Button component is a fundamental interactive element in our design system, designed to trigger actions or navigate
-users through the application. It provides visual feedback and clear affordances to enhance user experience.
-
-### Usage
-Buttons should be used for important actions that users need to take, such as form submissions, confirming choices,
-or initiating processes. They communicate interactivity and should have clear, action-oriented labels.
-
-### Variants
-* Primary Button
-  * Purpose : Used for the main action in a section or page
-  * Visual Style : Bold, filled with the primary brand color
-  * Usage : One primary button per section to guide users toward the most important action
-* Secondary Button
-  * Purpose : Used for alternative or supporting actions
-  * Visual Style : Outlined with the primary color, transparent background
-  * Usage : Can appear alongside a primary button for less important actions
-* Tertiary Button
-  * Purpose : Used for the least important actions
-  * Visual Style : Text-only with no border, using primary color
-  * Usage : For actions that should be available but not emphasized
--->
+- 한 영역의 주요 행동은 하나를 우선 강조한다.
+- 비활성 이유와 오류 복구 행동을 가까운 위치에 표시한다.
+- 새로운 의존성을 추가하기 전에 현재 활성 앱에서 실제로 필요한지 확인한다.
+- 현재 사용하지 않는 Figma 생성 컴포넌트는 제품 기능의 존재 근거로 보지 않는다.

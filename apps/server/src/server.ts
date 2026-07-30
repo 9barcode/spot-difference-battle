@@ -8,11 +8,16 @@ import {
 } from "@spot-battle/shared";
 import Fastify, { type FastifyInstance } from "fastify";
 import { randomUUID } from "node:crypto";
-import { readFile } from "node:fs/promises";
 import { Server, type Socket } from "socket.io";
+import {
+  defaultSceneOverride,
+  loadGameSceneOriginals,
+  type GameSceneImageOverrides,
+} from "./game-scenes.js";
 import { MatchRegistry } from "./match-registry.js";
 import { InMemoryMatchStore, type MatchStore } from "./match-store.js";
 import { validateProblemImageCoordinates } from "./problem-image-validation.js";
+import { validateSceneObjectEdits } from "./scene-validation.js";
 
 export interface GameServerOptions {
   webOrigin: string;
@@ -21,6 +26,8 @@ export interface GameServerOptions {
   matchStore?: MatchStore;
   /** 테스트에서 원본과 수정 이미지의 좌표 검증을 함께 실행하기 위한 원본 이미지 대역. */
   originalProblemImage?: Buffer;
+  /** 장면별 원본 이미지 대역. 지정하지 않은 장면은 서버 카탈로그의 번들 원본을 사용한다. */
+  originalProblemImages?: GameSceneImageOverrides;
 }
 
 interface SocketData {
@@ -46,9 +53,10 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
   const app = Fastify({ logger: false });
   await app.register(cors, { origin: options.webOrigin });
   const matchStore = options.matchStore ?? new InMemoryMatchStore();
-  const originalProblemImage =
-    options.originalProblemImage ??
-    await readFile(new URL("../../../UI/src/imports/image.png", import.meta.url));
+  const originalProblemImages = await loadGameSceneOriginals({
+    ...defaultSceneOverride(options.originalProblemImage),
+    ...options.originalProblemImages,
+  });
   app.get("/health", async () => {
     const database = await matchStore.health();
     return { status: database ? "ok" : "degraded", server: "ok", database };
@@ -355,6 +363,14 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
       try {
         const match = registry.getForPlayer(matchId, session.playerId);
         assertClientState(match, session.playerId, expectedState, expectedStateVersion, true);
+        validateSceneObjectEdits(match.imageId, differences);
+        const originalProblemImage = originalProblemImages.get(match.imageId);
+        if (!originalProblemImage) {
+          throw new GameRuleError(
+            "UNKNOWN_GAME_SCENE",
+            "경기 장면의 서버 원본을 찾을 수 없습니다.",
+          );
+        }
         try {
           validateProblemImageCoordinates(originalProblemImage, renderedImage, differences);
         } catch (error) {

@@ -6,10 +6,8 @@ import {
 } from "@spot-battle/shared";
 import { Check, MousePointer2, Shapes, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode, type SVGProps } from "react";
-import gameSceneImg from "@/imports/image.png";
+import type { GameSceneDefinition } from "./game-scenes";
 import {
-  SCENE_OBJECTS,
-  SCENE_OBJECTS_BY_ID,
   type SceneMaskPrimitive,
   type SceneObjectDefinition,
 } from "./scene-objects";
@@ -28,12 +26,12 @@ function sceneSize(image: HTMLImageElement) {
   return { width, height: Math.round((width * image.naturalHeight) / image.naturalWidth) };
 }
 
-function loadSceneImage(): Promise<HTMLImageElement> {
+function loadSceneImage(scene: GameSceneDefinition): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const image = new Image();
     image.onload = () => resolve(image);
     image.onerror = () => reject(new Error("원본 그림을 불러오지 못했습니다."));
-    image.src = gameSceneImg;
+    image.src = scene.imageSrc;
   });
 }
 
@@ -228,6 +226,7 @@ function drawObjectWithShapeTransform(
 function drawEffectLayer(
   image: HTMLImageElement,
   differences: Difference[],
+  scene: GameSceneDefinition,
 ): HTMLCanvasElement | null {
   const { width, height } = sceneSize(image);
   const canvas = document.createElement("canvas");
@@ -247,7 +246,7 @@ function drawEffectLayer(
   differences.forEach((difference) => {
     const edit = difference.objectEdit;
     if (!edit) return;
-    const object = SCENE_OBJECTS_BY_ID.get(edit.objectId);
+    const object = scene.objectsById.get(edit.objectId);
     if (!object) return;
 
     const maskCanvas = createObjectMask(object, width, height);
@@ -299,8 +298,11 @@ function drawEffectLayer(
 }
 
 /** 원본과 객체별 효과를 합쳐 문제 이미지를 만든다. */
-export async function renderProblemImage(differences: Difference[]): Promise<string> {
-  const image = await loadSceneImage();
+export async function renderProblemImage(
+  differences: Difference[],
+  scene: GameSceneDefinition,
+): Promise<string> {
+  const image = await loadSceneImage(scene);
   const { width, height } = sceneSize(image);
   const canvas = document.createElement("canvas");
   canvas.width = width;
@@ -309,21 +311,27 @@ export async function renderProblemImage(differences: Difference[]): Promise<str
   if (!context) throw new Error("문제 이미지를 만들 수 없습니다.");
 
   context.drawImage(image, 0, 0, width, height);
-  const layer = drawEffectLayer(image, differences);
+  const layer = drawEffectLayer(image, differences, scene);
   if (layer) context.drawImage(layer, 0, 0);
   return canvas.toDataURL("image/png");
 }
 
-export function DifferenceEffects({ differences }: { differences: Difference[] }) {
+export function DifferenceEffects({
+  differences,
+  scene,
+}: {
+  differences: Difference[];
+  scene: GameSceneDefinition;
+}) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const effectsKey = JSON.stringify(differences);
 
   useEffect(() => {
     let cancelled = false;
-    void loadSceneImage().then((image) => {
+    void loadSceneImage(scene).then((image) => {
       const canvas = canvasRef.current;
       if (cancelled || !canvas) return;
-      const layer = drawEffectLayer(image, differences);
+      const layer = drawEffectLayer(image, differences, scene);
       if (!layer) return;
       canvas.width = layer.width;
       canvas.height = layer.height;
@@ -335,7 +343,7 @@ export function DifferenceEffects({ differences }: { differences: Difference[] }
     return () => {
       cancelled = true;
     };
-  }, [effectsKey]);
+  }, [effectsKey, scene]);
 
   return <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 h-full w-full" />;
 }
@@ -350,19 +358,21 @@ function overlaps(candidate: Difference, existing: Difference[]): boolean {
   });
 }
 
-const AUTO_FILL_OBJECTS = ["clock", "ball", "cloud", "pillow", "vase", "picture", "cat"];
 const AUTO_FILL_COLORS = ["#ef2b2d", "#1775e5", "#18a83a", "#ffd400", "#6522a8"];
 const AUTO_FILL_SHAPES: ObjectShapeEffect[] = ["WIDE", "TALL", "STRIPES", "DOTS", "OUTLINE", "NONE"];
 
 /** 제한시간이 끝날 때 부족한 차이점을 서로 다른 고정 객체로 채운다. */
-export function buildAutoFilledDifferences(current: Difference[]): Difference[] {
+export function buildAutoFilledDifferences(
+  current: Difference[],
+  scene: GameSceneDefinition,
+): Difference[] {
   const filled = [...current];
   const used = new Set(filled.map((difference) => difference.objectEdit?.objectId).filter(Boolean));
 
-  for (const [index, objectId] of AUTO_FILL_OBJECTS.entries()) {
+  for (const [index, objectId] of scene.autoFillObjectIds.entries()) {
     if (filled.length >= GAME_CONFIG.differenceCount) break;
     if (used.has(objectId)) continue;
-    const object = SCENE_OBJECTS_BY_ID.get(objectId);
+    const object = scene.objectsById.get(objectId);
     if (!object) continue;
     const difference: Difference = {
       id: `auto-${object.id}-${filled.length}`,
@@ -456,16 +466,18 @@ const SHAPE_EFFECTS: Array<{ value: ObjectShapeEffect; label: string }> = [
 export function FreeformEditor({
   value,
   onChange,
+  scene,
   disabled = false,
 }: {
   value: Difference[];
   onChange: (next: Difference[]) => void;
+  scene: GameSceneDefinition;
   disabled?: boolean;
 }) {
   const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
   const [color, setColor] = useState("#ef2b2d");
   const [shapeEffect, setShapeEffect] = useState<ObjectShapeEffect>("NONE");
-  const selectedObject = selectedObjectId ? SCENE_OBJECTS_BY_ID.get(selectedObjectId) ?? null : null;
+  const selectedObject = selectedObjectId ? scene.objectsById.get(selectedObjectId) ?? null : null;
   const usedObjectIds = useMemo(
     () => new Set(value.map((difference) => difference.objectEdit?.objectId).filter(Boolean)),
     [value],
@@ -565,15 +577,15 @@ export function FreeformEditor({
       </div>
 
       <div className="relative overflow-hidden rounded-3xl border-4 border-white bg-white shadow-xl">
-        <img src={gameSceneImg} alt="따뜻한 거실과 귀여운 고양이" className="block h-auto w-full select-none" draggable={false} />
-        <DifferenceEffects differences={preview} />
+        <img src={scene.imageSrc} alt={scene.imageAlt} className="block h-auto w-full select-none" draggable={false} />
+        <DifferenceEffects differences={preview} scene={scene} />
         <svg
           data-testid="editor-board"
           viewBox={`0 0 ${SVG_WIDTH} ${SVG_HEIGHT}`}
           preserveAspectRatio="none"
           className={`absolute inset-0 h-full w-full touch-none ${disabled ? "cursor-not-allowed" : "cursor-pointer"}`}
         >
-          {SCENE_OBJECTS.flatMap((object) => {
+          {scene.objects.flatMap((object) => {
             const isCurrent = object.id === selectedObjectId;
             const isSaved = usedObjectIds.has(object.id);
             return object.masks.map((primitive, index) =>

@@ -1,4 +1,7 @@
-import type { GameSnapshot } from "@spot-battle/shared";
+import {
+  DEFAULT_GAME_SCENE_ID,
+  type GameSnapshot,
+} from "@spot-battle/shared";
 import { GameMatch } from "@spot-battle/game-core";
 import { describe, expect, it } from "vitest";
 import { InMemoryMatchStore } from "../src/match-store.js";
@@ -7,7 +10,7 @@ const snapshot: GameSnapshot = {
   matchId: "11111111-1111-4111-8111-111111111111",
   state: "FINISHED",
   stateVersion: 10,
-  imageId: "image-1",
+  imageId: DEFAULT_GAME_SCENE_ID,
   deadlineMs: null,
   players: [
     {
