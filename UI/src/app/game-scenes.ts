@@ -63,8 +63,9 @@ const cartoonLaboratory = createScene({
     "upper-plant",
   ],
   asset: {
-    licenseStatus: "UNVERIFIED",
-    source: "User-provided Nano Banana generation, 2026-07-26",
+    licenseStatus: "VERIFIED",
+    source:
+      "User-created Nano Banana generation; unrestricted project use authorized by the creator, 2026-07-31",
   },
 });
 

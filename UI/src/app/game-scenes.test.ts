@@ -14,6 +14,9 @@ describe("game scene catalog", () => {
   it("registers every shared scene id", () => {
     expect([...GAME_SCENES.keys()]).toEqual([...GAME_SCENE_IDS]);
     expect(GAME_SCENES.get("cartoon-laboratory")?.objects).toHaveLength(18);
+    expect(GAME_SCENES.get("cartoon-laboratory")?.asset.licenseStatus).toBe(
+      "VERIFIED",
+    );
   });
 
   it("registers unique objects and valid auto-fill candidates", () => {

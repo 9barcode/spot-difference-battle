@@ -79,7 +79,7 @@
 
 ## 6. 콘텐츠 방향
 
-현재 `prototype-room`과 `cartoon-laboratory` 후보 장면 두 개가 등록돼 있으며 둘 다 라이선스 상태는 `UNVERIFIED`다. 다중 장면 카탈로그와 무작위 선택은 동작하지만 출시 콘텐츠가 준비된 상태는 아니다. 출시 콘텐츠 기준과 등록 절차는 `GAME_ASSETS.md`를 따른다.
+현재 `prototype-room`과 `cartoon-laboratory` 후보 장면 두 개가 등록돼 있다. 연구실은 제작자 사용 허가가 확인돼 `VERIFIED`이며, 거실은 `UNVERIFIED`다. 다중 장면 카탈로그와 무작위 선택은 동작하지만 연구실의 출시 해상도·최적화와 추가 검증 장면 확보가 남아 있다. 출시 콘텐츠 기준과 등록 절차는 `GAME_ASSETS.md`를 따른다.
 
 ## 7. 성공 지표
 
