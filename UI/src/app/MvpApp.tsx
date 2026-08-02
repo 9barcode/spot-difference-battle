@@ -502,7 +502,7 @@ export default function MvpApp() {
       {game.snapshot.state === "FINISHED" && (
         <section data-testid="finished-screen" className="mx-auto max-w-2xl rounded-3xl bg-white p-10 text-center shadow-xl">
           <div className="text-7xl">{game.snapshot.winnerId === game.match.playerId ? "🏆" : game.snapshot.winnerId ? "😿" : "🤝"}</div>
-          <h2 className="mt-4 text-3xl font-black">{game.snapshot.winnerId === game.match.playerId ? "승리했습니다!" : game.snapshot.winnerId ? "아쉽게 패배했습니다" : "무승부입니다"}</h2>
+          <h2 className="mt-4 text-3xl font-black">{game.snapshot.winnerId === game.match.playerId ? "승리했습니다!" : game.snapshot.winnerId ? "아쉽게 패배했습니다" : "결과를 확정할 수 없습니다"}</h2>
           {game.snapshot.endReason === "FORFEIT" && <p className="mt-2 font-bold text-amber-600">{game.snapshot.winnerId === game.match.playerId ? "상대가 경기를 이탈했습니다." : "경기 이탈로 기권 처리되었습니다."}</p>}
           <div className="mt-6 rounded-2xl bg-violet-50 p-5">
             <p className="text-sm text-slate-500">{isFinder ? "내 찾기 결과" : "상대의 찾기 결과"}</p>

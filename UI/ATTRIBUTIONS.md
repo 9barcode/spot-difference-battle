@@ -3,10 +3,6 @@
 > 문서 상태: CURRENT
 > 이 파일은 확인된 출처와 확인이 필요한 자산을 구분한다.
 
-## UI components
-
-Figma Make 원본에는 [shadcn/ui](https://ui.shadcn.com/) 기반 컴포넌트가 포함되어 있으며 shadcn/ui는 MIT 라이선스를 사용한다. 저장소에는 Figma에서 생성된 다수의 UI 의존성과 비활성 참고 시안이 남아 있다.
-
 ## Game scene
 
 ### 따뜻한 거실
