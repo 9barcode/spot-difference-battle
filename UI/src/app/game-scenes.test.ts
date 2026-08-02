@@ -17,14 +17,23 @@ describe("game scene catalog", () => {
     expect(GAME_SCENES.get("cartoon-laboratory")?.asset.licenseStatus).toBe(
       "VERIFIED",
     );
+    for (const sceneId of [
+      "cozy-cafe",
+      "enchanted-forest",
+      "cyber-city",
+      "underwater-treasure",
+    ] as const) {
+      expect(GAME_SCENES.get(sceneId)?.objects).toHaveLength(15);
+      expect(GAME_SCENES.get(sceneId)?.asset.licenseStatus).toBe("VERIFIED");
+    }
   });
 
   it("registers unique objects and valid auto-fill candidates", () => {
     for (const scene of GAME_SCENES.values()) {
       expect(scene.objectsById.size).toBe(scene.objects.length);
-      expect([...scene.objectsById.keys()]).toEqual([
-        ...GAME_SCENE_OBJECT_IDS[scene.id],
-      ]);
+      expect(new Set(scene.objectsById.keys())).toEqual(
+        new Set(GAME_SCENE_OBJECT_IDS[scene.id]),
+      );
       for (const objectId of scene.autoFillObjectIds) {
         expect(scene.objectsById.has(objectId)).toBe(true);
       }

@@ -3,10 +3,6 @@
 > 문서 상태: CURRENT
 > 이 파일은 확인된 출처와 확인이 필요한 자산을 구분한다.
 
-## UI components
-
-Figma Make 원본에는 [shadcn/ui](https://ui.shadcn.com/) 기반 컴포넌트가 포함되어 있으며 shadcn/ui는 MIT 라이선스를 사용한다. 저장소에는 Figma에서 생성된 다수의 UI 의존성과 비활성 참고 시안이 남아 있다.
-
 ## Game scene
 
 ### 따뜻한 거실
@@ -24,19 +20,41 @@ Figma Make 원본에는 [shadcn/ui](https://ui.shadcn.com/) 기반 컴포넌트�
 
 ### 카툰 연구실
 
-현재 `src/imports/laboratory.png`의 기록:
+제작 원본과 출시 파생본의 기록:
 
 - 표시 이름: 카툰 연구실
 - 장면 ID: `cartoon-laboratory`
 - 제공 경로: 사용자가 대화에서 직접 제공
 - 기록된 생성 도구: Nano Banana
 - 생성본 파일 시각: 2026-07-26
-- SHA-256: `B5641C7939B66EFCB371973AAB022234E35C653F066310183DB1F4BF92FFE64F`
+- 제작 원본: `src/imports/laboratory.png`, 1024×572, SHA-256 `B5641C7939B66EFCB371973AAB022234E35C653F066310183DB1F4BF92FFE64F`
+- 서버 정본: `src/imports/laboratory-1920.png`, 1920×1080, SHA-256 `D18F92128DAA715D88EA7B260C73C9FF61A389EC458533810B07E92DB0989582`
+- 웹 전송본: `src/imports/laboratory-1920.webp`, 무손실, SHA-256 `54760B57CBF99315AD38FAC0E4C96FF2BB8C3F08DA5E5FF2FF940F55A6349B5A`
+- 대체 전송본: `src/imports/laboratory-1920.avif`, 무손실, SHA-256 `23343A363B98BF0FB608236C773FE48FE2BB2DDDECE73372EC33BB0091706DF6`
+- 변환 방식: 2026-08-02에 원본 상·하단 가장자리 픽셀을 각각 2픽셀 확장한 뒤 Lanczos3로 1920×1080 확대
+- 검증: PNG·WebP·AVIF 디코딩 RGBA 픽셀이 완전히 동일함
 - 권리 확인: 제공자가 직접 제작한 원본이며 프로젝트에서 제한 없이 사용할 수 있다고 2026-07-31 대화에서 확인
 - 허용 범위: 상업적 사용, 수정, 복제, 배포와 서비스 포함
 - 라이선스 상태: `VERIFIED` — 제작자 진술에 근거한 프로젝트 사용 허가
 - 사용 범위: 개발, 테스트와 출시
 
-라이선스 확인과 별개로 현재 원본은 1024×572로 정확한 16:9가 아니다. 출시 품질을 위해 1920×1080 정본과 서비스용 최적화 파일을 준비한 뒤 마스크를 다시 검수한다.
+웹은 무손실 WebP를 사용하고 서버 좌표 검증은 동일 픽셀의 PNG 정본을 사용한다. AVIF는 대체 전송본으로 보관한다. 기존 1024×572 마스크 좌표는 상하 2픽셀 확장을 반영해 런타임에서 변환한다.
+### 사용자 제작 정사각형 장면 4종
 
+2026-08-02 사용자가 직접 만든 이미지로 제공하고 이 프로젝트에 적용하도록 요청했다.
+
+| 장면 ID | 서버 PNG SHA-256 | 무손실 WebP SHA-256 |
+|---|---|---|
+| `cozy-cafe` | `5D656524DB7A8E5521DC8DC7DF699075E6EF5539C50FFDE7A710384A6B6B23C0` | `C904369E8821D8BB6B2916351A5CAC54537C5105F47169393563066330D0091B` |
+| `enchanted-forest` | `1166874F924BF9181E9C5F0F17DA351DDD68B8F7C8DCBCB8BD77CDAF6BE39874` | `46C668958D586FD744912C1316891ABB4E100EE87C26BA41A4773D5B86FF4E87` |
+| `cyber-city` | `3FAF8CC8C43C8C3E975611CCF6558E4C81C7C306C787A5D498B9AA40DC3934D3` | `93F768F6EE60D03A17A57ED70AE02C9B1862826C176250D314DB7350682EC61F` |
+| `underwater-treasure` | `57214B9FE65D3E48AE6702471FBEE464D1C1373F9D9505D6EEF36BC10F5D1950` | `24D62A553C7565061F6B0304114EFDF6D5CF9FAD4948526F5F3ACEA2BC6E3828` |
+
+- 모든 PNG와 WebP는 1024×1024이며 디코딩 RGBA 픽셀이 완전히 동일하다.
+- 숲 수정 기준본: `enchanted-forest-modified-reference.png`, SHA-256 `424FD26B3AC1EAC1B31875B38AA65172174D7823BE549A9F8B84C6347E3B49BC`
+- 바다 수정 기준본: `underwater-treasure-modified-reference.png`, SHA-256 `5DCDD5F5AD9BFFC06914E70846AB086CF2FB0ADC781AF956D92992DACFBF76DF`
+- 카페 modified/original: 동일 SHA-256 `5D656524DB7A8E5521DC8DC7DF699075E6EF5539C50FFDE7A710384A6B6B23C0`
+- 도시 modified/original: 동일 SHA-256 `3FAF8CC8C43C8C3E975611CCF6558E4C81C7C306C787A5D498B9AA40DC3934D3`
+- 라이선스 상태: `VERIFIED` — 제작자 진술과 프로젝트 적용 요청에 근거한 사용 허가
+- 사용 범위: 개발·테스트·출시. 단, 현재 정사각형 파일은 별도의 출시 해상도·비율 검수를 통과해야 한다.
 새 장면의 기록 요건은 `docs/GAME_ASSETS.md`를 따른다.

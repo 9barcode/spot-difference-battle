@@ -68,22 +68,29 @@ async function enterEditingMatch(
 }
 
 async function saveObjectEdit(page: Page, objectId: string, effectLabel: string): Promise<void> {
-  await page.getByTestId(`scene-object-${objectId}`).click();
+  const object = page.getByTestId(`scene-object-${objectId}`);
+  await object.focus();
+  await object.press("Enter");
   await page.getByRole("button", { name: effectLabel }).click();
   await page.getByRole("button", { name: "차이점 저장" }).click();
 }
 
-async function saveSceneSpecificEdits(page: Page): Promise<void> {
-  if (await page.getByTestId("scene-object-cat").isVisible()) {
-    await saveObjectEdit(page, "cat", "줄무늬");
-    await saveObjectEdit(page, "ball", "점무늬");
-    await saveObjectEdit(page, "clock", "윤곽 변경");
-    return;
-  }
+const sceneEdits: Record<string, Array<[string, string]>> = {
+  "prototype-room": [["cat", "줄무늬"], ["ball", "점무늬"], ["clock", "윤곽 변경"]],
+  "cartoon-laboratory": [["lab-clock", "윤곽 변경"], ["test-tubes", "점무늬"], ["toolbox", "가로로 넓게"]],
+  "cozy-cafe": [["cafe-clock", "윤곽 변경"], ["cafe-cake", "점무늬"], ["cafe-roses", "가로로 넓게"]],
+  "enchanted-forest": [["forest-sun", "윤곽 변경"], ["forest-scarf", "점무늬"], ["forest-bridge", "가로로 넓게"]],
+  "cyber-city": [["city-dragon-sign", "윤곽 변경"], ["city-large-umbrella", "점무늬"], ["city-bollard", "세로로 길게"]],
+  "underwater-treasure": [["underwater-jellyfish", "윤곽 변경"], ["underwater-chest", "점무늬"], ["underwater-starfish", "가로로 넓게"]],
+};
 
-  await saveObjectEdit(page, "lab-clock", "윤곽 변경");
-  await saveObjectEdit(page, "test-tubes", "점무늬");
-  await saveObjectEdit(page, "toolbox", "가로로 넓게");
+async function saveSceneSpecificEdits(page: Page): Promise<void> {
+  const sceneId = process.env.GAME_SCENE_ID ?? "cartoon-laboratory";
+  const edits = sceneEdits[sceneId];
+  if (!edits) throw new Error(`No E2E edits registered for ${sceneId}`);
+  for (const [objectId, effectLabel] of edits) {
+    await saveObjectEdit(page, objectId, effectLabel);
+  }
 }
 
 test("two independent players match and receive opposite forfeit results", async ({ browser }) => {
@@ -128,6 +135,11 @@ test("finder cannot see the editor until the creator finishes, and objects are s
     await expect(finder.getByRole("img", { name: /게임 원본 그림|상대가 수정한 그림/ })).toHaveCount(0);
 
     await saveSceneSpecificEdits(creator);
+
+    const qaScreenshotPath = process.env.SCENE_QA_SCREENSHOT_PATH;
+    if (qaScreenshotPath) {
+      await creator.getByTestId("editing-screen").screenshot({ path: qaScreenshotPath });
+    }
 
     const submitProblem = creator.getByTestId("submit-problem");
     await expect(submitProblem).toContainText("완료 3/3");

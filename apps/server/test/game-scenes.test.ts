@@ -17,5 +17,22 @@ describe("server game scene originals", () => {
 
     expect([...originals.keys()]).toEqual([...GAME_SCENE_IDS]);
     expect(originals.get(DEFAULT_GAME_SCENE_ID)).toEqual(fixture);
+
+    const laboratory = originals.get("cartoon-laboratory");
+    expect(laboratory?.subarray(1, 4).toString("ascii")).toBe("PNG");
+    expect(laboratory?.readUInt32BE(16)).toBe(1920);
+    expect(laboratory?.readUInt32BE(20)).toBe(1080);
+
+    for (const sceneId of [
+      "cozy-cafe",
+      "enchanted-forest",
+      "cyber-city",
+      "underwater-treasure",
+    ] as const) {
+      const image = originals.get(sceneId);
+      expect(image?.subarray(1, 4).toString("ascii")).toBe("PNG");
+      expect(image?.readUInt32BE(16)).toBe(1024);
+      expect(image?.readUInt32BE(20)).toBe(1024);
+    }
   });
 });

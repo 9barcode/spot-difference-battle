@@ -392,7 +392,10 @@ export function buildAutoFilledDifferences(
   return filled;
 }
 
-type ScenePrimitiveSvgProps = SVGProps<SVGElement> & { "data-testid"?: string };
+type ScenePrimitiveSvgProps = SVGProps<SVGElement> & {
+  "data-testid"?: string;
+  "data-object-id"?: string;
+};
 
 function renderSvgPrimitive(
   primitive: SceneMaskPrimitive,
@@ -603,6 +606,7 @@ export function FreeformEditor({
                 r={Math.max(object.region.radius * SVG_WIDTH, 55)}
                 fill="rgba(255,255,255,.001)"
                 data-testid={`scene-object-hit-${object.id}`}
+                data-object-id={object.id}
                 aria-hidden="true"
                 onPointerDown={(event) => {
                   event.stopPropagation();
@@ -616,6 +620,7 @@ export function FreeformEditor({
                   strokeWidth: isCurrent || isSaved ? 4 : 0,
                   vectorEffect: "non-scaling-stroke",
                   "data-testid": index === 0 ? `scene-object-${object.id}` : undefined,
+                  "data-object-id": object.id,
                   "aria-label": index === 0 ? `${object.label} 선택` : undefined,
                   role: index === 0 ? "button" : undefined,
                   tabIndex: index === 0 ? 0 : undefined,
