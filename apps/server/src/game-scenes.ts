@@ -11,10 +11,25 @@ const SERVER_GAME_SCENE_ORIGINALS = {
     import.meta.url,
   ),
   "cartoon-laboratory": new URL(
-    "../../../UI/src/imports/laboratory.png",
+    "../../../UI/src/imports/laboratory-1920.png",
     import.meta.url,
   ),
-} as const satisfies Record<GameSceneId, URL>;
+  "cozy-cafe": new URL(
+    "../../../UI/src/imports/cozy-cafe.png",
+    import.meta.url,
+  ),
+  "enchanted-forest": new URL(
+    "../../../UI/src/imports/enchanted-forest.png",
+    import.meta.url,
+  ),
+  "cyber-city": new URL(
+    "../../../UI/src/imports/cyber-city.png",
+    import.meta.url,
+  ),
+  "underwater-treasure": new URL(
+    "../../../UI/src/imports/underwater-treasure.png",
+    import.meta.url,
+  ),} as const satisfies Record<GameSceneId, URL>;
 
 export type GameSceneImageOverrides = Partial<Record<GameSceneId, Buffer>>;
 

@@ -13,7 +13,14 @@ export const GAME_CONFIG = {
  * 서버와 웹이 공통으로 아는 장면 식별자다.
  * 실제 이미지와 객체 마스크는 웹의 장면 카탈로그에서 관리한다.
  */
-export const GAME_SCENE_IDS = ["prototype-room", "cartoon-laboratory"] as const;
+export const GAME_SCENE_IDS = [
+  "prototype-room",
+  "cartoon-laboratory",
+  "cozy-cafe",
+  "enchanted-forest",
+  "cyber-city",
+  "underwater-treasure",
+] as const;
 export type GameSceneId = (typeof GAME_SCENE_IDS)[number];
 export const DEFAULT_GAME_SCENE_ID: GameSceneId = GAME_SCENE_IDS[0];
 
@@ -59,6 +66,35 @@ export const GAME_SCENE_OBJECT_IDS = {
     "goggles",
     "toolbox",
     "bottles",
+  ],
+  "cozy-cafe": [
+    "cafe-left-pendant", "cafe-center-pendant", "cafe-small-pendant",
+    "cafe-clock", "cafe-wall-books", "cafe-counter-plant", "cafe-cake",
+    "cafe-macarons", "cafe-croissants", "cafe-covered-pastries",
+    "cafe-display-case", "cafe-cat", "cafe-roses", "cafe-window-vines",
+    "cafe-coffee-cup",
+  ],
+  "enchanted-forest": [
+    "forest-main-house", "forest-chimney", "forest-sun", "forest-rabbit",
+    "forest-scarf", "forest-bird", "forest-bench", "forest-bridge",
+    "forest-stream", "forest-left-glow-mushrooms",
+    "forest-right-glow-mushrooms", "forest-right-house", "forest-tree-door",
+    "forest-red-mushroom", "forest-flowers",
+  ],
+  "cyber-city": [
+    "city-dragon-sign", "city-cyber-ramen-sign", "city-left-pink-sign",
+    "city-ramen-sign", "city-tech-sign", "city-headphone-person",
+    "city-food-stall", "city-chef", "city-large-umbrella",
+    "city-cyan-coat-person", "city-right-man", "city-bollard",
+    "city-road-reflection", "city-tower-screen", "city-overhead-cables",
+  ],
+  "underwater-treasure": [
+    "underwater-turtle", "underwater-jellyfish", "underwater-chest",
+    "underwater-starfish", "underwater-left-blue-fish",
+    "underwater-yellow-school", "underwater-striped-fish",
+    "underwater-clownfish", "underwater-left-coral", "underwater-right-coral",
+    "underwater-shell", "underwater-rocks", "underwater-bubbles",
+    "underwater-left-seaweed", "underwater-right-seaweed",
   ],
 } as const satisfies Record<GameSceneId, readonly string[]>;
 

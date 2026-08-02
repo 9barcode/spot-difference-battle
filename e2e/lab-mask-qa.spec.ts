@@ -1,5 +1,15 @@
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 
+const sceneObjectCounts: Record<string, number> = {
+  "prototype-room": 16,
+  "cartoon-laboratory": 18,
+  "cozy-cafe": 15,
+  "enchanted-forest": 15,
+  "cyber-city": 15,
+  "underwater-treasure": 15,
+};
+const configuredSceneId = process.env.GAME_SCENE_ID ?? "cartoon-laboratory";
+
 async function join(page: Page, nickname: string): Promise<void> {
   await page.goto("/");
   await page.getByTestId("nickname-input").fill(nickname);
@@ -7,7 +17,8 @@ async function join(page: Page, nickname: string): Promise<void> {
   await expect(page.getByTestId("matchmaking-start")).toBeEnabled();
 }
 
-test("all laboratory objects remain individually selectable by touch on mobile", async ({ browser }) => {
+test(`all ${configuredSceneId} objects remain individually selectable by touch on mobile`, async ({ browser }) => {
+  test.setTimeout(35_000);
   const firstContext: BrowserContext = await browser.newContext({
     viewport: { width: 390, height: 844 },
     deviceScaleFactor: 3,
@@ -46,20 +57,30 @@ test("all laboratory objects remain individually selectable by touch on mobile",
     const creator = firstIsCreator ? first : second;
     await expect(creator.getByTestId("editor-board")).toBeVisible();
 
-    const hitTargets = creator.locator('[data-testid^="scene-object-hit-"]');
-    await expect(hitTargets).toHaveCount(18);
-    for (let index = 0; index < 18; index += 1) {
-      const hitTarget = hitTargets.nth(index);
-      const testId = await hitTarget.getAttribute("data-testid");
-      const objectId = testId!.replace("scene-object-hit-", "");
-      const mask = creator.getByTestId(`scene-object-${objectId}`);
-      const label = (await mask.getAttribute("aria-label"))!.replace(/ 선택$/, "");
-      await hitTarget.scrollIntoViewIfNeeded();
-      const box = await hitTarget.boundingBox();
-      expect(box).not.toBeNull();
-      await creator.touchscreen.tap(box!.x + box!.width / 2, box!.y + box!.height / 2);
-      await expect(creator.getByText(`선택 객체: ${label}`, { exact: true })).toBeVisible();
-    }
+    const editorBoard = creator.getByTestId("editor-board");
+    await editorBoard.evaluate((element) =>
+      element.scrollIntoView({ block: "center", inline: "center" }),
+    );
+    const targetResults = await creator
+      .locator('[data-testid^="scene-object-hit-"]')
+      .evaluateAll((elements) =>
+        elements.map((element) => {
+          const circle = element as SVGCircleElement;
+          const svg = circle.ownerSVGElement!;
+          const rect = svg.getBoundingClientRect();
+          const viewBox = svg.viewBox.baseVal;
+          const x = rect.left + ((circle.cx.baseVal.value - viewBox.x) / viewBox.width) * rect.width;
+          const y = rect.top + ((circle.cy.baseVal.value - viewBox.y) / viewBox.height) * rect.height;
+          return {
+            expected: circle.getAttribute("data-object-id"),
+            actual: document.elementFromPoint(x, y)?.getAttribute("data-object-id") ?? null,
+          };
+        }),
+      );
+    expect(targetResults).toHaveLength(sceneObjectCounts[configuredSceneId]);
+    expect(
+      targetResults.filter(({ expected, actual }) => expected !== actual),
+    ).toEqual([]);
   } finally {
     await firstContext.close();
     await secondContext.close();

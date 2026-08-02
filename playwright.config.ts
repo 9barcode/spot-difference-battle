@@ -2,6 +2,7 @@ import { defineConfig } from "@playwright/test";
 
 const webPort = 4173;
 const serverPort = 3101;
+const gameSceneId = process.env.GAME_SCENE_ID ?? "cartoon-laboratory";
 
 export default defineConfig({
   testDir: "./e2e",
@@ -30,7 +31,7 @@ export default defineConfig({
         HOST: "127.0.0.1",
         PORT: String(serverPort),
         WEB_ORIGIN: `http://127.0.0.1:${webPort}`,
-        GAME_SCENE_ID: "cartoon-laboratory",
+        GAME_SCENE_ID: gameSceneId,
       },
     },
     {

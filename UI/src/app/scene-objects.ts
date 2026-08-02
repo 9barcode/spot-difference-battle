@@ -12,6 +12,8 @@ export interface SceneObjectDefinition {
   masks: SceneMaskPrimitive[];
   /** 큰 객체 안에 포함된 별도 객체를 색칠 범위에서 제외한다. */
   excludeMasks?: SceneMaskPrimitive[];
+  /** 겹친 객체의 선택 순서. 값이 클수록 SVG에서 위에 렌더된다. */
+  hitPriority?: number;
 }
 
 /**
