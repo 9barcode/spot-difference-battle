@@ -30,7 +30,7 @@
 - 운영 로그·지표·모니터링
 - 스테이징 배포와 복구 검증
 
-현재 장면 카탈로그에는 라이선스가 확인되지 않은 `prototype-room` 한 개만 있습니다.
+현재 장면 카탈로그에는 라이선스가 확인된 `cartoon-laboratory`와 라이선스가 확인되지 않은 `prototype-room` 후보가 있습니다. 연구실 장면은 출시 전에 정확한 16:9 정본과 서비스용 최적화 파일이 필요합니다.
 
 ## 프로젝트 구성
 
@@ -133,3 +133,10 @@ pnpm --filter @spot-battle/server test
 ```
 
 환경변수 전체 목록은 `.env.example`을 참고합니다.
+
+내부 테스트에서 특정 장면으로 고정하려면 서버 실행 전에 `GAME_SCENE_ID`를 설정합니다. 비우면 등록 장면 중 하나를 무작위로 선택합니다.
+
+```powershell
+$env:GAME_SCENE_ID="cartoon-laboratory"
+pnpm dev
+```

@@ -1,11 +1,12 @@
-import type {
-  ClientToServerEvents,
-  Difference,
-  GameSnapshot,
-  GameErrorPayload,
-  MatchFoundPayload,
-  SessionReadyPayload,
-  ServerToClientEvents,
+import {
+  DEFAULT_GAME_SCENE_ID,
+  type ClientToServerEvents,
+  type Difference,
+  type GameSnapshot,
+  type GameErrorPayload,
+  type MatchFoundPayload,
+  type SessionReadyPayload,
+  type ServerToClientEvents,
 } from "@spot-battle/shared";
 import type { AddressInfo } from "node:net";
 import { io as createClient, type Socket } from "socket.io-client";
@@ -106,6 +107,7 @@ describe("game server", () => {
       matchStore,
       inputCooldownMs: 0,
       originalProblemImage: problemImageFixture.originalImage,
+      sceneId: DEFAULT_GAME_SCENE_ID,
     });
     await app.listen({ host: "127.0.0.1", port: 0 });
 

@@ -10,6 +10,10 @@ const SERVER_GAME_SCENE_ORIGINALS = {
     "../../../UI/src/imports/image.png",
     import.meta.url,
   ),
+  "cartoon-laboratory": new URL(
+    "../../../UI/src/imports/laboratory.png",
+    import.meta.url,
+  ),
 } as const satisfies Record<GameSceneId, URL>;
 
 export type GameSceneImageOverrides = Partial<Record<GameSceneId, Buffer>>;

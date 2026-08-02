@@ -36,6 +36,16 @@ describe("validateSceneObjectEdits", () => {
     ).not.toThrow();
   });
 
+  it("accepts registered laboratory objects", () => {
+    expect(() =>
+      validateSceneObjectEdits("cartoon-laboratory", [
+        difference("1", "lab-clock", "OUTLINE"),
+        difference("2", "test-tubes", "DOTS"),
+        difference("3", "toolbox", "WIDE"),
+      ]),
+    ).not.toThrow();
+  });
+
   it("rejects missing, unknown, duplicate, and unsupported object edits", () => {
     const missing = difference("1", "plant");
     delete missing.objectEdit;

@@ -4,6 +4,7 @@ import {
   GAME_CONFIG,
   PROBLEM_IMAGE_LIMITS,
   type ClientToServerEvents,
+  type GameSceneId,
   type ServerToClientEvents,
 } from "@spot-battle/shared";
 import Fastify, { type FastifyInstance } from "fastify";
@@ -28,6 +29,8 @@ export interface GameServerOptions {
   originalProblemImage?: Buffer;
   /** 장면별 원본 이미지 대역. 지정하지 않은 장면은 서버 카탈로그의 번들 원본을 사용한다. */
   originalProblemImages?: GameSceneImageOverrides;
+  /** 통합 테스트 등에서 특정 장면으로 매칭을 고정한다. */
+  sceneId?: GameSceneId;
 }
 
 interface SocketData {
@@ -72,7 +75,7 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
     // 제작자가 렌더한 문제 이미지가 오간다. 게임 코어가 다시 한 번 용량을 검증한다.
     maxHttpBufferSize: PROBLEM_IMAGE_LIMITS.maxBytes + 256 * 1024,
   });
-  const registry = new MatchRegistry();
+  const registry = new MatchRegistry(options.sceneId ? [options.sceneId] : undefined);
   const sessionsByToken = new Map<string, GuestSession>();
   const sessionsByPlayer = new Map<string, GuestSession>();
   const reconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();

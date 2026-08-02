@@ -73,6 +73,19 @@ async function saveObjectEdit(page: Page, objectId: string, effectLabel: string)
   await page.getByRole("button", { name: "차이점 저장" }).click();
 }
 
+async function saveSceneSpecificEdits(page: Page): Promise<void> {
+  if (await page.getByTestId("scene-object-cat").isVisible()) {
+    await saveObjectEdit(page, "cat", "줄무늬");
+    await saveObjectEdit(page, "ball", "점무늬");
+    await saveObjectEdit(page, "clock", "윤곽 변경");
+    return;
+  }
+
+  await saveObjectEdit(page, "lab-clock", "윤곽 변경");
+  await saveObjectEdit(page, "test-tubes", "점무늬");
+  await saveObjectEdit(page, "toolbox", "가로로 넓게");
+}
+
 test("two independent players match and receive opposite forfeit results", async ({ browser }) => {
   const { firstContext, secondContext, creator, finder } = await enterEditingMatch(
     browser,
@@ -114,9 +127,7 @@ test("finder cannot see the editor until the creator finishes, and objects are s
     await expect(finder.getByTestId("editing-screen")).toContainText("수정 완료 대기 중");
     await expect(finder.getByRole("img", { name: /게임 원본 그림|상대가 수정한 그림/ })).toHaveCount(0);
 
-    await saveObjectEdit(creator, "cat", "줄무늬");
-    await saveObjectEdit(creator, "ball", "점무늬");
-    await saveObjectEdit(creator, "clock", "윤곽 변경");
+    await saveSceneSpecificEdits(creator);
 
     const submitProblem = creator.getByTestId("submit-problem");
     await expect(submitProblem).toContainText("완료 3/3");

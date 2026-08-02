@@ -30,6 +30,7 @@ export default defineConfig({
         HOST: "127.0.0.1",
         PORT: String(serverPort),
         WEB_ORIGIN: `http://127.0.0.1:${webPort}`,
+        GAME_SCENE_ID: "cartoon-laboratory",
       },
     },
     {
