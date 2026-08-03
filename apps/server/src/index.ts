@@ -7,7 +7,11 @@ import {
 
 const host = process.env.HOST ?? "0.0.0.0";
 const port = Number.parseInt(process.env.PORT ?? "3001", 10);
-const webOrigin = process.env.WEB_ORIGIN ?? "http://localhost:5173";
+const webOrigin =
+  process.env.WEB_ORIGIN?.trim() ||
+  (process.env.NODE_ENV === "production" ? undefined : "http://localhost:5173");
+const staticRoot = process.env.WEB_ROOT?.trim() || undefined;
+const gameAssetRoot = process.env.GAME_ASSET_ROOT?.trim() || undefined;
 const configuredSceneId = process.env.GAME_SCENE_ID?.trim();
 if (
   configuredSceneId &&
@@ -21,7 +25,13 @@ const sceneId = configuredSceneId as GameSceneId | undefined;
 const matchStore = process.env.DATABASE_URL
   ? new PostgresMatchStore(process.env.DATABASE_URL)
   : new InMemoryMatchStore();
-const app = await createGameServer({ webOrigin, matchStore, sceneId });
+const app = await createGameServer({
+  webOrigin,
+  staticRoot,
+  gameAssetRoot,
+  matchStore,
+  sceneId,
+});
 
 try {
   await app.listen({ host, port });

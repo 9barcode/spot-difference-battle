@@ -28,7 +28,7 @@
 - 라이선스가 확인된 장면 10개
 - 완료 문제와 정답의 신고 감사용 보관
 - 운영 로그·지표·모니터링
-- 스테이징 배포와 복구 검증
+- 실제 스테이징 생성 후 모바일 접속과 롤백 검증
 
 현재 장면 카탈로그에는 6개 장면이 있습니다. `cartoon-laboratory`와 사용자 제작 정사각형 장면 4개는 라이선스가 확인됐고, `prototype-room`은 확인되지 않았습니다. 연구실은 1920×1080 출시 조건을 충족하며, 새 카페·숲·도시·바다 장면은 1024×1024 플레이 검증용이므로 출시 전 16:9 정본과 최종 마스크 육안 검수가 필요합니다.
 
@@ -57,6 +57,7 @@
 - [구현 백로그](docs/IMPLEMENTATION_BACKLOG.md)
 - [UI 현황 점검](docs/UI_AUDIT.md)
 - [게임 장면 에셋 가이드](docs/GAME_ASSETS.md)
+- [스테이징 배포 가이드](docs/DEPLOYMENT.md)
 
 게임 규칙의 유일한 Markdown 정본은 `GAME_RULES.md`입니다. `MVP_DECISIONS.md`는 결정 근거, `GAME_STATE.md`는 상태 매핑이며 별도 규칙집이 아닙니다. 실제 판정 수치는 정본을 구현한 공유 `GAME_CONFIG`가 사용합니다. 날짜별 `CHANGES_*.md`와 과거 릴리스는 역사 기록입니다.
 
@@ -133,6 +134,10 @@ pnpm --filter @spot-battle/server test
 ```
 
 환경변수 전체 목록은 `.env.example`을 참고합니다.
+
+## 스테이징 배포
+
+프로덕션 빌드는 React 웹과 Fastify·Socket.IO 서버를 같은 도메인의 단일 컨테이너로 제공합니다. 루트의 `Dockerfile`과 `render.yaml`로 무료 Render 테스트 환경을 만들 수 있으며, 생성 절차와 무료 환경 제한·롤백 방법은 [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)를 참고합니다.
 
 내부 테스트에서 특정 장면으로 고정하려면 서버 실행 전에 `GAME_SCENE_ID`를 설정합니다. 비우면 등록 장면 중 하나를 무작위로 선택합니다.
 

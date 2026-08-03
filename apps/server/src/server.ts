@@ -1,4 +1,5 @@
 import cors from "@fastify/cors";
+import fastifyStatic from "@fastify/static";
 import { GameMatch, GameRuleError } from "@spot-battle/game-core";
 import {
   GAME_CONFIG,
@@ -21,7 +22,11 @@ import { validateProblemImageCoordinates } from "./problem-image-validation.js";
 import { validateSceneObjectEdits } from "./scene-validation.js";
 
 export interface GameServerOptions {
-  webOrigin: string;
+  webOrigin?: string;
+  /** Built web client directory to serve from the same origin in production. */
+  staticRoot?: string;
+  /** Directory containing server-side original PNG files for submission validation. */
+  gameAssetRoot?: string;
   reconnectGraceMs?: number;
   inputCooldownMs?: number;
   matchStore?: MatchStore;
@@ -54,12 +59,23 @@ type GameSocket = Socket<
 
 export async function createGameServer(options: GameServerOptions): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
-  await app.register(cors, { origin: options.webOrigin });
+  if (options.webOrigin) {
+    await app.register(cors, { origin: options.webOrigin });
+  }
+  if (options.staticRoot) {
+    await app.register(fastifyStatic, {
+      root: options.staticRoot,
+      index: ["index.html"],
+    });
+  }
   const matchStore = options.matchStore ?? new InMemoryMatchStore();
-  const originalProblemImages = await loadGameSceneOriginals({
-    ...defaultSceneOverride(options.originalProblemImage),
-    ...options.originalProblemImages,
-  });
+  const originalProblemImages = await loadGameSceneOriginals(
+    {
+      ...defaultSceneOverride(options.originalProblemImage),
+      ...options.originalProblemImages,
+    },
+    options.gameAssetRoot,
+  );
   app.get("/health", async () => {
     const database = await matchStore.health();
     return { status: database ? "ok" : "degraded", server: "ok", database };
@@ -71,7 +87,7 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
     Record<string, never>,
     SocketData
   >(app.server, {
-    cors: { origin: options.webOrigin },
+    cors: options.webOrigin ? { origin: options.webOrigin } : undefined,
     // 제작자가 렌더한 문제 이미지가 오간다. 게임 코어가 다시 한 번 용량을 검증한다.
     maxHttpBufferSize: PROBLEM_IMAGE_LIMITS.maxBytes + 256 * 1024,
   });

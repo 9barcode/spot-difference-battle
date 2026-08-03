@@ -20,7 +20,9 @@ import { shouldAcceptGameSnapshot } from "./game-snapshot.js";
 type GameSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 type LobbyPhase = "NICKNAME" | "LOBBY" | "MATCHING" | "IN_GAME";
 
-const SERVER_URL = import.meta.env.VITE_SERVER_URL ?? "http://localhost:3001";
+const SERVER_URL =
+  import.meta.env.VITE_SERVER_URL ||
+  (import.meta.env.DEV ? "http://localhost:3001" : window.location.origin);
 const NICKNAME_KEY = "spot-battle.nickname";
 const GUEST_TOKEN_KEY = "spot-battle.guest-token";
 

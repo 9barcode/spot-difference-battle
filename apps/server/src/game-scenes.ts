@@ -4,43 +4,37 @@ import {
   type GameSceneId,
 } from "@spot-battle/shared";
 import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 
-const SERVER_GAME_SCENE_ORIGINALS = {
-  "prototype-room": new URL(
-    "../../../UI/src/imports/image.png",
-    import.meta.url,
-  ),
-  "cartoon-laboratory": new URL(
-    "../../../UI/src/imports/laboratory-1920.png",
-    import.meta.url,
-  ),
-  "cozy-cafe": new URL(
-    "../../../UI/src/imports/cozy-cafe.png",
-    import.meta.url,
-  ),
-  "enchanted-forest": new URL(
-    "../../../UI/src/imports/enchanted-forest.png",
-    import.meta.url,
-  ),
-  "cyber-city": new URL(
-    "../../../UI/src/imports/cyber-city.png",
-    import.meta.url,
-  ),
-  "underwater-treasure": new URL(
-    "../../../UI/src/imports/underwater-treasure.png",
-    import.meta.url,
-  ),} as const satisfies Record<GameSceneId, URL>;
+const GAME_SCENE_ORIGINAL_FILES = {
+  "prototype-room": "image.png",
+  "cartoon-laboratory": "laboratory-1920.png",
+  "cozy-cafe": "cozy-cafe.png",
+  "enchanted-forest": "enchanted-forest.png",
+  "cyber-city": "cyber-city.png",
+  "underwater-treasure": "underwater-treasure.png",
+} as const satisfies Record<GameSceneId, string>;
+
+const DEVELOPMENT_GAME_ASSET_ROOT = new URL(
+  "../../../UI/src/imports/",
+  import.meta.url,
+);
 
 export type GameSceneImageOverrides = Partial<Record<GameSceneId, Buffer>>;
 
 export async function loadGameSceneOriginals(
   overrides: GameSceneImageOverrides = {},
+  assetRoot?: string,
 ): Promise<ReadonlyMap<GameSceneId, Buffer>> {
   const entries = await Promise.all(
     GAME_SCENE_IDS.map(async (sceneId) => [
       sceneId,
       overrides[sceneId] ??
-        await readFile(SERVER_GAME_SCENE_ORIGINALS[sceneId]),
+        await readFile(
+          assetRoot
+            ? join(assetRoot, GAME_SCENE_ORIGINAL_FILES[sceneId])
+            : new URL(GAME_SCENE_ORIGINAL_FILES[sceneId], DEVELOPMENT_GAME_ASSET_ROOT),
+        ),
     ] as const),
   );
   return new Map(entries);
