@@ -24,6 +24,8 @@ export interface GameServerOptions {
   webOrigin: string;
   reconnectGraceMs?: number;
   inputCooldownMs?: number;
+  /** 종료 결과 재조회·신고를 허용한 뒤 서버 메모리에서 경기를 제거하기까지의 시간. */
+  finishedMatchRetentionMs?: number;
   matchStore?: MatchStore;
   /** 테스트에서 원본과 수정 이미지의 좌표 검증을 함께 실행하기 위한 원본 이미지 대역. */
   originalProblemImage?: Buffer;
@@ -79,12 +81,14 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
   const sessionsByToken = new Map<string, GuestSession>();
   const sessionsByPlayer = new Map<string, GuestSession>();
   const reconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  const finishedMatchCleanupTimers = new Map<string, ReturnType<typeof setTimeout>>();
   const persistedMatches = new Set<string>();
   const runtimeWrites = new Map<string, Promise<void>>();
   const guestWrites = new Set<Promise<void>>();
   const reconnectGraceMs =
     options.reconnectGraceMs ?? GAME_CONFIG.reconnectGraceSeconds * 1_000;
   const inputCooldownMs = options.inputCooldownMs ?? 120;
+  const finishedMatchRetentionMs = options.finishedMatchRetentionMs ?? 5 * 60 * 1_000;
   let waitingPlayer: { playerId: string; socketId: string; nickname: string } | null = null;
   let closing = false;
 
@@ -147,6 +151,18 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
     return next;
   }
 
+  function scheduleFinishedMatchCleanup(match: GameMatch): void {
+    if (finishedMatchCleanupTimers.has(match.matchId)) return;
+
+    const timer = setTimeout(() => {
+      finishedMatchCleanupTimers.delete(match.matchId);
+      registry.remove(match.matchId);
+      persistedMatches.delete(match.matchId);
+    }, finishedMatchRetentionMs);
+    timer.unref();
+    finishedMatchCleanupTimers.set(match.matchId, timer);
+  }
+
   async function persistIfFinished(match: GameMatch): Promise<void> {
     if (
       persistedMatches.has(match.matchId) ||
@@ -159,6 +175,8 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
       persistedMatches.add(match.matchId);
     } catch (error) {
       app.log.error(error);
+    } finally {
+      scheduleFinishedMatchCleanup(match);
     }
   }
 
@@ -488,6 +506,8 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
     closing = true;
     clearInterval(expiryTimer);
     for (const timer of reconnectTimers.values()) clearTimeout(timer);
+    for (const timer of finishedMatchCleanupTimers.values()) clearTimeout(timer);
+    finishedMatchCleanupTimers.clear();
     await new Promise<void>((resolve) => io.close(() => resolve()));
     await Promise.allSettled([...runtimeWrites.values(), ...guestWrites]);
     await matchStore.close();
