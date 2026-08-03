@@ -173,9 +173,10 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
     try {
       await matchStore.saveMatch(match.snapshot());
       persistedMatches.add(match.matchId);
-      scheduleFinishedMatchCleanup(match);
     } catch (error) {
       app.log.error(error);
+    } finally {
+      scheduleFinishedMatchCleanup(match);
     }
   }
 
