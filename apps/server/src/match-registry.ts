@@ -59,6 +59,19 @@ export class MatchRegistry {
     return matchId ? this.matches.get(matchId) ?? null : null;
   }
 
+  remove(matchId: string): boolean {
+    const match = this.matches.get(matchId);
+    if (!match) return false;
+
+    this.matches.delete(matchId);
+    for (const player of match.snapshot().players) {
+      if (this.playerMatches.get(player.playerId) === matchId) {
+        this.playerMatches.delete(player.playerId);
+      }
+    }
+    return true;
+  }
+
   expire(nowMs: number): GameMatch[] {
     const changed: GameMatch[] = [];
     for (const match of this.matches.values()) {
