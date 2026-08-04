@@ -85,6 +85,7 @@ export class GameMatch {
     public readonly matchId: string,
     public readonly puzzles: readonly MatchPuzzle[],
     players: [MatchPlayer, MatchPlayer],
+    createdAtMs = Date.now(),
   ) {
     if (players[0].playerId === players[1].playerId) {
       throw new GameRuleError("DUPLICATE_PLAYER", "서로 다른 두 플레이어가 필요합니다.");
@@ -108,6 +109,7 @@ export class GameMatch {
       lastCorrectAtMs: null,
       connectionStatus: "CONNECTED",
     })) as [InternalPlayer, InternalPlayer];
+    this.deadlineMs = createdAtMs + GAME_CONFIG.readyTimeoutSeconds * 1_000;
   }
 
   static restore(state: PersistedMatchState): GameMatch {
@@ -161,6 +163,7 @@ export class GameMatch {
 
   markReady(playerId: string, nowMs: number): void {
     this.requireState("READY");
+    this.requireBeforeDeadline(nowMs);
     const player = this.getPlayer(playerId);
     if (player.ready) return;
     player.ready = true;
@@ -172,6 +175,7 @@ export class GameMatch {
 
   markLoaded(playerId: string, puzzleId: GamePuzzleId, nowMs: number): void {
     this.requireState("PRELOADING");
+    this.requireBeforeDeadline(nowMs);
     const player = this.getPlayer(playerId);
     if (puzzleId !== this.puzzles[0]?.id) {
       throw new GameRuleError("WRONG_PUZZLE", "현재 경기의 첫 문제가 아닙니다.");
@@ -233,6 +237,10 @@ export class GameMatch {
 
   expire(nowMs: number): boolean {
     if (this.deadlineMs === null || nowMs < this.deadlineMs) return false;
+    if (this.state === "READY") {
+      this.cancel("준비 제한시간 안에 양쪽 준비가 끝나지 않았습니다.");
+      return true;
+    }
     if (this.state === "PRELOADING") {
       this.cancel("문제 이미지를 제한시간 안에 불러오지 못했습니다.");
       return true;

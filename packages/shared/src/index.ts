@@ -1,7 +1,8 @@
-﻿export const GAME_CONFIG = {
+export const GAME_CONFIG = {
   differenceCount: 3,
   gameDurationSeconds: 180,
   countdownSeconds: 3,
+  readyTimeoutSeconds: 30,
   preloadTimeoutSeconds: 15,
   wrongAnswerLockSeconds: 1,
   reconnectGraceSeconds: 10,

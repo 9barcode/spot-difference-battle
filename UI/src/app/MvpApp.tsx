@@ -47,6 +47,8 @@ export default function MvpApp() {
   const game = useGameClient();
   const [nicknameInput, setNicknameInput] = useState(game.nickname);
   const [reportReason, setReportReason] = useState<ReportReason>("UNFAIR");
+  const [preloadError, setPreloadError] = useState<string | null>(null);
+  const [preloadAttempt, setPreloadAttempt] = useState(0);
   const loadedKeyRef = useRef<string | null>(null);
   const remaining = useRemainingSeconds(game.snapshot?.deadlineMs);
   const me = game.snapshot?.players.find((player) => player.playerId === game.match?.playerId);
@@ -56,15 +58,25 @@ export default function MvpApp() {
   const inputLocked = Boolean(me?.inputLockedUntilMs && me.inputLockedUntilMs > Date.now());
 
   useEffect(() => {
-    if (game.snapshot?.state !== "PRELOADING" || !game.snapshot.currentPuzzleId || !game.match) return;
+    if (!game.snapshot?.currentPuzzleId) return;
+    const ids = [game.snapshot.currentPuzzleId, game.snapshot.nextPuzzleId].filter(Boolean) as GamePuzzleId[];
+    const loading = Promise.all(ids.map(preloadPuzzle));
+
+    if (game.snapshot.state !== "PRELOADING" || !game.match) {
+      void loading.catch(() => undefined);
+      return;
+    }
+
     const key = `${game.match.matchId}:${game.snapshot.currentPuzzleId}`;
     if (loadedKeyRef.current === key) return;
-    loadedKeyRef.current = key;
-    const ids = [game.snapshot.currentPuzzleId, game.snapshot.nextPuzzleId].filter(Boolean) as GamePuzzleId[];
-    Promise.all(ids.map(preloadPuzzle))
-      .then(() => game.loaded(game.snapshot!.currentPuzzleId!))
-      .catch(() => game.clearError());
-  }, [game.snapshot?.state, game.snapshot?.currentPuzzleId, game.snapshot?.nextPuzzleId, game.match?.matchId]);
+    void loading
+      .then(() => {
+        loadedKeyRef.current = key;
+        setPreloadError(null);
+        game.loaded(game.snapshot!.currentPuzzleId!);
+      })
+      .catch(() => setPreloadError("이미지를 불러오지 못했습니다. 네트워크를 확인하고 다시 시도해주세요."));
+  }, [game.snapshot?.state, game.snapshot?.currentPuzzleId, game.snapshot?.nextPuzzleId, game.match?.matchId, preloadAttempt]);
 
   const header = useMemo(() => (
     <header className="mx-auto mb-6 flex max-w-6xl items-center justify-between rounded-2xl bg-white/90 px-5 py-4 shadow-sm">
@@ -88,13 +100,13 @@ export default function MvpApp() {
 
     {game.snapshot.state === "READY" && <section data-testid="ready-screen" className="mx-auto max-w-xl rounded-3xl bg-white p-10 text-center shadow-xl"><div className="text-6xl">🔎</div><h2 className="mt-4 text-2xl font-black">상대: {game.match.opponentNickname}</h2><p className="mt-3 text-slate-500">두 명 모두 같은 문제를 동시에 풉니다.</p><button data-testid="ready-button" disabled={me?.ready} onClick={game.ready} className="mt-6 rounded-2xl bg-violet-600 px-8 py-4 font-black text-white disabled:bg-emerald-500">{me?.ready ? "준비 완료 · 상대 대기" : "준비 완료"}</button></section>}
 
-    {game.snapshot.state === "PRELOADING" && <section data-testid="preloading-screen" className="mx-auto max-w-xl rounded-3xl bg-white p-10 text-center shadow-xl"><LoaderCircle className="mx-auto animate-spin text-violet-600" size={52}/><h2 className="mt-4 text-2xl font-black">문제 이미지를 준비하고 있습니다</h2><p className="mt-2 text-slate-500">양쪽 준비가 끝나면 동시에 시작합니다.</p></section>}
+    {game.snapshot.state === "PRELOADING" && <section data-testid="preloading-screen" className="mx-auto max-w-xl rounded-3xl bg-white p-10 text-center shadow-xl"><LoaderCircle className="mx-auto animate-spin text-violet-600" size={52}/><h2 className="mt-4 text-2xl font-black">문제 이미지를 준비하고 있습니다</h2><p className="mt-2 text-slate-500">양쪽 준비가 끝나면 동시에 시작합니다.</p>{preloadError && <div className="mt-5"><p className="font-bold text-red-600">{preloadError}</p><button onClick={() => setPreloadAttempt((value) => value + 1)} className="mt-3 rounded-xl bg-slate-800 px-4 py-2 font-bold text-white">다시 시도</button></div>}</section>}
 
     {game.snapshot.state === "COUNTDOWN" && <section data-testid="countdown-screen" className="mx-auto max-w-xl rounded-3xl bg-white p-12 text-center shadow-xl"><div className="text-8xl font-black text-violet-600">{remaining ?? 0}</div><h2 className="mt-3 text-2xl font-black">곧 시작합니다!</h2></section>}
 
     {game.snapshot.state === "PLAYING" && puzzle && <section data-testid="playing-screen" className="mx-auto max-w-6xl"><div className="mb-4 text-center"><h2 className="text-2xl font-black">{puzzle.label}</h2><p className="text-sm text-slate-500">변경본에서 차이 3개를 찾으세요. 다 찾으면 바로 다음 그림으로 이동합니다.</p></div><div className="grid gap-5 lg:grid-cols-2"><div><p className="mb-2 text-center font-black">원본</p><ImageBoard src={puzzle.originalSrc} alt={`${puzzle.alt} 원본`}/></div><div><p className="mb-2 text-center font-black">변경본 · 여기를 선택</p><ImageBoard src={puzzle.modifiedSrc} alt={`${puzzle.alt} 변경본`} marks={game.foundMarks} onSelect={inputLocked ? undefined : (point) => game.guess(puzzle.id, point)}/></div></div><div className="mt-5 flex justify-center">{inputLocked ? <span className="rounded-xl bg-red-100 px-5 py-3 font-black text-red-700">오답 · 1초 입력 잠금</span> : game.lastGuess && <span className={`rounded-xl px-5 py-3 font-black ${game.lastGuess.correct ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}>{game.lastGuess.correct ? "정답!" : "오답"}</span>}</div></section>}
 
-    {game.snapshot.state === "FINISHED" && <section data-testid="finished-screen" className="mx-auto max-w-2xl rounded-3xl bg-white p-10 text-center shadow-xl"><div className="text-7xl">{game.snapshot.winnerId === game.match.playerId ? "🏆" : game.snapshot.winnerId ? "😿" : "🤝"}</div><h2 className="mt-4 text-3xl font-black">{game.snapshot.winnerId === game.match.playerId ? "승리했습니다!" : game.snapshot.winnerId ? "아쉽게 패배했습니다" : "무승부입니다"}</h2><div className="mt-6 grid gap-4 sm:grid-cols-2"><div className="rounded-2xl bg-violet-50 p-5"><p className="font-black">나</p><p className="mt-1 text-2xl font-black">{me?.completedPuzzleCount}판 · 총 {me?.totalFoundCount}개</p><p className="text-sm text-slate-500">오답 {me?.wrongAnswerCount}</p></div><div className="rounded-2xl bg-slate-100 p-5"><p className="font-black">{opponent?.nickname}</p><p className="mt-1 text-2xl font-black">{opponent?.completedPuzzleCount}판 · 총 {opponent?.totalFoundCount}개</p><p className="text-sm text-slate-500">오답 {opponent?.wrongAnswerCount}</p></div></div><button onClick={game.returnToLobby} className="mt-7 inline-flex items-center gap-2 rounded-2xl bg-violet-600 px-7 py-4 font-black text-white"><RotateCcw size={19}/>로비로 돌아가기</button></section>}
+    {game.snapshot.state === "FINISHED" && <section data-testid="finished-screen" className="mx-auto max-w-2xl rounded-3xl bg-white p-10 text-center shadow-xl"><div className="text-7xl">{game.snapshot.winnerId === game.match.playerId ? "🏆" : game.snapshot.winnerId ? "😿" : "🤝"}</div><h2 className="mt-4 text-3xl font-black">{game.snapshot.winnerId === game.match.playerId ? "승리했습니다!" : game.snapshot.winnerId ? "아쉽게 패배했습니다" : "무승부입니다"}</h2><p className="mt-2 text-slate-500">종료 사유: {game.snapshot.endReason === "COMPLETED" ? "전체 문제 완료" : game.snapshot.endReason === "TIMEOUT" ? "제한시간 종료" : game.snapshot.endReason === "FORFEIT" ? "상대 기권" : "경기 종료"}</p><div className="mt-6 grid gap-4 sm:grid-cols-2"><div className="rounded-2xl bg-violet-50 p-5"><p className="font-black">나</p><p className="mt-1 text-2xl font-black">{me?.completedPuzzleCount}판 · 총 {me?.totalFoundCount}개</p><p className="text-sm text-slate-500">오답 {me?.wrongAnswerCount}</p></div><div className="rounded-2xl bg-slate-100 p-5"><p className="font-black">{opponent?.nickname}</p><p className="mt-1 text-2xl font-black">{opponent?.completedPuzzleCount}판 · 총 {opponent?.totalFoundCount}개</p><p className="text-sm text-slate-500">오답 {opponent?.wrongAnswerCount}</p></div></div><button onClick={game.returnToLobby} className="mt-7 inline-flex items-center gap-2 rounded-2xl bg-violet-600 px-7 py-4 font-black text-white"><RotateCcw size={19}/>로비로 돌아가기</button></section>}
 
     {game.snapshot.state === "CANCELLED" && <section className="mx-auto max-w-2xl rounded-3xl bg-white p-10 text-center shadow-xl"><div className="text-7xl">🛠️</div><h2 className="mt-4 text-3xl font-black">경기가 취소되었습니다</h2><p className="mt-2 text-slate-500">{game.snapshot.cancelReason}</p><button onClick={game.returnToLobby} className="mt-7 rounded-2xl bg-violet-600 px-7 py-4 font-black text-white">로비로 돌아가기</button></section>}
 

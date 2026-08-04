@@ -34,6 +34,25 @@ function startPlaying(match: GameMatch, now = 1_000) {
 }
 
 describe("GameMatch simultaneous race", () => {
+  it("cancels when the ready deadline expires", () => {
+    const match = new GameMatch("match-ready-timeout", puzzles, [
+      { playerId: "p1", nickname: "첫째" },
+      { playerId: "p2", nickname: "둘째" },
+    ], 1_000);
+    expect(match.expire(31_000)).toBe(true);
+    expect(match.snapshot("p1")).toMatchObject({ state: "CANCELLED", endReason: "CANCELLED" });
+  });
+
+  it("rejects a load acknowledgement at or after the preload deadline", () => {
+    const match = new GameMatch("match-load-timeout", puzzles, [
+      { playerId: "p1", nickname: "첫째" },
+      { playerId: "p2", nickname: "둘째" },
+    ], 1_000);
+    match.markReady("p1", 1_100);
+    match.markReady("p2", 1_100);
+    expect(() => match.markLoaded("p1", "enchanted-forest", 16_100)).toThrowError(GameRuleError);
+    expect(match.snapshot("p1")).toMatchObject({ state: "CANCELLED", endReason: "CANCELLED" });
+  });
   it("starts only after both players load the same first puzzle", () => {
     const match = createMatch();
     match.markReady("p1", 1_000);

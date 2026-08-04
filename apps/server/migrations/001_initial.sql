@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS match_players (
   match_id UUID NOT NULL REFERENCES matches(id) ON DELETE CASCADE,
   player_id UUID NOT NULL,
   nickname VARCHAR(16) NOT NULL,
-  found_count SMALLINT NOT NULL CHECK (found_count BETWEEN 0 AND 3),
+  found_count INTEGER NOT NULL CHECK (found_count >= 0),
   wrong_answer_count INTEGER NOT NULL CHECK (wrong_answer_count >= 0),
   hints_used SMALLINT NOT NULL CHECK (hints_used BETWEEN 0 AND 1),
   connection_status TEXT NOT NULL,

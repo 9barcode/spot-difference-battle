@@ -1,4 +1,4 @@
-import type { ClientToServerEvents, GameSnapshot, MatchFoundPayload, ServerToClientEvents } from "@spot-battle/shared";
+import type { ClientToServerEvents, GameErrorPayload, GameSnapshot, MatchFoundPayload, ServerToClientEvents } from "@spot-battle/shared";
 import type { AddressInfo } from "node:net";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { io as createClient, type Socket } from "socket.io-client";
@@ -70,6 +70,18 @@ describe("simultaneous game server", () => {
 
     const [firstPlaying, secondPlaying] = await Promise.all([waitForState(first, "PLAYING"), waitForState(second, "PLAYING")]);
     const context = { expectedState: "PLAYING" as const, expectedStateVersion: firstPlaying.stateVersion };
+    const malformedError = waitForEvent<GameErrorPayload>(first, "game:error", (error) => error.code === "INVALID_POINT");
+    first.emit("game:guess", {
+      matchId: firstMatch.matchId,
+      puzzleId: "enchanted-forest",
+      point: null,
+      ...context,
+    } as never);
+    await expect(malformedError).resolves.toMatchObject({ code: "INVALID_POINT" });
+
+    const requeueError = waitForEvent<GameErrorPayload>(first, "game:error", (error) => error.code === "ALREADY_IN_MATCH");
+    first.emit("queue:join", { nickname: "재매칭시도" });
+    await expect(requeueError).resolves.toMatchObject({ code: "ALREADY_IN_MATCH" });
     second.emit("game:guess", { matchId: firstMatch.matchId, puzzleId: "enchanted-forest", point: { x: 0.31, y: 0.13 }, ...context });
     const secondProgress = await waitForEvent<GameSnapshot>(second, "game:snapshot", (snapshot) => snapshot.players.some((player) => player.playerId === secondMatch.playerId && player.foundCount === 1));
     expect(secondProgress.foundMarks).toHaveLength(1);
