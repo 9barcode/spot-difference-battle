@@ -1,11 +1,11 @@
-# Spot Difference Battle Web
+﻿# Spot Difference Battle Web
 
 > 문서 상태: CURRENT
 > 이 폴더는 pnpm workspace의 `@spot-battle/web` 패키지다.
 
 ## 활성 앱
 
-`src/main.tsx`가 `src/app/MvpApp.tsx`를 렌더한다. `src/app/App.tsx`는 Figma Make에서 가져온 비활성 참고 시안이며 현재 게임 규칙이나 화면의 기준이 아니다.
+`src/main.tsx`가 `src/app/MvpApp.tsx`를 렌더한다. 현재 앱은 원본·변경본 동시 빨리찾기 화면을 구현하며 `../docs/GAME_RULES.md`와 `../docs/SCREEN_SPEC.md`를 따른다.
 
 ## 실행
 
@@ -15,13 +15,7 @@
 pnpm --filter @spot-battle/web dev
 ```
 
-웹과 서버를 함께 실행하려면 루트에서:
-
-```powershell
-pnpm dev
-```
-
-기본 웹 주소는 `http://localhost:5173`이다. 서버 주소는 `VITE_SERVER_URL`로 바꿀 수 있으며 기본값은 로컬 서버 설정을 따른다.
+웹과 서버를 함께 실행하려면 `pnpm dev`를 사용한다. 기본 웹 주소는 `http://localhost:5173`이며 서버 주소는 `VITE_SERVER_URL`로 바꿀 수 있다.
 
 ## 검사
 

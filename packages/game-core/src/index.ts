@@ -1,4 +1,4 @@
-import {
+﻿import {
   GAME_CONFIG,
   PROBLEM_IMAGE_LIMITS,
   type AnswerRegion,
@@ -119,8 +119,8 @@ export function getRemainingTimeMs(
   nowMs: number,
   wrongAnswerCount: number,
 ): number {
-  const penaltyMs = Math.max(0, wrongAnswerCount) * GAME_CONFIG.wrongAnswerPenaltySeconds * 1_000;
-  return Math.max(0, deadlineMs - nowMs - penaltyMs);
+  void wrongAnswerCount;
+  return Math.max(0, deadlineMs - nowMs);
 }
 
 export function determineWinner(
@@ -148,6 +148,8 @@ export {
   GameMatch,
   GameRuleError,
   type MatchPlayer,
+  type MatchPuzzle,
+  type PuzzleDifference,
   type PersistedMatchPlayer,
   type PersistedMatchState,
 } from "./match.js";

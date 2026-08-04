@@ -1,4 +1,4 @@
-import type { PersistedMatchState } from "@spot-battle/game-core";
+﻿import type { PersistedMatchState } from "@spot-battle/game-core";
 import type { GameSnapshot, ReportReason } from "@spot-battle/shared";
 import { randomUUID } from "node:crypto";
 import { Pool } from "pg";
@@ -171,9 +171,9 @@ export class PostgresMatchStore implements MatchStore {
               snapshot.matchId,
               player.playerId,
               player.nickname,
-              player.foundCount,
+              player.totalFoundCount,
               player.wrongAnswerCount,
-              1 - player.hintsRemaining,
+              0,
               player.connectionStatus,
             ],
           );

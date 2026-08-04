@@ -1,13 +1,14 @@
-export const GAME_CONFIG = {
+﻿export const GAME_CONFIG = {
   differenceCount: 3,
-  editingDurationSeconds: 30,
-  findingDurationSeconds: 60,
-  wrongAnswerPenaltySeconds: 3,
-  hintsPerGame: 1,
+  gameDurationSeconds: 180,
+  countdownSeconds: 3,
+  preloadTimeoutSeconds: 15,
+  wrongAnswerLockSeconds: 1,
   reconnectGraceSeconds: 10,
-  /** 제작 마감 몇 초 전에 클라이언트가 자동 보충 후 제출할지 */
-  autoSubmitLeadSeconds: 3,
 } as const;
+
+export const GAME_PUZZLE_IDS = ["enchanted-forest", "underwater-treasure"] as const;
+export type GamePuzzleId = (typeof GAME_PUZZLE_IDS)[number];
 
 /**
  * 서버와 웹이 공통으로 아는 장면 식별자다.
@@ -111,6 +112,9 @@ export type GameState =
   | "LOBBY"
   | "MATCHING"
   | "READY"
+  | "PRELOADING"
+  | "COUNTDOWN"
+  | "PLAYING"
   | "EDITING"
   | "SWAPPING"
   | "FINDING"
@@ -209,12 +213,13 @@ export interface PlayerProgress {
   playerId: string;
   nickname: string;
   ready: boolean;
-  submitted: boolean;
-  /** 마감 임박으로 클라이언트가 자동 보충해 제출했는지 */
-  autoFilled: boolean;
+  loaded: boolean;
+  puzzleIndex: number;
+  completedPuzzleCount: number;
   foundCount: number;
+  totalFoundCount: number;
   wrongAnswerCount: number;
-  hintsRemaining: number;
+  inputLockedUntilMs: number | null;
   connectionStatus: "CONNECTED" | "RECONNECTING" | "FORFEITED";
 }
 
@@ -226,6 +231,9 @@ export interface GameSnapshot {
   state: GameState;
   stateVersion: number;
   imageId: GameSceneId;
+  currentPuzzleId: GamePuzzleId | null;
+  nextPuzzleId: GamePuzzleId | null;
+  totalPuzzleCount: number;
   deadlineMs: number | null;
   players: [PlayerProgress, PlayerProgress];
   winnerId: string | null;
@@ -254,8 +262,10 @@ export interface GuessResult {
   /** 맞혔을 때만 그 차이점의 위치를 돌려준다. 오답이면 null. */
   region: AnswerRegion | null;
   remainingTimeMs: number;
-  /** 마감·자동보충 등으로 제출이 자동 처리됐는지 */
-  autoFilled?: boolean;
+  puzzleCompleted: boolean;
+  matchFinished: boolean;
+  inputLockedUntilMs: number | null;
+  currentPuzzleId: GamePuzzleId | null;
 }
 
 export interface HintResult {
@@ -292,6 +302,7 @@ export interface ClientToServerEvents {
   "queue:join": (payload: { nickname: string }) => void;
   "queue:leave": () => void;
   "game:ready": (payload: { matchId: string }) => void;
+  "game:loaded": (payload: { matchId: string; puzzleId: GamePuzzleId }) => void;
   "game:submit": (
     payload: GameActionContext & {
       matchId: string;
@@ -302,7 +313,11 @@ export interface ClientToServerEvents {
       autoFilled?: boolean;
     },
   ) => void;
-  "game:guess": (payload: GameActionContext & { matchId: string; point: NormalizedPoint }) => void;
+  "game:guess": (payload: GameActionContext & {
+    matchId: string;
+    puzzleId: GamePuzzleId;
+    point: NormalizedPoint;
+  }) => void;
   "game:hint": (payload: GameActionContext & { matchId: string }) => void;
   "game:forfeit": (payload: GameActionContext & { matchId: string }) => void;
   "game:report": (payload: GameActionContext & {

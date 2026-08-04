@@ -1,8 +1,8 @@
-import { defineConfig } from "@playwright/test";
+﻿import { defineConfig } from "@playwright/test";
 
 const webPort = 4173;
 const serverPort = 3101;
-const gameSceneId = process.env.GAME_SCENE_ID ?? "cartoon-laboratory";
+const gameSceneId = process.env.GAME_SCENE_ID ?? "";
 
 export default defineConfig({
   testDir: "./e2e",

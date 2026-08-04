@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+﻿import { describe, expect, it } from "vitest";
 import type { Difference, PlayerResult } from "@spot-battle/shared";
 import {
   determineWinner,
@@ -37,8 +37,8 @@ describe("answer and time rules", () => {
     expect(isPointInAnswerRegion({ x: 0.7, y: 0.7 }, region)).toBe(false);
   });
 
-  it("subtracts three seconds for every wrong answer", () => {
-    expect(getRemainingTimeMs(60_000, 10_000, 2)).toBe(44_000);
+  it("keeps the shared deadline independent from wrong answers", () => {
+    expect(getRemainingTimeMs(60_000, 10_000, 2)).toBe(50_000);
     expect(getRemainingTimeMs(10_000, 20_000, 0)).toBe(0);
   });
 });

@@ -1,9 +1,8 @@
-import cors from "@fastify/cors";
+﻿import cors from "@fastify/cors";
 import fastifyStatic from "@fastify/static";
 import { GameMatch, GameRuleError } from "@spot-battle/game-core";
 import {
   GAME_CONFIG,
-  PROBLEM_IMAGE_LIMITS,
   type ClientToServerEvents,
   type GameSceneId,
   type ServerToClientEvents,
@@ -11,15 +10,10 @@ import {
 import Fastify, { type FastifyInstance } from "fastify";
 import { randomUUID } from "node:crypto";
 import { Server, type Socket } from "socket.io";
-import {
-  defaultSceneOverride,
-  loadGameSceneOriginals,
-  type GameSceneImageOverrides,
-} from "./game-scenes.js";
+import type { GameSceneImageOverrides } from "./game-scenes.js";
 import { MatchRegistry } from "./match-registry.js";
 import { InMemoryMatchStore, type MatchStore } from "./match-store.js";
-import { validateProblemImageCoordinates } from "./problem-image-validation.js";
-import { validateSceneObjectEdits } from "./scene-validation.js";
+import { GAME_PUZZLES } from "./game-puzzles.js";
 
 export interface GameServerOptions {
   webOrigin?: string;
@@ -71,13 +65,6 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
     });
   }
   const matchStore = options.matchStore ?? new InMemoryMatchStore();
-  const originalProblemImages = await loadGameSceneOriginals(
-    {
-      ...defaultSceneOverride(options.originalProblemImage),
-      ...options.originalProblemImages,
-    },
-    options.gameAssetRoot,
-  );
   app.get("/health", async () => {
     const database = await matchStore.health();
     return { status: database ? "ok" : "degraded", server: "ok", database };
@@ -90,10 +77,11 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
     SocketData
   >(app.server, {
     cors: options.webOrigin ? { origin: options.webOrigin } : undefined,
-    // 제작자가 렌더한 문제 이미지가 오간다. 게임 코어가 다시 한 번 용량을 검증한다.
-    maxHttpBufferSize: PROBLEM_IMAGE_LIMITS.maxBytes + 256 * 1024,
   });
-  const registry = new MatchRegistry(options.sceneId ? [options.sceneId] : undefined);
+  const requestedPuzzle = options.sceneId
+    ? GAME_PUZZLES.find((puzzle) => puzzle.id === options.sceneId)
+    : undefined;
+  const registry = new MatchRegistry(requestedPuzzle ? [requestedPuzzle] : undefined);
   const sessionsByToken = new Map<string, GuestSession>();
   const sessionsByPlayer = new Map<string, GuestSession>();
   const reconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -396,47 +384,24 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
       }
     });
 
-    socket.on("game:submit", async ({ matchId, differences, renderedImage, autoFilled, expectedState, expectedStateVersion }) => {
+    socket.on("game:loaded", ({ matchId, puzzleId }) => {
       try {
         const match = registry.getForPlayer(matchId, session.playerId);
-        assertClientState(match, session.playerId, expectedState, expectedStateVersion, true);
-        validateSceneObjectEdits(match.imageId, differences);
-        const originalProblemImage = originalProblemImages.get(match.imageId);
-        if (!originalProblemImage) {
-          throw new GameRuleError(
-            "UNKNOWN_GAME_SCENE",
-            "경기 장면의 서버 원본을 찾을 수 없습니다.",
-          );
-        }
-        try {
-          validateProblemImageCoordinates(originalProblemImage, renderedImage, differences);
-        } catch (error) {
-          throw new GameRuleError(
-            "INVALID_PROBLEM_COORDINATES",
-            error instanceof Error ? error.message : "문제 이미지와 정답 좌표가 일치하지 않습니다.",
-          );
-        }
-        match.submitDifferences(
-          session.playerId,
-          differences,
-          renderedImage,
-          Date.now(),
-          Boolean(autoFilled),
-        );
+        match.markLoaded(session.playerId, puzzleId, Date.now());
         emitSnapshots(match);
       } catch (error) {
         handleActionError(socket, matchId, error);
       }
     });
 
-    socket.on("game:guess", ({ matchId, point, expectedState, expectedStateVersion }) => {
+    socket.on("game:guess", ({ matchId, puzzleId, point, expectedState, expectedStateVersion }) => {
       try {
         const match = registry.getForPlayer(matchId, session.playerId);
-        assertClientState(match, session.playerId, expectedState, expectedStateVersion);
+        assertClientState(match, session.playerId, expectedState, expectedStateVersion, true);
         enforceCooldown("guess");
         socket.emit(
           "game:guess-result",
-          match.guess(session.playerId, point, Date.now()),
+          match.guess(session.playerId, puzzleId, point, Date.now()),
         );
         emitSnapshots(match);
         void persistIfFinished(match);
@@ -445,16 +410,8 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
       }
     });
 
-    socket.on("game:hint", ({ matchId, expectedState, expectedStateVersion }) => {
-      try {
-        const match = registry.getForPlayer(matchId, session.playerId);
-        assertClientState(match, session.playerId, expectedState, expectedStateVersion);
-        enforceCooldown("hint");
-        socket.emit("game:hint-result", match.useHint(session.playerId, Date.now()));
-        emitSnapshots(match);
-      } catch (error) {
-        handleActionError(socket, matchId, error);
-      }
+    socket.on("game:hint", ({ matchId }) => {
+      socket.emit("game:error", { code: "NO_HINTS", message: "온라인 경쟁전에는 힌트가 없습니다." });
     });
 
     socket.on("game:forfeit", ({ matchId, expectedState, expectedStateVersion }) => {

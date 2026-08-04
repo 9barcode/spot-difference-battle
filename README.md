@@ -1,53 +1,48 @@
-# Spot Difference Battle
+﻿# Spot Difference Battle
 
 > 문서 상태: CURRENT
-> 이 문서는 입문용 요약이다. 현재 게임 규칙의 유일한 Markdown 정본은 [`docs/GAME_RULES.md`](docs/GAME_RULES.md)다.
+> 현재 게임 규칙의 유일한 Markdown 정본은 [`docs/GAME_RULES.md`](docs/GAME_RULES.md)다.
 
-한 플레이어가 객체 3개를 수정하고 다른 플레이어가 제한시간 안에 빠르게 찾는 실시간 1대1 비대칭 공방 게임입니다. 두 플레이어가 동시에 찾아 속도를 비교하는 방식은 아닙니다. 같은 흐름을 혼자 확인하는 1인 테스트 모드도 제공합니다.
+두 플레이어가 동일한 원본과 변경본을 비교하고, 차이점 3개를 찾을 때마다 각자 다음 이미지로 이동해 제한시간 동안 더 많이 푸는 실시간 1대1 게임입니다.
 
-## 현재 게임 방식
+## 다음 게임 방식
 
-1. 먼저 매칭된 플레이어가 제작자, 두 번째 플레이어가 찾는 사람이 됩니다.
-2. 양쪽이 준비하면 제작자에게 30초의 편집 시간이 주어집니다.
-3. 제작자는 장면의 서로 다른 객체 3개에 색상·확대·무늬·윤곽 효과를 적용합니다.
-4. 제작 중 찾는 사람에게 그림·선택 객체·정답 위치를 보내지 않습니다.
-5. 제작자가 제출하면 찾는 사람에게 원본과 완성된 PNG 문제 이미지를 제공합니다.
-6. 찾는 사람이 60초 안에 3개를 모두 찾으면 승리합니다.
-7. 시간 안에 완료하지 못하면 제작자가 승리합니다.
-8. 오답은 3초 차감되고 힌트는 한 번 사용할 수 있습니다.
-9. 제작자가 마감까지 제출하지 못하거나 플레이어가 10초 안에 재접속하지 못하면 기권 처리됩니다.
+1. 두 플레이어가 매칭·준비한다.
+2. 서버가 양쪽에 동일한 문제 순서를 배정한다.
+3. 이미지 로드 후 3초 카운트다운으로 동시에 시작한다.
+4. 변경본에서 차이 3개를 찾는다.
+5. 모두 찾은 플레이어는 상대를 기다리지 않고 다음 이미지로 이동한다.
+6. 3분 동안 완료한 문제 수가 많은 플레이어가 승리한다.
+7. 완료 수가 같으면 현재 발견 수, 오답이 적은 순서로 판정하고 모두 같으면 무승부다.
+8. 경쟁전 힌트와 문제별 선착 보너스는 없다.
+9. 오답은 1초 입력 잠금이며 재접속 유예는 10초다.
 
-정상 경기에는 동점 비교나 무승부가 없습니다. 결과 화면에서는 현재 로비 이동과 신고를 제공합니다. 재대전과 결과 화면 즉시 새 매칭은 보류 기능입니다.
+현재 웹·서버는 이 규칙의 동시 대전 흐름을 구현한다.
 
-## 현재 단계
+## 에셋 상태
 
-핵심 비대칭 경기와 저장·복구·브라우저 테스트가 연결된 세로형 MVP입니다. 아직 출시 후보는 아닙니다.
+- 숲과 바다: 원본·변경본과 수동 정답 3곳 등록 완료, 플레이 난이도 검수 필요
+- 카페·도시·연구실: 유효한 변경본 필요
+- 거실: 라이선스 미확인으로 출시 제외
 
-출시 전에 필요한 주요 작업:
-
-- 라이선스가 확인된 장면 10개
-- 완료 문제와 정답의 신고 감사용 보관
-- 운영 로그·지표·모니터링
-- 실제 스테이징 생성 후 모바일 접속과 롤백 검증
-
-현재 장면 카탈로그에는 6개 장면이 있습니다. `cartoon-laboratory`와 사용자 제작 정사각형 장면 4개는 라이선스가 확인됐고, `prototype-room`은 확인되지 않았습니다. 연구실은 1920×1080 출시 조건을 충족하며, 새 카페·숲·도시·바다 장면은 1024×1024 플레이 검증용이므로 출시 전 16:9 정본과 최종 마스크 육안 검수가 필요합니다.
+내부 기능 검증에는 5세트 이상, 3분 경기에는 반복되지 않는 10세트 이상, 초기 반복 서비스에는 20~30세트를 목표로 한다.
 
 ## 프로젝트 구성
 
-- `UI/`: 현재 React 웹 앱과 객체 편집기
+- `UI/`: React 웹 앱
 - `apps/server/`: Fastify·Socket.IO 서버와 PostgreSQL 저장소
-- `packages/shared/`: 공유 타입, 상태와 게임 수치
-- `packages/game-core/`: 서버 권한 역할·타이머·승패 판정
-- `docs/`: 현재 규칙, 기술, 화면, 테스트와 역사 기록
+- `packages/shared/`: 공유 타입·상태·게임 수치
+- `packages/game-core/`: 서버 권한 판정
+- `docs/`: 규칙·상태·기술·화면·테스트와 역사 기록
 - `e2e/`: Playwright 브라우저 테스트
 
-활성 웹 진입점은 `UI/src/main.tsx`이며 유일한 앱 구현인 `MvpApp`을 렌더합니다.
+활성 웹 진입점은 `UI/src/main.tsx`이며 `MvpApp`을 렌더한다.
 
-## 문서
+## 주요 문서
 
 - [문서 운영 기준](docs/DOCUMENTATION.md)
-- [MVP 결정 기록](docs/MVP_DECISIONS.md)
 - [게임 규칙](docs/GAME_RULES.md)
+- [MVP 결정 기록](docs/MVP_DECISIONS.md)
 - [게임 상태](docs/GAME_STATE.md)
 - [게임 기획](docs/GAME_DESIGN.md)
 - [사용자 흐름](docs/USER_FLOW.md)
@@ -56,47 +51,24 @@
 - [테스트 계획](docs/TEST_PLAN.md)
 - [구현 백로그](docs/IMPLEMENTATION_BACKLOG.md)
 - [UI 현황 점검](docs/UI_AUDIT.md)
-- [게임 장면 에셋 가이드](docs/GAME_ASSETS.md)
+- [문제 에셋 가이드](docs/GAME_ASSETS.md)
 - [스테이징 배포 가이드](docs/DEPLOYMENT.md)
 
-게임 규칙의 유일한 Markdown 정본은 `GAME_RULES.md`입니다. `MVP_DECISIONS.md`는 결정 근거, `GAME_STATE.md`는 상태 매핑이며 별도 규칙집이 아닙니다. 실제 판정 수치는 정본을 구현한 공유 `GAME_CONFIG`가 사용합니다. 날짜별 `CHANGES_*.md`와 과거 릴리스는 역사 기록입니다.
+날짜별 `CHANGES_*.md`와 과거 릴리스는 당시 구현의 역사 기록이다.
 
 ## 로컬 실행
 
-필요 항목:
-
-- Node.js
-- pnpm 11.9.0
-- 선택 사항: PostgreSQL을 실행할 Docker Desktop
-
-저장소를 처음 준비할 때:
+필요 항목은 Node.js와 pnpm 11.9.0이며 PostgreSQL을 쓸 때만 Docker Desktop이 필요하다.
 
 ```powershell
 pnpm setup
-```
-
-웹과 서버 실행:
-
-```powershell
 pnpm dev
 ```
 
 - 웹: `http://localhost:5173`
 - 서버 상태: `http://localhost:3001/health`
 
-UI만 실행:
-
-```powershell
-pnpm --filter @spot-battle/web dev
-```
-
-서버만 실행:
-
-```powershell
-pnpm --filter @spot-battle/server dev
-```
-
-## 검사와 테스트
+검사:
 
 ```powershell
 pnpm check
@@ -104,44 +76,6 @@ pnpm test
 pnpm build
 ```
 
-`pnpm test`는 `DATABASE_URL`이 없으면 실제 PostgreSQL 재시작 통합 테스트를 건너뜁니다.
+자동 테스트는 동시 사전 로드·카운트다운·독립 정답 판정·첫 문제 완료 승패를 검증한다.
 
-브라우저 엔진을 처음 설치하고 E2E를 실행하려면:
-
-```powershell
-pnpm e2e:install
-pnpm e2e
-```
-
-현재 E2E는 Chromium·Firefox·WebKit에서 닉네임·매칭, 역할·준비, 제작 화면 비공개, 객체 3개 선택, 데스크톱·모바일 조합, 기권 결과 동기화를 확인합니다. 브라우저에서 정답 3개를 직접 찾아 정상 결과까지 완료하는 시나리오는 백로그에 있습니다.
-
-## PostgreSQL
-
-PostgreSQL 없이 실행하면 메모리 저장소를 사용합니다. Docker가 준비된 경우:
-
-```powershell
-docker compose up -d postgres
-$env:DATABASE_URL="postgresql://postgres:spot-battle-local-only@127.0.0.1:5432/spot_difference_battle"
-pnpm --filter @spot-battle/server db:migrate
-pnpm dev
-```
-
-같은 PowerShell 창에서 실제 PostgreSQL 테스트:
-
-```powershell
-$env:DATABASE_URL="postgresql://postgres:spot-battle-local-only@127.0.0.1:5432/spot_difference_battle"
-pnpm --filter @spot-battle/server test
-```
-
-환경변수 전체 목록은 `.env.example`을 참고합니다.
-
-## 스테이징 배포
-
-프로덕션 빌드는 React 웹과 Fastify·Socket.IO 서버를 같은 도메인의 단일 컨테이너로 제공합니다. 루트의 `Dockerfile`과 `render.yaml`로 무료 Render 테스트 환경을 만들 수 있으며, 생성 절차와 무료 환경 제한·롤백 방법은 [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)를 참고합니다.
-
-내부 테스트에서 특정 장면으로 고정하려면 서버 실행 전에 `GAME_SCENE_ID`를 설정합니다. 비우면 등록 장면 중 하나를 무작위로 선택합니다.
-
-```powershell
-$env:GAME_SCENE_ID="cartoon-laboratory"
-pnpm dev
-```
+PostgreSQL 없이 실행하면 메모리 저장소를 사용한다. PostgreSQL·환경변수·배포 절차는 `.env.example`과 `docs/DEPLOYMENT.md`를 참고한다.
