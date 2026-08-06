@@ -1,5 +1,5 @@
 import { inflateSync } from "node:zlib";
-import type { Difference } from "@spot-battle/shared";
+import { PROBLEM_IMAGE_LIMITS, type Difference } from "@spot-battle/shared";
 
 interface DecodedImage {
   width: number;
@@ -11,6 +11,9 @@ const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 const MIN_CHANGED_PIXEL_RATIO = 0.015;
 const MIN_REGION_LIFT = 0.012;
 const PIXEL_DELTA_THRESHOLD = 54;
+const MIN_IMAGE_WIDTH = 320;
+const MIN_IMAGE_HEIGHT = 180;
+const MAX_IMAGE_DIMENSION = 2000;
 
 function paeth(left: number, above: number, upperLeft: number): number {
   const estimate = left + above - upperLeft;
@@ -59,10 +62,23 @@ function decodePng(data: Buffer): DecodedImage {
     throw new Error("PNG_UNSUPPORTED");
   }
 
+  if (
+    width < MIN_IMAGE_WIDTH ||
+    height < MIN_IMAGE_HEIGHT ||
+    width > MAX_IMAGE_DIMENSION ||
+    height > MAX_IMAGE_DIMENSION
+  ) {
+    throw new Error("INVALID_DIMENSIONS");
+  }
+
   const channels = colorType === 6 ? 4 : 3;
   const rowBytes = width * channels;
-  const inflated = inflateSync(Buffer.concat(idat));
-  if (inflated.length !== (rowBytes + 1) * height) throw new Error("PNG_SIZE");
+  const expectedInflatedBytes = (rowBytes + 1) * height;
+  if (idat.length === 0) throw new Error("PNG_SIZE");
+  const inflated = inflateSync(Buffer.concat(idat), {
+    maxOutputLength: expectedInflatedBytes,
+  });
+  if (inflated.length !== expectedInflatedBytes) throw new Error("PNG_SIZE");
 
   const raw = new Uint8Array(rowBytes * height);
   for (let y = 0; y < height; y += 1) {
@@ -99,7 +115,9 @@ function decodePng(data: Buffer): DecodedImage {
 function dataUrlToBuffer(image: string): Buffer {
   const match = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(image);
   if (!match) throw new Error("PNG_DATA_URL");
-  return Buffer.from(match[1]!, "base64");
+  const buffer = Buffer.from(match[1]!, "base64");
+  if (buffer.length > PROBLEM_IMAGE_LIMITS.maxBytes) throw new Error("PNG_TOO_LARGE");
+  return buffer;
 }
 
 function sourcePixel(source: DecodedImage, targetX: number, targetY: number, targetWidth: number, targetHeight: number): number {
@@ -121,9 +139,6 @@ export function validateProblemImageCoordinates(
 ): void {
   const original = decodePng(originalImage);
   const rendered = decodePng(dataUrlToBuffer(renderedImage));
-  if (rendered.width < 320 || rendered.height < 180 || rendered.width > 2000 || rendered.height > 2000) {
-    throw new Error("INVALID_DIMENSIONS");
-  }
 
   const regionTotals = differences.map(() => 0);
   const regionChanged = differences.map(() => 0);
