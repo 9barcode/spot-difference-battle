@@ -1,7 +1,8 @@
 import { GAME_CONFIG, type FoundMark, type GamePuzzleId, type NormalizedPoint, type ReportReason } from "@spot-battle/shared";
-import { Clock, Flag, LoaderCircle, LogOut, RotateCcw, UsersRound, WifiOff, X } from "lucide-react";
+import { Clock, Flag, LoaderCircle, LogOut, Minus, Move, Plus, RotateCcw, UsersRound, WifiOff, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { GAME_PUZZLE_VISUALS, preloadPuzzle } from "./game-puzzles";
+import { clampViewport, normalizedPointFromClient, type ImageViewport } from "./image-geometry";
 import { useGameClient } from "./use-game-client";
 
 function useRemainingSeconds(deadlineMs: number | null | undefined): number | null {
@@ -18,37 +19,106 @@ function Shell({ children }: { children: ReactNode }) {
   return <main className="min-h-screen bg-gradient-to-br from-violet-50 via-white to-amber-50 p-4 text-slate-900 sm:p-7">{children}</main>;
 }
 
-function ImageBoard({ src, alt, marks = [], onSelect }: { src: string; alt: string; marks?: FoundMark[]; onSelect?: (point: NormalizedPoint) => void }) {
+function ImageBoard({
+  src,
+  alt,
+  marks = [],
+  onSelect,
+  viewport,
+  onPanBy,
+}: {
+  src: string;
+  alt: string;
+  marks?: FoundMark[];
+  onSelect?: (point: NormalizedPoint) => void;
+  viewport: ImageViewport;
+  onPanBy: (delta: NormalizedPoint) => void;
+}) {
+  const imageRef = useRef<HTMLImageElement | null>(null);
+  const gestureRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    lastX: number;
+    lastY: number;
+    moved: boolean;
+  } | null>(null);
+  const interactive = Boolean(onSelect) || viewport.scale > 1;
+
   return (
-    <div className="relative mx-auto overflow-hidden rounded-2xl border-4 border-white bg-slate-100 shadow-lg">
-      <img
-        src={src}
-        alt={alt}
-        draggable={false}
-        className={`block aspect-square w-full select-none object-contain ${onSelect ? "cursor-crosshair" : ""}`}
-        onClick={(event) => {
-          if (!onSelect) return;
+    <div
+      data-testid={alt.endsWith("변경본") ? "modified-board" : "original-board"}
+      className={`relative mx-auto aspect-square overflow-hidden rounded-2xl border-4 border-white bg-slate-100 shadow-lg ${interactive ? "cursor-crosshair" : ""}`}
+      style={{ touchAction: viewport.scale > 1 ? "none" : "manipulation" }}
+      onPointerDown={(event) => {
+        if (!interactive || (event.pointerType === "mouse" && event.button !== 0)) return;
+        gestureRef.current = {
+          pointerId: event.pointerId,
+          startX: event.clientX,
+          startY: event.clientY,
+          lastX: event.clientX,
+          lastY: event.clientY,
+          moved: false,
+        };
+        event.currentTarget.setPointerCapture(event.pointerId);
+      }}
+      onPointerMove={(event) => {
+        const gesture = gestureRef.current;
+        if (!gesture || gesture.pointerId !== event.pointerId) return;
+        const totalDistance = Math.hypot(event.clientX - gesture.startX, event.clientY - gesture.startY);
+        if (totalDistance > 6) gesture.moved = true;
+        if (viewport.scale > 1) {
           const rect = event.currentTarget.getBoundingClientRect();
-          onSelect({ x: (event.clientX - rect.left) / rect.width, y: (event.clientY - rect.top) / rect.height });
-        }}
-      />
-      {marks.map((mark, index) => (
-        <span
-          key={`${mark.differenceId}-${index}`}
-          className="pointer-events-none absolute grid -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border-4 border-emerald-400 bg-emerald-300/25 font-black text-emerald-950"
-          style={{ left: `${mark.region.x * 100}%`, top: `${mark.region.y * 100}%`, width: `${mark.region.radius * 200}%`, aspectRatio: "1" }}
-        >✓</span>
-      ))}
+          onPanBy({
+            x: (event.clientX - gesture.lastX) / rect.width,
+            y: (event.clientY - gesture.lastY) / rect.height,
+          });
+        }
+        gesture.lastX = event.clientX;
+        gesture.lastY = event.clientY;
+      }}
+      onPointerUp={(event) => {
+        const gesture = gestureRef.current;
+        if (!gesture || gesture.pointerId !== event.pointerId) return;
+        gestureRef.current = null;
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+          event.currentTarget.releasePointerCapture(event.pointerId);
+        }
+        if (!gesture.moved && onSelect && imageRef.current) {
+          onSelect(normalizedPointFromClient(event.clientX, event.clientY, imageRef.current.getBoundingClientRect()));
+        }
+      }}
+      onPointerCancel={() => { gestureRef.current = null; }}
+    >
+      <div
+        className="absolute inset-0 origin-center will-change-transform"
+        style={{ transform: `translate(${viewport.pan.x * 100}%, ${viewport.pan.y * 100}%) scale(${viewport.scale})` }}
+      >
+        <img
+          ref={imageRef}
+          src={src}
+          alt={alt}
+          draggable={false}
+          className="block h-full w-full select-none object-contain"
+        />
+        {marks.map((mark, index) => (
+          <span
+            key={`${mark.differenceId}-${index}`}
+            className="pointer-events-none absolute grid -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border-4 border-emerald-400 bg-emerald-300/25 font-black text-emerald-950"
+            style={{ left: `${mark.region.x * 100}%`, top: `${mark.region.y * 100}%`, width: `${mark.region.radius * 200}%`, aspectRatio: "1" }}
+          >✓</span>
+        ))}
+      </div>
     </div>
   );
 }
-
 export default function MvpApp() {
   const game = useGameClient();
   const [nicknameInput, setNicknameInput] = useState(game.nickname);
   const [reportReason, setReportReason] = useState<ReportReason>("UNFAIR");
   const [preloadError, setPreloadError] = useState<string | null>(null);
   const [preloadAttempt, setPreloadAttempt] = useState(0);
+  const [imageViewport, setImageViewport] = useState<ImageViewport>({ scale: 1, pan: { x: 0, y: 0 } });
   const loadedKeyRef = useRef<string | null>(null);
   const remaining = useRemainingSeconds(game.snapshot?.deadlineMs);
   const me = game.snapshot?.players.find((player) => player.playerId === game.match?.playerId);
@@ -56,6 +126,19 @@ export default function MvpApp() {
   const puzzleId = game.snapshot?.currentPuzzleId ?? null;
   const puzzle = puzzleId ? GAME_PUZZLE_VISUALS[puzzleId] : null;
   const inputLocked = Boolean(me?.inputLockedUntilMs && me.inputLockedUntilMs > Date.now());
+  useEffect(() => {
+    setImageViewport({ scale: 1, pan: { x: 0, y: 0 } });
+  }, [puzzleId]);
+
+  const changeZoom = (delta: number) => {
+    setImageViewport((current) => clampViewport({ ...current, scale: current.scale + delta }));
+  };
+  const panImages = (delta: NormalizedPoint) => {
+    setImageViewport((current) => clampViewport({
+      ...current,
+      pan: { x: current.pan.x + delta.x, y: current.pan.y + delta.y },
+    }));
+  };
 
   useEffect(() => {
     if (!game.snapshot?.currentPuzzleId) return;
@@ -104,7 +187,7 @@ export default function MvpApp() {
 
     {game.snapshot.state === "COUNTDOWN" && <section data-testid="countdown-screen" className="mx-auto max-w-xl rounded-3xl bg-white p-12 text-center shadow-xl"><div className="text-8xl font-black text-violet-600">{remaining ?? 0}</div><h2 className="mt-3 text-2xl font-black">곧 시작합니다!</h2></section>}
 
-    {game.snapshot.state === "PLAYING" && puzzle && <section data-testid="playing-screen" className="mx-auto max-w-6xl"><div className="mb-4 text-center"><h2 className="text-2xl font-black">{puzzle.label}</h2><p className="text-sm text-slate-500">변경본에서 차이 3개를 찾으세요. 다 찾으면 바로 다음 그림으로 이동합니다.</p></div><div className="grid gap-5 lg:grid-cols-2"><div><p className="mb-2 text-center font-black">원본</p><ImageBoard src={puzzle.originalSrc} alt={`${puzzle.alt} 원본`}/></div><div><p className="mb-2 text-center font-black">변경본 · 여기를 선택</p><ImageBoard src={puzzle.modifiedSrc} alt={`${puzzle.alt} 변경본`} marks={game.foundMarks} onSelect={inputLocked ? undefined : (point) => game.guess(puzzle.id, point)}/></div></div><div className="mt-5 flex justify-center">{inputLocked ? <span className="rounded-xl bg-red-100 px-5 py-3 font-black text-red-700">오답 · 1초 입력 잠금</span> : game.lastGuess && <span className={`rounded-xl px-5 py-3 font-black ${game.lastGuess.correct ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}>{game.lastGuess.correct ? "정답!" : "오답"}</span>}</div></section>}
+    {game.snapshot.state === "PLAYING" && puzzle && <section data-testid="playing-screen" className="mx-auto max-w-6xl"><div className="mb-4 text-center"><h2 className="text-2xl font-black">{puzzle.label}</h2><p className="text-sm text-slate-500">변경본에서 차이 3개를 찾으세요. 다 찾으면 바로 다음 그림으로 이동합니다.</p></div><div className="mb-4 flex flex-wrap items-center justify-center gap-2" data-testid="zoom-controls"><span className="mr-1 inline-flex items-center gap-1 text-sm font-bold text-slate-600"><Move size={16}/>확대 후 드래그</span><button type="button" aria-label="축소" disabled={imageViewport.scale <= 1} onClick={() => changeZoom(-0.5)} className="rounded-xl bg-white p-2 shadow disabled:opacity-35"><Minus size={18}/></button><span className="min-w-14 text-center font-black">{imageViewport.scale.toFixed(1)}배</span><button type="button" aria-label="확대" disabled={imageViewport.scale >= 3} onClick={() => changeZoom(0.5)} className="rounded-xl bg-white p-2 shadow disabled:opacity-35"><Plus size={18}/></button><button type="button" onClick={() => setImageViewport({ scale: 1, pan: { x: 0, y: 0 } })} className="rounded-xl bg-slate-800 px-3 py-2 text-sm font-bold text-white">원래 크기</button></div><div className="grid gap-5 lg:grid-cols-2"><div><p className="mb-2 text-center font-black">원본</p><ImageBoard src={puzzle.originalSrc} alt={`${puzzle.alt} 원본`} viewport={imageViewport} onPanBy={panImages}/></div><div><p className="mb-2 text-center font-black">변경본 · 여기를 선택</p><ImageBoard src={puzzle.modifiedSrc} alt={`${puzzle.alt} 변경본`} marks={game.foundMarks} viewport={imageViewport} onPanBy={panImages} onSelect={inputLocked ? undefined : (point) => game.guess(puzzle.id, point)}/></div></div><div className="mt-5 flex justify-center">{inputLocked ? <span className="rounded-xl bg-red-100 px-5 py-3 font-black text-red-700">오답 · 1초 입력 잠금</span> : game.lastGuess && <span className={`rounded-xl px-5 py-3 font-black ${game.lastGuess.correct ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}>{game.lastGuess.correct ? "정답!" : "오답"}</span>}</div></section>}
 
     {game.snapshot.state === "FINISHED" && <section data-testid="finished-screen" className="mx-auto max-w-2xl rounded-3xl bg-white p-10 text-center shadow-xl"><div className="text-7xl">{game.snapshot.winnerId === game.match.playerId ? "🏆" : game.snapshot.winnerId ? "😿" : "🤝"}</div><h2 className="mt-4 text-3xl font-black">{game.snapshot.winnerId === game.match.playerId ? "승리했습니다!" : game.snapshot.winnerId ? "아쉽게 패배했습니다" : "무승부입니다"}</h2><p className="mt-2 text-slate-500">종료 사유: {game.snapshot.endReason === "COMPLETED" ? "전체 문제 완료" : game.snapshot.endReason === "TIMEOUT" ? "제한시간 종료" : game.snapshot.endReason === "FORFEIT" ? "상대 기권" : "경기 종료"}</p><div className="mt-6 grid gap-4 sm:grid-cols-2"><div className="rounded-2xl bg-violet-50 p-5"><p className="font-black">나</p><p className="mt-1 text-2xl font-black">{me?.completedPuzzleCount}판 · 총 {me?.totalFoundCount}개</p><p className="text-sm text-slate-500">오답 {me?.wrongAnswerCount}</p></div><div className="rounded-2xl bg-slate-100 p-5"><p className="font-black">{opponent?.nickname}</p><p className="mt-1 text-2xl font-black">{opponent?.completedPuzzleCount}판 · 총 {opponent?.totalFoundCount}개</p><p className="text-sm text-slate-500">오답 {opponent?.wrongAnswerCount}</p></div></div><button onClick={game.returnToLobby} className="mt-7 inline-flex items-center gap-2 rounded-2xl bg-violet-600 px-7 py-4 font-black text-white"><RotateCcw size={19}/>로비로 돌아가기</button></section>}
 

@@ -1,4 +1,4 @@
-﻿import { expect, test, type Browser, type BrowserContext, type Page } from "@playwright/test";
+import { expect, test, type Browser, type BrowserContext, type Page } from "@playwright/test";
 
 async function createPlayer(browser: Browser, nickname: string, viewport: { width: number; height: number }): Promise<{ context: BrowserContext; page: Page }> {
   const context = await browser.newContext({ viewport });
@@ -49,6 +49,26 @@ test("two players start together and the first player to find all differences wi
     const firstPoints = firstPuzzle?.includes("마법")
       ? [{ x: 0.31, y: 0.13 }, { x: 0.23, y: 0.66 }, { x: 0.08, y: 0.84 }]
       : [{ x: 0.34, y: 0.19 }, { x: 0.27, y: 0.76 }, { x: 0.78, y: 0.62 }];
+    const mobileImage = second.page.getByRole("img", { name: /변경본$/ });
+    const imageBeforeZoom = await mobileImage.boundingBox();
+    await second.page.getByRole("button", { name: "확대" }).click();
+    await second.page.getByRole("button", { name: "확대" }).click();
+    await expect(second.page.getByTestId("zoom-controls")).toContainText("2.0배");
+    const imageAfterZoom = await mobileImage.boundingBox();
+    expect(imageAfterZoom!.width).toBeGreaterThan(imageBeforeZoom!.width * 1.9);
+
+    const mobileBoard = second.page.getByTestId("modified-board");
+    await mobileBoard.scrollIntoViewIfNeeded();
+    const boardBox = await mobileBoard.boundingBox();
+    if (!boardBox) throw new Error("모바일 변경본 보드를 찾을 수 없습니다.");
+    await second.page.mouse.move(boardBox.x + boardBox.width / 2, boardBox.y + boardBox.height / 2);
+    await second.page.mouse.down();
+    await second.page.mouse.move(boardBox.x + boardBox.width / 2, boardBox.y + boardBox.height / 2 + 120, { steps: 5 });
+    await second.page.mouse.up();
+    await expect(second.page.getByText("나 0판 · 0/3", { exact: true })).toBeVisible();
+
+    await clickNormalized(second.page, firstPoints[0]!.x, firstPoints[0]!.y);
+    await expect(second.page.getByText("나 0판 · 1/3", { exact: true })).toBeVisible();
     for (const point of firstPoints) await clickNormalized(first.page, point.x, point.y);
     await expect(heading).not.toHaveText(firstPuzzle ?? "", { timeout: 5_000 });
 
