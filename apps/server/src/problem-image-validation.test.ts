@@ -36,6 +36,21 @@ function createPng(width: number, height: number, paint?: (x: number, y: number)
   ]);
 }
 
+function createPngFromCompressedRows(width: number, height: number, compressedRows: Buffer): Buffer {
+  const signature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(width, 0);
+  header.writeUInt32BE(height, 4);
+  header[8] = 8;
+  header[9] = 6;
+  return Buffer.concat([
+    signature,
+    chunk("IHDR", header),
+    chunk("IDAT", compressedRows),
+    chunk("IEND", Buffer.alloc(0)),
+  ]);
+}
+
 const differences: Difference[] = [
   { id: "a", kind: "COLOR", region: { x: 0.2, y: 0.25, radius: 0.08 } },
   { id: "b", kind: "COLOR", region: { x: 0.5, y: 0.5, radius: 0.08 } },
@@ -61,6 +76,28 @@ describe("validateProblemImageCoordinates", () => {
   it("accepts changes located at every submitted answer", () => {
     const fixture = createProblemImageFixture();
     expect(() => validateProblemImageCoordinates(fixture.originalImage, fixture.renderedImage, differences)).not.toThrow();
+  });
+
+
+  it("rejects oversized dimensions before inflating PNG data", () => {
+    const forged = createPngFromCompressedRows(2001, 180, deflateSync(Buffer.alloc(1)));
+    const rendered = `data:image/png;base64,${forged.toString("base64")}`;
+    expect(() => validateProblemImageCoordinates(createPng(400, 200), rendered, differences))
+      .toThrow("INVALID_DIMENSIONS");
+  });
+
+  it("caps decompression at the size declared by the PNG header", () => {
+    const width = 320;
+    const height = 180;
+    const expectedBytes = (width * 4 + 1) * height;
+    const forged = createPngFromCompressedRows(
+      width,
+      height,
+      deflateSync(Buffer.alloc(expectedBytes + 1)),
+    );
+    const rendered = `data:image/png;base64,${forged.toString("base64")}`;
+    expect(() => validateProblemImageCoordinates(createPng(400, 200), rendered, differences))
+      .toThrow();
   });
 
   it("rejects an answer coordinate with no image change", () => {
