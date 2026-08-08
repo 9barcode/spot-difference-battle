@@ -14,8 +14,8 @@ const snapshot: GameSnapshot = {
   totalPuzzleCount: 2,
   deadlineMs: null,
   players: [
-    { playerId: "22222222-2222-4222-8222-222222222222", nickname: "첫째", ready: true, loaded: true, puzzleIndex: 2, completedPuzzleCount: 2, foundCount: 0, totalFoundCount: 6, wrongAnswerCount: 0, inputLockedUntilMs: null, connectionStatus: "CONNECTED" },
-    { playerId: "33333333-3333-4333-8333-333333333333", nickname: "둘째", ready: true, loaded: true, puzzleIndex: 1, completedPuzzleCount: 1, foundCount: 2, totalFoundCount: 5, wrongAnswerCount: 1, inputLockedUntilMs: null, connectionStatus: "CONNECTED" },
+    { playerId: "22222222-2222-4222-8222-222222222222", nickname: "첫째", perspective: "SELF", ready: true, loaded: true, puzzleIndex: 2, completedPuzzleCount: 2, foundCount: 0, totalFoundCount: 6, wrongAnswerCount: 0, inputLockedUntilMs: null, connectionStatus: "CONNECTED" },
+    { playerId: "33333333-3333-4333-8333-333333333333", nickname: "둘째", perspective: "SELF", ready: true, loaded: true, puzzleIndex: 1, completedPuzzleCount: 1, foundCount: 2, totalFoundCount: 5, wrongAnswerCount: 1, inputLockedUntilMs: null, connectionStatus: "CONNECTED" },
   ],
   winnerId: "22222222-2222-4222-8222-222222222222",
   problemImage: null,

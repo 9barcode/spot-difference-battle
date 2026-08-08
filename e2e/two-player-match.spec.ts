@@ -17,7 +17,7 @@ async function clickNormalized(page: Page, x: number, y: number) {
   await page.waitForTimeout(160);
 }
 
-test("two players start together and the first player to find all differences wins", async ({ browser }) => {
+test("a player who clears the deck waits until timeout or forfeit", async ({ browser }) => {
   const first = await createPlayer(browser, "빠른사람", { width: 1280, height: 900 });
   const second = await createPlayer(browser, "도전자", { width: 390, height: 844 });
   try {
@@ -77,6 +77,11 @@ test("two players start together and the first player to find all differences wi
       ? [{ x: 0.31, y: 0.13 }, { x: 0.23, y: 0.66 }, { x: 0.08, y: 0.84 }]
       : [{ x: 0.34, y: 0.19 }, { x: 0.27, y: 0.76 }, { x: 0.78, y: 0.62 }];
     for (const point of secondPoints) await clickNormalized(first.page, point.x, point.y);
+
+    await expect(first.page.getByTestId("finished-screen")).not.toBeVisible();
+    await expect(first.page.getByTestId("deck-complete-screen")).toContainText("제한시간까지 계속됩니다");
+    second.page.once("dialog", (dialog) => dialog.accept());
+    await second.page.getByTestId("forfeit-button").click();
 
     await expect(first.page.getByTestId("finished-screen")).toContainText("승리했습니다", { timeout: 5_000 });
     await expect(second.page.getByTestId("finished-screen")).toContainText("패배했습니다", { timeout: 5_000 });

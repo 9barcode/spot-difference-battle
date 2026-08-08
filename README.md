@@ -76,6 +76,6 @@ pnpm test
 pnpm build
 ```
 
-자동 테스트는 동시 사전 로드·카운트다운·독립 정답 판정·첫 문제 완료 승패를 검증한다.
+자동 테스트는 동시 사전 로드·카운트다운·독립 정답 판정·제한시간 승패 우선순위를 검증한다.
 
 PostgreSQL 없이 실행하면 메모리 저장소를 사용한다. PostgreSQL·환경변수·배포 절차는 `.env.example`과 `docs/DEPLOYMENT.md`를 참고한다.

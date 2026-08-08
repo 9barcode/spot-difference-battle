@@ -74,12 +74,14 @@ describe("GameMatch simultaneous race", () => {
     expect(match.snapshot("p2").currentPuzzleId).toBe("enchanted-forest");
   });
 
-  it("finishes when a player clears every prepared puzzle", () => {
+  it("waits for the time limit after a player clears every prepared puzzle", () => {
     const match = createMatch();
     let now = startPlaying(match);
     for (const point of [{ x: 0.2, y: 0.2 }, { x: 0.5, y: 0.5 }, { x: 0.8, y: 0.8 }]) match.guess("p1", "enchanted-forest", point, ++now);
     for (const point of [{ x: 0.2, y: 0.8 }, { x: 0.5, y: 0.2 }, { x: 0.8, y: 0.5 }]) match.guess("p1", "underwater-treasure", point, ++now);
-    expect(match.snapshot("p1")).toMatchObject({ state: "FINISHED", winnerId: "p1", endReason: "COMPLETED" });
+    expect(match.snapshot("p1")).toMatchObject({ state: "PLAYING", currentPuzzleId: null });
+    expect(match.expire(184_100)).toBe(true);
+    expect(match.snapshot("p1")).toMatchObject({ state: "FINISHED", winnerId: "p1", endReason: "TIMEOUT" });
   });
 
   it("locks wrong input for one second without subtracting time", () => {
@@ -102,6 +104,57 @@ describe("GameMatch simultaneous race", () => {
     expect(restored.snapshot("p1")).toMatchObject({ state: "PLAYING", myFoundIds: ["a"] });
   });
 
+  it("exposes full progress only for the snapshot viewer", () => {
+    const match = createMatch();
+    const now = startPlaying(match);
+    match.guess("p1", "enchanted-forest", { x: 0.95, y: 0.1 }, now + 10);
+    match.guess("p2", "enchanted-forest", { x: 0.2, y: 0.2 }, now + 10);
+    const snapshot = match.snapshot("p1");
+    const self = snapshot.players.find((player) => player.playerId === "p1")!;
+    const opponent = snapshot.players.find((player) => player.playerId === "p2")!;
+    expect(self).toMatchObject({ perspective: "SELF", puzzleIndex: 0, totalFoundCount: 0, wrongAnswerCount: 1 });
+    expect(opponent).toMatchObject({ perspective: "OPPONENT", completedPuzzleCount: 0, foundCount: 1 });
+    for (const field of ["puzzleIndex", "totalFoundCount", "wrongAnswerCount", "inputLockedUntilMs"]) {
+      expect(opponent).not.toHaveProperty(field);
+    }
+  });
+
+  it("returns DUPLICATE without changing match state", () => {
+    const match = createMatch();
+    const now = startPlaying(match);
+    expect(match.guess("p1", "enchanted-forest", { x: 0.2, y: 0.2 }, now + 10).outcome).toBe("CORRECT");
+    const version = match.version;
+    expect(match.guess("p1", "enchanted-forest", { x: 0.2, y: 0.2 }, now + 20)).toMatchObject({
+      outcome: "DUPLICATE",
+      correct: true,
+    });
+    expect(match.version).toBe(version);
+  });
+
+  it("rejects invalid puzzle identities and answer regions", () => {
+    const invalidPuzzles: MatchPuzzle[] = [{
+      id: "enchanted-forest",
+      differences: [
+        { id: "same", label: "A", regions: [{ x: 0.2, y: 0.2, radius: 0.05 }] },
+        { id: "same", label: "B", regions: [{ x: 0.5, y: 0.5, radius: 0.05 }] },
+        { id: "c", label: "C", regions: [{ x: 0.8, y: 0.8, radius: 0.05 }] },
+      ],
+    }];
+    expect(() => new GameMatch("bad-id", invalidPuzzles, [
+      { playerId: "p1", nickname: "첫째" },
+      { playerId: "p2", nickname: "둘째" },
+    ])).toThrowError(GameRuleError);
+
+    invalidPuzzles[0]!.differences[1] = {
+      id: "b",
+      label: "B",
+      regions: [{ x: 0.2, y: 0.2, radius: 0.05 }, { x: 0.5, y: 0.5, radius: 0.05 }],
+    };
+    expect(() => new GameMatch("bad-regions", invalidPuzzles, [
+      { playerId: "p1", nickname: "첫째" },
+      { playerId: "p2", nickname: "둘째" },
+    ])).toThrowError(GameRuleError);
+  });
   it("awards a forfeit win to the connected opponent", () => {
     const match = createMatch();
     startPlaying(match);

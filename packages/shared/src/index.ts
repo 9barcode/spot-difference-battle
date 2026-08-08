@@ -215,13 +215,30 @@ export interface PlayerProgress {
   nickname: string;
   ready: boolean;
   loaded: boolean;
-  puzzleIndex: number;
   completedPuzzleCount: number;
   foundCount: number;
+  connectionStatus: "CONNECTED" | "RECONNECTING" | "FORFEITED";
+  perspective: "SELF" | "OPPONENT";
+  /** Present only for the player receiving this snapshot. */
+  puzzleIndex?: number;
+  /** Present only for the player receiving this snapshot. */
+  totalFoundCount?: number;
+  /** Present only for the player receiving this snapshot. */
+  wrongAnswerCount?: number;
+  /** Present only for the player receiving this snapshot. */
+  inputLockedUntilMs?: number | null;
+}
+
+export interface SelfPlayerProgress extends PlayerProgress {
+  perspective: "SELF";
+  puzzleIndex: number;
   totalFoundCount: number;
   wrongAnswerCount: number;
   inputLockedUntilMs: number | null;
-  connectionStatus: "CONNECTED" | "RECONNECTING" | "FORFEITED";
+}
+
+export interface OpponentPlayerProgress extends PlayerProgress {
+  perspective: "OPPONENT";
 }
 
 export type GameEndReason = "COMPLETED" | "TIMEOUT" | "FORFEIT" | "CANCELLED";
@@ -258,6 +275,7 @@ export interface SessionReadyPayload {
 }
 
 export interface GuessResult {
+  outcome: "CORRECT" | "DUPLICATE" | "WRONG";
   correct: boolean;
   differenceId: string | null;
   /** 맞혔을 때만 그 차이점의 위치를 돌려준다. 오답이면 null. */

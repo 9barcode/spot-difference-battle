@@ -9,8 +9,10 @@ import {
   type GameState,
   type GuessResult,
   type NormalizedPoint,
+  type OpponentPlayerProgress,
   type PlayerProgress,
   type RevealedDifference,
+  type SelfPlayerProgress,
 } from "@spot-battle/shared";
 import { isPointInAnswerRegion } from "./index.js";
 
@@ -93,11 +95,7 @@ export class GameMatch {
     if (puzzles.length === 0) {
       throw new GameRuleError("NO_PUZZLES", "경기에 사용할 문제가 없습니다.");
     }
-    for (const puzzle of puzzles) {
-      if (puzzle.differences.length !== GAME_CONFIG.differenceCount) {
-        throw new GameRuleError("INVALID_PUZZLE", `${puzzle.id} 문제의 차이점은 정확히 ${GAME_CONFIG.differenceCount}개여야 합니다.`);
-      }
-    }
+    for (const puzzle of puzzles) this.validatePuzzle(puzzle);
     this.players = players.map((player) => ({
       ...player,
       ready: false,
@@ -214,7 +212,6 @@ export class GameMatch {
       if (foundIds.size === GAME_CONFIG.differenceCount) {
         puzzleCompleted = true;
         player.puzzleIndex += 1;
-        if (player.puzzleIndex >= this.puzzles.length) this.finish(player.playerId, "COMPLETED");
       }
       this.bumpVersion();
     } else if (!hit) {
@@ -224,6 +221,7 @@ export class GameMatch {
     }
 
     return {
+      outcome: hit ? (alreadyFound ? "DUPLICATE" : "CORRECT") : "WRONG",
       correct: Boolean(hit),
       differenceId: hit?.id ?? null,
       region: matchedRegion ? { ...matchedRegion } : null,
@@ -271,7 +269,7 @@ export class GameMatch {
       nextPuzzleId: nextPuzzle?.id ?? null,
       totalPuzzleCount: this.puzzles.length,
       deadlineMs: this.deadlineMs,
-      players: this.players.map((player) => this.toProgress(player)) as [PlayerProgress, PlayerProgress],
+      players: this.players.map((player) => this.toProgress(player, !viewerId || player.playerId === viewer.playerId)) as [PlayerProgress, PlayerProgress],
       winnerId: this.winnerId,
       problemImage: null,
       myFoundIds: viewer.puzzleIndex < this.puzzles.length ? [...currentFound] : [],
@@ -354,21 +352,61 @@ export class GameMatch {
 
   private bumpVersion(): void { this.stateVersion += 1; }
 
-  private toProgress(player: InternalPlayer): PlayerProgress {
+  private toProgress(player: InternalPlayer, isViewer: boolean): SelfPlayerProgress | OpponentPlayerProgress {
     const foundCount = player.foundIdsByPuzzle[player.puzzleIndex]?.size ?? 0;
-    return {
+    const publicProgress: OpponentPlayerProgress = {
       playerId: player.playerId,
       nickname: player.nickname,
       ready: player.ready,
       loaded: player.loaded,
-      puzzleIndex: player.puzzleIndex,
       completedPuzzleCount: player.puzzleIndex,
       foundCount,
+      connectionStatus: player.connectionStatus,
+      perspective: "OPPONENT",
+    };
+    if (!isViewer) return publicProgress;
+    return {
+      ...publicProgress,
+      perspective: "SELF",
+      puzzleIndex: player.puzzleIndex,
       totalFoundCount: player.puzzleIndex * GAME_CONFIG.differenceCount + foundCount,
       wrongAnswerCount: player.wrongAnswerCount,
       inputLockedUntilMs: player.inputLockedUntilMs,
-      connectionStatus: player.connectionStatus,
     };
+  }
+
+  private validatePuzzle(puzzle: MatchPuzzle): void {
+    if (puzzle.differences.length !== GAME_CONFIG.differenceCount) {
+      throw new GameRuleError("INVALID_PUZZLE", puzzle.id + " 문제의 차이점 수가 올바르지 않습니다.");
+    }
+    const ids = new Set<string>();
+    for (const difference of puzzle.differences) {
+      if (!difference.id || ids.has(difference.id)) {
+        throw new GameRuleError("INVALID_PUZZLE", puzzle.id + " 문제에 비어 있거나 중복된 차이점 ID가 있습니다.");
+      }
+      ids.add(difference.id);
+      if (difference.regions.length !== 1) {
+        throw new GameRuleError("INVALID_PUZZLE", puzzle.id + " 문제의 각 차이점은 정확히 하나의 영역이어야 합니다.");
+      }
+      const region = difference.regions[0]!;
+      if (
+        !Number.isFinite(region.x) || !Number.isFinite(region.y) || !Number.isFinite(region.radius) ||
+        region.radius <= 0 || region.radius > 0.5 ||
+        region.x - region.radius < 0 || region.x + region.radius > 1 ||
+        region.y - region.radius < 0 || region.y + region.radius > 1
+      ) {
+        throw new GameRuleError("INVALID_PUZZLE", puzzle.id + " 문제에 유효하지 않은 정답 영역이 있습니다.");
+      }
+    }
+    for (let left = 0; left < puzzle.differences.length; left += 1) {
+      for (let right = left + 1; right < puzzle.differences.length; right += 1) {
+        const a = puzzle.differences[left]!.regions[0]!;
+        const b = puzzle.differences[right]!.regions[0]!;
+        if (Math.hypot(a.x - b.x, a.y - b.y) < a.radius + b.radius) {
+          throw new GameRuleError("INVALID_PUZZLE", puzzle.id + " 문제의 정답 영역이 서로 겹칩니다.");
+        }
+      }
+    }
   }
 
   private toFoundMarks(puzzle: MatchPuzzle, foundIds: Set<string>): FoundMark[] {

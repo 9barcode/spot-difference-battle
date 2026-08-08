@@ -173,7 +173,7 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
       io.to(player.playerId).emit("game:snapshot", match.snapshot(player.playerId));
     }
     if (match.currentState !== "FINISHED" && match.currentState !== "CANCELLED") {
-      void persistRuntime(match);
+      void persistRuntime(match).catch((error) => app.log.error(error));
     }
   }
 
@@ -185,16 +185,16 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
         : match.serialize();
     const previous = runtimeWrites.get(matchId) ?? Promise.resolve();
     const next = previous
-      .catch(() => undefined)
+      .catch((error) => app.log.error(error))
       .then(async () => {
         if (state) await matchStore.saveActiveMatch(state);
         else await matchStore.deleteActiveMatch(matchId);
-      })
-      .catch((error) => app.log.error(error));
+      });
     runtimeWrites.set(matchId, next);
-    void next.finally(() => {
+    const clearWrite = () => {
       if (runtimeWrites.get(matchId) === next) runtimeWrites.delete(matchId);
-    });
+    };
+    void next.then(clearWrite, clearWrite);
     return next;
   }
 
@@ -210,20 +210,22 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
     finishedMatchCleanupTimers.set(match.matchId, timer);
   }
 
-  async function persistIfFinished(match: GameMatch): Promise<void> {
+  async function persistIfFinished(match: GameMatch): Promise<boolean> {
     if (
       persistedMatches.has(match.matchId) ||
       (match.currentState !== "FINISHED" && match.currentState !== "CANCELLED")
     ) {
-      return;
+      return true;
     }
     try {
       await matchStore.saveMatch(match.snapshot());
       await persistRuntime(match);
       persistedMatches.add(match.matchId);
       scheduleFinishedMatchCleanup(match);
+      return true;
     } catch (error) {
       app.log.error(error);
+      return false;
     }
   }
   function emitGameError(socket: GameSocket, error: unknown): void {
@@ -471,12 +473,18 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
         const match = registry.getForPlayer(matchId, session.playerId);
         assertClientState(match, session.playerId, expectedState, expectedStateVersion, true);
         enforceCooldown("guess");
-        socket.emit(
-          "game:guess-result",
-          match.guess(session.playerId, puzzleId as Parameters<GameMatch["guess"]>[1], point, Date.now()),
+        const versionBeforeGuess = match.version;
+        const result = match.guess(
+          session.playerId,
+          puzzleId as Parameters<GameMatch["guess"]>[1],
+          point,
+          Date.now(),
         );
-        emitSnapshots(match);
-        void persistIfFinished(match);
+        socket.emit("game:guess-result", result);
+        if (match.version !== versionBeforeGuess) {
+          emitSnapshots(match);
+          void persistIfFinished(match);
+        }
       } catch (error) {
         handleActionError(socket, matchId, error);
       }
@@ -523,7 +531,9 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
         if (match.currentState !== "FINISHED" && match.currentState !== "CANCELLED") {
           throw new GameRuleError("MATCH_NOT_FINISHED", "경기 종료 후 신고할 수 있습니다.");
         }
-        await persistIfFinished(match);
+        if (!await persistIfFinished(match)) {
+          throw new Error("MATCH_PERSISTENCE_FAILED");
+        }
         const reportId = await matchStore.createReport({
           matchId,
           reporterPlayerId: session.playerId,

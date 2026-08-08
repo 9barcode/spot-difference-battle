@@ -2,6 +2,7 @@ import type { ClientToServerEvents, GameErrorPayload, GameSnapshot, MatchFoundPa
 import type { AddressInfo } from "node:net";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { io as createClient, type Socket } from "socket.io-client";
+import { InMemoryMatchStore } from "../src/match-store.js";
 import { createGameServer } from "../src/server.js";
 
 type TestSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
@@ -45,7 +46,47 @@ describe("simultaneous game server", () => {
     return socket;
   }
 
-  it("starts both players together, allows independent guesses, and declares the first clear winner", async () => {
+  it("does not accept a report when finished-match cleanup persistence fails", async () => {
+    await app.close();
+    const store = new class extends InMemoryMatchStore {
+      override async deleteActiveMatch(): Promise<void> {
+        throw new Error("DELETE_FAILED");
+      }
+    }();
+    app = await createGameServer({ matchStore: store, inputCooldownMs: 0 });
+    await app.listen({ host: "127.0.0.1", port: 0 });
+
+    const first = await connect();
+    const second = await connect();
+    const firstFound = waitForEvent<MatchFoundPayload>(first, "match:found");
+    const secondFound = waitForEvent<MatchFoundPayload>(second, "match:found");
+    const firstReadySnapshot = waitForState(first, "READY");
+    first.emit("queue:join", { nickname: "first" });
+    second.emit("queue:join", { nickname: "second" });
+    const [firstMatch] = await Promise.all([firstFound, secondFound]);
+    const ready = await firstReadySnapshot;
+    const finished = waitForState(first, "FINISHED");
+    first.emit("game:forfeit", {
+      matchId: firstMatch.matchId,
+      expectedState: ready.state,
+      expectedStateVersion: ready.stateVersion,
+    });
+    const result = await finished;
+    const persistenceError = waitForEvent<GameErrorPayload>(
+      first,
+      "game:error",
+      (error) => error.code === "INTERNAL_ERROR",
+    );
+    first.emit("game:report", {
+      matchId: firstMatch.matchId,
+      expectedState: result.state,
+      expectedStateVersion: result.stateVersion,
+      reason: "SYSTEM_ERROR",
+    });
+    await persistenceError;
+    expect(store.reports.size).toBe(0);
+  });
+  it("keeps a cleared player waiting until timeout or forfeit", async () => {
     const first = await connect();
     const second = await connect();
     const firstFound = waitForEvent<MatchFoundPayload>(first, "match:found");
@@ -87,13 +128,22 @@ describe("simultaneous game server", () => {
     expect(secondProgress.foundMarks).toHaveLength(1);
     expect(firstPlaying.foundMarks).toHaveLength(0);
 
-    const finishedFirst = waitForState(first, "FINISHED");
-    const finishedSecond = waitForState(second, "FINISHED");
-    for (const point of [{ x: 0.31, y: 0.13 }, { x: 0.23, y: 0.66 }, { x: 0.08, y: 0.84 }]) {
+    const exhaustedFirst = waitForEvent<GameSnapshot>(first, "game:snapshot", (snapshot) => snapshot.state === "PLAYING" && snapshot.currentPuzzleId === null);
+    for (const point of [{ x: 0.31, y: 0.13 }, { x: 0.23, y: 0.66 }, { x: 0.1, y: 0.84 }]) {
       first.emit("game:guess", { matchId: firstMatch.matchId, puzzleId: "enchanted-forest", point, ...context });
     }
+    const stillPlaying = await exhaustedFirst;
+    expect(stillPlaying).toMatchObject({ state: "PLAYING", currentPuzzleId: null, winnerId: null });
+
+    const finishedFirst = waitForState(first, "FINISHED");
+    const finishedSecond = waitForState(second, "FINISHED");
+    second.emit("game:forfeit", {
+      matchId: firstMatch.matchId,
+      expectedState: "PLAYING",
+      expectedStateVersion: stillPlaying.stateVersion,
+    });
     const [firstResult, secondResult] = await Promise.all([finishedFirst, finishedSecond]);
-    expect(firstResult).toMatchObject({ winnerId: firstMatch.playerId, endReason: "COMPLETED" });
+    expect(firstResult).toMatchObject({ winnerId: firstMatch.playerId, endReason: "FORFEIT" });
     expect(secondResult.winnerId).toBe(firstMatch.playerId);
   }, 15_000);
 });

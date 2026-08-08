@@ -6,14 +6,7 @@ export const GAME_PUZZLES: readonly MatchPuzzle[] = [
     differences: [
       { id: "forest-smoke", label: "굴뚝 연기", regions: [{ x: 0.31, y: 0.13, radius: 0.11 }] },
       { id: "forest-scarf", label: "토끼 목도리 색", regions: [{ x: 0.23, y: 0.66, radius: 0.075 }] },
-      {
-        id: "forest-glow-mushrooms",
-        label: "빛나는 버섯 색",
-        regions: [
-          { x: 0.08, y: 0.84, radius: 0.1 },
-          { x: 0.91, y: 0.82, radius: 0.1 },
-        ],
-      },
+      { id: "forest-glow-mushrooms", label: "빛나는 버섯 색", regions: [{ x: 0.1, y: 0.84, radius: 0.1 }] },
     ],
   },
   {
