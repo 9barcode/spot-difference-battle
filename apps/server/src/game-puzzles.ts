@@ -19,8 +19,15 @@ export const GAME_PUZZLES: readonly MatchPuzzle[] = [
   },
 ] as const;
 
+// The forest asset currently contains unregistered visual differences (the
+// right mushroom cluster and the bench bird). Keep its definition available
+// for repair and explicit QA, but never include it in normal matchmaking.
+export const ACTIVE_GAME_PUZZLES: readonly MatchPuzzle[] = GAME_PUZZLES.filter(
+  (puzzle) => puzzle.id !== "enchanted-forest",
+);
+
 export function shuffledGamePuzzles(): MatchPuzzle[] {
-  return [...GAME_PUZZLES]
+  return [...ACTIVE_GAME_PUZZLES]
     .map((puzzle) => ({ puzzle, order: Math.random() }))
     .sort((left, right) => left.order - right.order)
     .map(({ puzzle }) => structuredClone(puzzle));
