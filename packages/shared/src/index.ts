@@ -8,7 +8,13 @@ export const GAME_CONFIG = {
   reconnectGraceSeconds: 10,
 } as const;
 
-export const GAME_PUZZLE_IDS = ["enchanted-forest", "underwater-treasure"] as const;
+export const GAME_PUZZLE_IDS = [
+  "cozy-cafe",
+  "enchanted-forest",
+  "underwater-treasure",
+  "cyber-city",
+  "winter-cabin",
+] as const;
 export type GamePuzzleId = (typeof GAME_PUZZLE_IDS)[number];
 
 /**

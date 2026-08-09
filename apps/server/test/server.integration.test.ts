@@ -123,13 +123,13 @@ describe("simultaneous game server", () => {
     const requeueError = waitForEvent<GameErrorPayload>(first, "game:error", (error) => error.code === "ALREADY_IN_MATCH");
     first.emit("queue:join", { nickname: "재매칭시도" });
     await expect(requeueError).resolves.toMatchObject({ code: "ALREADY_IN_MATCH" });
-    second.emit("game:guess", { matchId: firstMatch.matchId, puzzleId: "enchanted-forest", point: { x: 0.31, y: 0.13 }, ...context });
+    second.emit("game:guess", { matchId: firstMatch.matchId, puzzleId: "enchanted-forest", point: { x: 0.31, y: 0.33 }, ...context });
     const secondProgress = await waitForEvent<GameSnapshot>(second, "game:snapshot", (snapshot) => snapshot.players.some((player) => player.playerId === secondMatch.playerId && player.foundCount === 1));
     expect(secondProgress.foundMarks).toHaveLength(1);
     expect(firstPlaying.foundMarks).toHaveLength(0);
 
     const exhaustedFirst = waitForEvent<GameSnapshot>(first, "game:snapshot", (snapshot) => snapshot.state === "PLAYING" && snapshot.currentPuzzleId === null);
-    for (const point of [{ x: 0.31, y: 0.13 }, { x: 0.23, y: 0.66 }, { x: 0.1, y: 0.84 }]) {
+    for (const point of [{ x: 0.31, y: 0.33 }, { x: 0.27, y: 0.78 }, { x: 0.79, y: 0.17 }]) {
       first.emit("game:guess", { matchId: firstMatch.matchId, puzzleId: "enchanted-forest", point, ...context });
     }
     const stillPlaying = await exhaustedFirst;

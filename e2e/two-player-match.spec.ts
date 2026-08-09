@@ -13,10 +13,18 @@ async function clickNormalized(page: Page, x: number, y: number) {
   const image = page.getByRole("img", { name: /변경본$/ });
   const box = await image.boundingBox();
   if (!box) throw new Error("변경본 이미지 좌표를 찾을 수 없습니다.");
-  await page.mouse.click(box.x + box.width * x, box.y + box.height * y);
+  await image.click({ position: { x: box.width * x, y: box.height * y } });
   await page.waitForTimeout(160);
 }
 
+function pointsForPuzzle(label: string | null): Array<{ x: number; y: number }> {
+  if (label?.includes("카페")) return [{ x: 0.125, y: 0.155 }, { x: 0.52, y: 0.59 }, { x: 0.86, y: 0.8 }];
+  if (label?.includes("마법")) return [{ x: 0.31, y: 0.33 }, { x: 0.27, y: 0.78 }, { x: 0.79, y: 0.17 }];
+  if (label?.includes("바닷속")) return [{ x: 0.39, y: 0.11 }, { x: 0.8, y: 0.22 }, { x: 0.5, y: 0.76 }];
+  if (label?.includes("사이버")) return [{ x: 0.23, y: 0.24 }, { x: 0.75, y: 0.24 }, { x: 0.52, y: 0.69 }];
+  if (label?.includes("겨울")) return [{ x: 0.66, y: 0.12 }, { x: 0.84, y: 0.6 }, { x: 0.51, y: 0.78 }];
+  throw new Error(`등록되지 않은 문제 제목입니다: ${label}`);
+}
 test("a player who clears the deck waits until timeout or forfeit", async ({ browser }) => {
   const first = await createPlayer(browser, "빠른사람", { width: 1280, height: 900 });
   const second = await createPlayer(browser, "도전자", { width: 390, height: 844 });
@@ -46,9 +54,7 @@ test("a player who clears the deck waits until timeout or forfeit", async ({ bro
 
     const heading = first.page.getByTestId("playing-screen").getByRole("heading");
     const firstPuzzle = await heading.textContent();
-    const firstPoints = firstPuzzle?.includes("마법")
-      ? [{ x: 0.31, y: 0.13 }, { x: 0.23, y: 0.66 }, { x: 0.08, y: 0.84 }]
-      : [{ x: 0.34, y: 0.19 }, { x: 0.27, y: 0.76 }, { x: 0.78, y: 0.62 }];
+    const firstPoints = pointsForPuzzle(firstPuzzle);
     const mobileImage = second.page.getByRole("img", { name: /변경본$/ });
     const imageBeforeZoom = await mobileImage.boundingBox();
     await second.page.getByRole("button", { name: "확대" }).click();
@@ -66,17 +72,19 @@ test("a player who clears the deck waits until timeout or forfeit", async ({ bro
     await second.page.mouse.move(boardBox.x + boardBox.width / 2, boardBox.y + boardBox.height / 2 + 120, { steps: 5 });
     await second.page.mouse.up();
     await expect(second.page.getByText("나 0판 · 0/3", { exact: true })).toBeVisible();
+    await second.page.getByRole("button", { name: "원래 크기" }).click();
+    await expect(second.page.getByTestId("zoom-controls")).toContainText("1.0배");
 
     await clickNormalized(second.page, firstPoints[0]!.x, firstPoints[0]!.y);
     await expect(second.page.getByText("나 0판 · 1/3", { exact: true })).toBeVisible();
-    for (const point of firstPoints) await clickNormalized(first.page, point.x, point.y);
-    await expect(heading).not.toHaveText(firstPuzzle ?? "", { timeout: 5_000 });
-
-    const secondPuzzle = await heading.textContent();
-    const secondPoints = secondPuzzle?.includes("마법")
-      ? [{ x: 0.31, y: 0.13 }, { x: 0.23, y: 0.66 }, { x: 0.08, y: 0.84 }]
-      : [{ x: 0.34, y: 0.19 }, { x: 0.27, y: 0.76 }, { x: 0.78, y: 0.62 }];
-    for (const point of secondPoints) await clickNormalized(first.page, point.x, point.y);
+    for (let puzzleIndex = 0; puzzleIndex < 5; puzzleIndex += 1) {
+      const puzzleLabel = await heading.textContent();
+      const points = pointsForPuzzle(puzzleLabel);
+      for (const point of points) await clickNormalized(first.page, point.x, point.y);
+      if (puzzleIndex < 4) {
+        await expect(heading).not.toHaveText(puzzleLabel ?? "", { timeout: 5_000 });
+      }
+    }
 
     await expect(first.page.getByTestId("finished-screen")).not.toBeVisible();
     await expect(first.page.getByTestId("deck-complete-screen")).toContainText("제한시간까지 계속됩니다");

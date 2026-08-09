@@ -1,8 +1,14 @@
 import type { GamePuzzleId } from "@spot-battle/shared";
-import forestOriginal from "@/imports/enchanted-forest.webp";
-import forestModified from "@/imports/enchanted-forest-modified-reference.png";
-import underwaterOriginal from "@/imports/underwater-treasure.webp";
-import underwaterModified from "@/imports/underwater-treasure-modified-reference.png";
+import cafeOriginal from "@/imports/cozy-cafe-original-v2.jpg";
+import cafeModified from "@/imports/cozy-cafe-modified-v2.jpg";
+import forestOriginal from "@/imports/enchanted-forest-original-v2.jpg";
+import forestModified from "@/imports/enchanted-forest-modified-v2.jpg";
+import underwaterOriginal from "@/imports/underwater-treasure-original-v2.jpg";
+import underwaterModified from "@/imports/underwater-treasure-modified-v2.jpg";
+import cityOriginal from "@/imports/cyber-city-original-v2.jpg";
+import cityModified from "@/imports/cyber-city-modified-v2.jpg";
+import winterOriginal from "@/imports/winter-cabin-original.jpg";
+import winterModified from "@/imports/winter-cabin-modified.jpg";
 
 export interface GamePuzzleVisual {
   id: GamePuzzleId;
@@ -13,12 +19,19 @@ export interface GamePuzzleVisual {
 }
 
 export const GAME_PUZZLE_VISUALS: Readonly<Record<GamePuzzleId, GamePuzzleVisual>> = {
+  "cozy-cafe": {
+    id: "cozy-cafe",
+    label: "햇살 좋은 카페",
+    originalSrc: cafeOriginal,
+    modifiedSrc: cafeModified,
+    alt: "꽃병과 고양이가 있는 따뜻한 카페",
+  },
   "enchanted-forest": {
     id: "enchanted-forest",
     label: "마법의 버섯 숲",
     originalSrc: forestOriginal,
     modifiedSrc: forestModified,
-    alt: "버섯집과 토끼가 있는 마법의 숲",
+    alt: "토끼와 버섯집이 있는 마법의 숲",
   },
   "underwater-treasure": {
     id: "underwater-treasure",
@@ -26,6 +39,20 @@ export const GAME_PUZZLE_VISUALS: Readonly<Record<GamePuzzleId, GamePuzzleVisual
     originalSrc: underwaterOriginal,
     modifiedSrc: underwaterModified,
     alt: "거북이와 보물상자가 있는 바닷속",
+  },
+  "cyber-city": {
+    id: "cyber-city",
+    label: "네온 사이버 도시",
+    originalSrc: cityOriginal,
+    modifiedSrc: cityModified,
+    alt: "네온 간판과 사람들이 있는 미래 도시",
+  },
+  "winter-cabin": {
+    id: "winter-cabin",
+    label: "눈 내린 겨울 산장",
+    originalSrc: winterOriginal,
+    modifiedSrc: winterModified,
+    alt: "모닥불과 눈사람이 있는 겨울 산장",
   },
 };
 
