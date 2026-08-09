@@ -68,6 +68,15 @@ pnpm dev
 - 웹: `http://localhost:5173`
 - 서버 상태: `http://localhost:3001/health`
 
+### 같은 Wi-Fi 휴대폰 테스트
+
+1. PC와 휴대폰을 같은 Wi-Fi에 연결한다.
+2. PC PowerShell에서 `ipconfig`로 Wi-Fi 어댑터의 IPv4 주소를 확인한다.
+3. 저장소 루트에서 `pnpm dev`를 실행한다.
+4. 휴대폰에서 `http://<PC의 IPv4 주소>:5173`으로 접속한다.
+
+개발 웹은 접속한 PC 호스트의 `3001` 포트로 API를 자동 연결한다. Windows 방화벽 알림이 나오면 개인 네트워크만 허용한다. 이 기능은 같은 사설망의 개발 테스트용이며 인터넷에 직접 공개하는 용도가 아니다.
+
 검사:
 
 ```powershell

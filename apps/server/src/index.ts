@@ -4,12 +4,11 @@ import {
   GAME_SCENE_IDS,
   type GameSceneId,
 } from "@spot-battle/shared";
+import { resolveWebOrigin } from "./web-origin.js";
 
 const host = process.env.HOST ?? "0.0.0.0";
 const port = Number.parseInt(process.env.PORT ?? "3001", 10);
-const webOrigin =
-  process.env.WEB_ORIGIN?.trim() ||
-  (process.env.NODE_ENV === "production" ? undefined : "http://localhost:5173");
+const webOrigin = resolveWebOrigin(process.env.WEB_ORIGIN, process.env.NODE_ENV);
 const staticRoot = process.env.WEB_ROOT?.trim() || undefined;
 const gameAssetRoot = process.env.GAME_ASSET_ROOT?.trim() || undefined;
 const configuredSceneId = process.env.GAME_SCENE_ID?.trim();

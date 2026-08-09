@@ -16,7 +16,7 @@ import { InMemoryMatchStore, type MatchStore } from "./match-store.js";
 import { GAME_PUZZLES } from "./game-puzzles.js";
 
 export interface GameServerOptions {
-  webOrigin?: string;
+  webOrigin?: string | RegExp;
   /** Built web client directory to serve from the same origin in production. */
   staticRoot?: string;
   /** Directory containing server-side original PNG files for submission validation. */

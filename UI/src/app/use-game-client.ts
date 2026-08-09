@@ -15,11 +15,16 @@ import type {
 import { useCallback, useEffect, useRef, useState } from "react";
 import { io, type Socket } from "socket.io-client";
 import { shouldAcceptGameSnapshot } from "./game-snapshot.js";
+import { resolveServerUrl } from "./server-url.js";
 
 type GameSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 type LobbyPhase = "NICKNAME" | "LOBBY" | "MATCHING" | "IN_GAME";
 
-const SERVER_URL = import.meta.env.VITE_SERVER_URL || (import.meta.env.DEV ? "http://localhost:3001" : window.location.origin);
+const SERVER_URL = resolveServerUrl(
+  import.meta.env.VITE_SERVER_URL,
+  import.meta.env.DEV,
+  window.location.href,
+);
 const NICKNAME_KEY = "spot-battle.nickname";
 const GUEST_TOKEN_KEY = "spot-battle.guest-token";
 

@@ -15,7 +15,7 @@
 pnpm --filter @spot-battle/web dev
 ```
 
-웹과 서버를 함께 실행하려면 `pnpm dev`를 사용한다. 기본 웹 주소는 `http://localhost:5173`이며 서버 주소는 `VITE_SERVER_URL`로 바꿀 수 있다.
+웹과 서버를 함께 실행하려면 `pnpm dev`를 사용한다. 기본 웹 주소는 `http://localhost:5173`이며 서버 주소는 `VITE_SERVER_URL`로 바꿀 수 있다. 개발 모드에서는 LAN에 바인딩하며, 다른 기기가 PC의 사설 IP로 접속하면 API도 같은 PC의 `3001` 포트를 자동 사용한다.
 
 ## 검사
 
