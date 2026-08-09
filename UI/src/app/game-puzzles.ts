@@ -1,14 +1,14 @@
 import type { GamePuzzleId } from "@spot-battle/shared";
-import cafeOriginal from "@/imports/cozy-cafe-original-v2.jpg";
-import cafeModified from "@/imports/cozy-cafe-modified-v2.jpg";
-import forestOriginal from "@/imports/enchanted-forest-original-v2.jpg";
-import forestModified from "@/imports/enchanted-forest-modified-v2.jpg";
-import underwaterOriginal from "@/imports/underwater-treasure-original-v2.jpg";
-import underwaterModified from "@/imports/underwater-treasure-modified-v2.jpg";
-import cityOriginal from "@/imports/cyber-city-original-v2.jpg";
-import cityModified from "@/imports/cyber-city-modified-v2.jpg";
-import winterOriginal from "@/imports/winter-cabin-original.jpg";
-import winterModified from "@/imports/winter-cabin-modified.jpg";
+import cafeOriginal from "@/imports/cozy-cafe-original-v2.webp";
+import cafeModified from "@/imports/cozy-cafe-modified-v2.webp";
+import forestOriginal from "@/imports/enchanted-forest-original-v2.webp";
+import forestModified from "@/imports/enchanted-forest-modified-v2.webp";
+import underwaterOriginal from "@/imports/underwater-treasure-original-v2.webp";
+import underwaterModified from "@/imports/underwater-treasure-modified-v2.webp";
+import cityOriginal from "@/imports/cyber-city-original-v2.webp";
+import cityModified from "@/imports/cyber-city-modified-v2.webp";
+import winterOriginal from "@/imports/winter-cabin-original.webp";
+import winterModified from "@/imports/winter-cabin-modified.webp";
 
 export interface GamePuzzleVisual {
   id: GamePuzzleId;
@@ -56,12 +56,22 @@ export const GAME_PUZZLE_VISUALS: Readonly<Record<GamePuzzleId, GamePuzzleVisual
   },
 };
 
+const preloadCache = new Map<GamePuzzleId, Promise<void>>();
+
 export function preloadPuzzle(puzzleId: GamePuzzleId): Promise<void> {
+  const cached = preloadCache.get(puzzleId);
+  if (cached) return cached;
+
   const puzzle = GAME_PUZZLE_VISUALS[puzzleId];
-  return Promise.all([puzzle.originalSrc, puzzle.modifiedSrc].map((src) => new Promise<void>((resolve, reject) => {
+  const loading = Promise.all([puzzle.originalSrc, puzzle.modifiedSrc].map((src) => new Promise<void>((resolve, reject) => {
     const image = new Image();
     image.onload = () => resolve();
     image.onerror = () => reject(new Error(`${puzzle.label} 이미지를 불러오지 못했습니다.`));
     image.src = src;
-  }))).then(() => undefined);
+  }))).then(() => undefined).catch((error: unknown) => {
+    preloadCache.delete(puzzleId);
+    throw error;
+  });
+  preloadCache.set(puzzleId, loading);
+  return loading;
 }
