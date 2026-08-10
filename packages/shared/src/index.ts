@@ -1,3 +1,15 @@
+import type { GamePuzzleId } from "./puzzle-asset-manifest.js";
+
+export {
+  GAME_PUZZLE_ASSET_MANIFEST,
+  GAME_PUZZLE_IDS,
+  type GamePuzzleId,
+  type PuzzleAssetFileMetadata,
+  type PuzzleAssetMetadata,
+  type PuzzleDifficulty,
+  type PuzzleRightsStatus,
+} from "./puzzle-asset-manifest.js";
+
 export const GAME_CONFIG = {
   differenceCount: 3,
   gameDurationSeconds: 180,
@@ -7,15 +19,6 @@ export const GAME_CONFIG = {
   wrongAnswerLockSeconds: 1,
   reconnectGraceSeconds: 10,
 } as const;
-
-export const GAME_PUZZLE_IDS = [
-  "cozy-cafe",
-  "enchanted-forest",
-  "underwater-treasure",
-  "cyber-city",
-  "winter-cabin",
-] as const;
-export type GamePuzzleId = (typeof GAME_PUZZLE_IDS)[number];
 
 /**
  * 서버와 웹이 공통으로 아는 장면 식별자다.

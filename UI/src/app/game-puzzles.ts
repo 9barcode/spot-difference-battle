@@ -1,4 +1,8 @@
-import type { GamePuzzleId } from "@spot-battle/shared";
+import {
+  GAME_PUZZLE_ASSET_MANIFEST,
+  type GamePuzzleId,
+  type PuzzleAssetMetadata,
+} from "@spot-battle/shared";
 import cafeOriginal from "@/imports/cozy-cafe-original-v2.webp";
 import cafeModified from "@/imports/cozy-cafe-modified-v2.webp";
 import forestOriginal from "@/imports/enchanted-forest-original-v2.webp";
@@ -12,6 +16,7 @@ import winterModified from "@/imports/winter-cabin-modified.webp";
 
 export interface GamePuzzleVisual {
   id: GamePuzzleId;
+  metadata: PuzzleAssetMetadata;
   label: string;
   originalSrc: string;
   modifiedSrc: string;
@@ -21,6 +26,7 @@ export interface GamePuzzleVisual {
 export const GAME_PUZZLE_VISUALS: Readonly<Record<GamePuzzleId, GamePuzzleVisual>> = {
   "cozy-cafe": {
     id: "cozy-cafe",
+    metadata: GAME_PUZZLE_ASSET_MANIFEST["cozy-cafe"],
     label: "햇살 좋은 카페",
     originalSrc: cafeOriginal,
     modifiedSrc: cafeModified,
@@ -28,6 +34,7 @@ export const GAME_PUZZLE_VISUALS: Readonly<Record<GamePuzzleId, GamePuzzleVisual
   },
   "enchanted-forest": {
     id: "enchanted-forest",
+    metadata: GAME_PUZZLE_ASSET_MANIFEST["enchanted-forest"],
     label: "마법의 버섯 숲",
     originalSrc: forestOriginal,
     modifiedSrc: forestModified,
@@ -35,6 +42,7 @@ export const GAME_PUZZLE_VISUALS: Readonly<Record<GamePuzzleId, GamePuzzleVisual
   },
   "underwater-treasure": {
     id: "underwater-treasure",
+    metadata: GAME_PUZZLE_ASSET_MANIFEST["underwater-treasure"],
     label: "바닷속 보물",
     originalSrc: underwaterOriginal,
     modifiedSrc: underwaterModified,
@@ -42,6 +50,7 @@ export const GAME_PUZZLE_VISUALS: Readonly<Record<GamePuzzleId, GamePuzzleVisual
   },
   "cyber-city": {
     id: "cyber-city",
+    metadata: GAME_PUZZLE_ASSET_MANIFEST["cyber-city"],
     label: "네온 사이버 도시",
     originalSrc: cityOriginal,
     modifiedSrc: cityModified,
@@ -49,6 +58,7 @@ export const GAME_PUZZLE_VISUALS: Readonly<Record<GamePuzzleId, GamePuzzleVisual
   },
   "winter-cabin": {
     id: "winter-cabin",
+    metadata: GAME_PUZZLE_ASSET_MANIFEST["winter-cabin"],
     label: "눈 내린 겨울 산장",
     originalSrc: winterOriginal,
     modifiedSrc: winterModified,
