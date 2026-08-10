@@ -36,6 +36,7 @@ export interface PuzzleDifference {
 
 export interface MatchPuzzle {
   id: GamePuzzleId;
+  assetVersion: string;
   differences: PuzzleDifference[];
 }
 
@@ -171,12 +172,16 @@ export class GameMatch {
     }
   }
 
-  markLoaded(playerId: string, puzzleId: GamePuzzleId, nowMs: number): void {
+  markLoaded(playerId: string, puzzleId: GamePuzzleId, puzzleVersion: string, nowMs: number): void {
     this.requireState("PRELOADING");
     this.requireBeforeDeadline(nowMs);
     const player = this.getPlayer(playerId);
-    if (puzzleId !== this.puzzles[0]?.id) {
+    const expectedPuzzle = this.puzzles[0];
+    if (puzzleId !== expectedPuzzle?.id) {
       throw new GameRuleError("WRONG_PUZZLE", "현재 경기의 첫 문제가 아닙니다.");
+    }
+    if (puzzleVersion !== expectedPuzzle.assetVersion) {
+      throw new GameRuleError("PUZZLE_VERSION_MISMATCH", "문제 이미지 버전이 서버와 다릅니다. 새로고침 후 다시 시도해주세요.");
     }
     if (player.loaded) return;
     player.loaded = true;
@@ -266,7 +271,9 @@ export class GameMatch {
       stateVersion: this.stateVersion,
       imageId: currentPuzzle.id as GameSceneId,
       currentPuzzleId: viewer.puzzleIndex < this.puzzles.length ? currentPuzzle.id : null,
+      currentPuzzleVersion: viewer.puzzleIndex < this.puzzles.length ? currentPuzzle.assetVersion : null,
       nextPuzzleId: nextPuzzle?.id ?? null,
+      nextPuzzleVersion: nextPuzzle?.assetVersion ?? null,
       totalPuzzleCount: this.puzzles.length,
       deadlineMs: this.deadlineMs,
       players: this.players.map((player) => this.toProgress(player, !viewerId || player.playerId === viewer.playerId)) as [PlayerProgress, PlayerProgress],
@@ -376,6 +383,9 @@ export class GameMatch {
   }
 
   private validatePuzzle(puzzle: MatchPuzzle): void {
+    if (typeof puzzle.assetVersion !== "string" || !puzzle.assetVersion.trim()) {
+      throw new GameRuleError("INVALID_PUZZLE", puzzle.id + " 문제의 에셋 버전이 없습니다.");
+    }
     if (puzzle.differences.length !== GAME_CONFIG.differenceCount) {
       throw new GameRuleError("INVALID_PUZZLE", puzzle.id + " 문제의 차이점 수가 올바르지 않습니다.");
     }

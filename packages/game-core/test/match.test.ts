@@ -2,12 +2,12 @@ import { describe, expect, it } from "vitest";
 import { GameMatch, GameRuleError, type MatchPuzzle } from "../src/index.js";
 
 const puzzles: MatchPuzzle[] = [
-  { id: "enchanted-forest", differences: [
+  { id: "enchanted-forest", assetVersion: "forest-v1", differences: [
     { id: "a", label: "A", regions: [{ x: 0.2, y: 0.2, radius: 0.05 }] },
     { id: "b", label: "B", regions: [{ x: 0.5, y: 0.5, radius: 0.05 }] },
     { id: "c", label: "C", regions: [{ x: 0.8, y: 0.8, radius: 0.05 }] },
   ] },
-  { id: "underwater-treasure", differences: [
+  { id: "underwater-treasure", assetVersion: "underwater-v1", differences: [
     { id: "d", label: "D", regions: [{ x: 0.2, y: 0.8, radius: 0.05 }] },
     { id: "e", label: "E", regions: [{ x: 0.5, y: 0.2, radius: 0.05 }] },
     { id: "f", label: "F", regions: [{ x: 0.8, y: 0.5, radius: 0.05 }] },
@@ -25,8 +25,8 @@ function startPlaying(match: GameMatch, now = 1_000) {
   match.markReady("p1", now);
   match.markReady("p2", now);
   expect(match.currentState).toBe("PRELOADING");
-  match.markLoaded("p1", "enchanted-forest", now + 100);
-  match.markLoaded("p2", "enchanted-forest", now + 100);
+  match.markLoaded("p1", "enchanted-forest", "forest-v1", now + 100);
+  match.markLoaded("p2", "enchanted-forest", "forest-v1", now + 100);
   expect(match.currentState).toBe("COUNTDOWN");
   match.expire(now + 3_100);
   expect(match.currentState).toBe("PLAYING");
@@ -50,16 +50,24 @@ describe("GameMatch simultaneous race", () => {
     ], 1_000);
     match.markReady("p1", 1_100);
     match.markReady("p2", 1_100);
-    expect(() => match.markLoaded("p1", "enchanted-forest", 16_100)).toThrowError(GameRuleError);
+    expect(() => match.markLoaded("p1", "enchanted-forest", "forest-v1", 16_100)).toThrowError(GameRuleError);
     expect(match.snapshot("p1")).toMatchObject({ state: "CANCELLED", endReason: "CANCELLED" });
+  });
+  it("rejects a client that loaded a different puzzle asset version", () => {
+    const match = createMatch();
+    match.markReady("p1", 1_000);
+    match.markReady("p2", 1_000);
+    expect(() => match.markLoaded("p1", "enchanted-forest", "stale-version", 1_100))
+      .toThrowError(/버전이 서버와 다릅니다/);
+    expect(match.currentState).toBe("PRELOADING");
   });
   it("starts only after both players load the same first puzzle", () => {
     const match = createMatch();
     match.markReady("p1", 1_000);
     match.markReady("p2", 1_000);
-    match.markLoaded("p1", "enchanted-forest", 1_100);
+    match.markLoaded("p1", "enchanted-forest", "forest-v1", 1_100);
     expect(match.currentState).toBe("PRELOADING");
-    match.markLoaded("p2", "enchanted-forest", 1_100);
+    match.markLoaded("p2", "enchanted-forest", "forest-v1", 1_100);
     expect(match.currentState).toBe("COUNTDOWN");
   });
 
@@ -72,6 +80,7 @@ describe("GameMatch simultaneous race", () => {
     expect(completed).toMatchObject({ correct: true, puzzleCompleted: true, currentPuzzleId: "underwater-treasure" });
     expect(match.snapshot("p1").players[0]).toMatchObject({ completedPuzzleCount: 1, foundCount: 0, totalFoundCount: 3 });
     expect(match.snapshot("p2").currentPuzzleId).toBe("enchanted-forest");
+    expect(match.snapshot("p2")).toMatchObject({ currentPuzzleVersion: "forest-v1", nextPuzzleVersion: "underwater-v1" });
   });
 
   it("waits for the time limit after a player clears every prepared puzzle", () => {
@@ -134,6 +143,7 @@ describe("GameMatch simultaneous race", () => {
   it("rejects invalid puzzle identities and answer regions", () => {
     const invalidPuzzles: MatchPuzzle[] = [{
       id: "enchanted-forest",
+      assetVersion: "forest-v1",
       differences: [
         { id: "same", label: "A", regions: [{ x: 0.2, y: 0.2, radius: 0.05 }] },
         { id: "same", label: "B", regions: [{ x: 0.5, y: 0.5, radius: 0.05 }] },

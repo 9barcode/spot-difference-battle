@@ -1,8 +1,10 @@
 import type { MatchPuzzle } from "@spot-battle/game-core";
+import { GAME_PUZZLE_ASSET_MANIFEST } from "@spot-battle/shared";
 
 export const GAME_PUZZLES: readonly MatchPuzzle[] = [
   {
     id: "cozy-cafe",
+    assetVersion: GAME_PUZZLE_ASSET_MANIFEST["cozy-cafe"].version,
     differences: [
       { id: "cafe-clock-hands", label: "벽시계 바늘", regions: [{ x: 0.125, y: 0.155, radius: 0.09 }] },
       { id: "cafe-bouquet", label: "테이블 꽃", regions: [{ x: 0.52, y: 0.59, radius: 0.14 }] },
@@ -11,6 +13,7 @@ export const GAME_PUZZLES: readonly MatchPuzzle[] = [
   },
   {
     id: "enchanted-forest",
+    assetVersion: GAME_PUZZLE_ASSET_MANIFEST["enchanted-forest"].version,
     differences: [
       { id: "forest-lantern", label: "매달린 등불", regions: [{ x: 0.31, y: 0.33, radius: 0.13 }] },
       { id: "forest-scarf", label: "토끼 목도리", regions: [{ x: 0.27, y: 0.78, radius: 0.08 }] },
@@ -19,6 +22,7 @@ export const GAME_PUZZLES: readonly MatchPuzzle[] = [
   },
   {
     id: "underwater-treasure",
+    assetVersion: GAME_PUZZLE_ASSET_MANIFEST["underwater-treasure"].version,
     differences: [
       { id: "underwater-turtle-hat", label: "거북이 모자", regions: [{ x: 0.39, y: 0.11, radius: 0.1 }] },
       { id: "underwater-jellyfish", label: "해파리 색", regions: [{ x: 0.8, y: 0.22, radius: 0.14 }] },
@@ -27,6 +31,7 @@ export const GAME_PUZZLES: readonly MatchPuzzle[] = [
   },
   {
     id: "cyber-city",
+    assetVersion: GAME_PUZZLE_ASSET_MANIFEST["cyber-city"].version,
     differences: [
       { id: "city-neon-sign", label: "대형 네온 간판", regions: [{ x: 0.23, y: 0.24, radius: 0.16 }] },
       { id: "city-flying-car", label: "하늘의 자동차", regions: [{ x: 0.75, y: 0.24, radius: 0.15 }] },
@@ -35,6 +40,7 @@ export const GAME_PUZZLES: readonly MatchPuzzle[] = [
   },
   {
     id: "winter-cabin",
+    assetVersion: GAME_PUZZLE_ASSET_MANIFEST["winter-cabin"].version,
     differences: [
       { id: "winter-chimney-smoke", label: "굴뚝 연기", regions: [{ x: 0.66, y: 0.12, radius: 0.1 }] },
       { id: "winter-snowman-hat", label: "눈사람 모자", regions: [{ x: 0.84, y: 0.6, radius: 0.11 }] },

@@ -103,10 +103,13 @@ describe("simultaneous game server", () => {
     const [firstLoad, secondLoad] = await Promise.all([firstPreloading, secondPreloading]);
     expect(firstLoad.currentPuzzleId).toBe("enchanted-forest");
 
+    const versionError = waitForEvent<GameErrorPayload>(first, "game:error", (error) => error.code === "PUZZLE_VERSION_MISMATCH");
+    first.emit("game:loaded", { matchId: firstMatch.matchId, puzzleId: "enchanted-forest", puzzleVersion: "stale-version" });
+    await expect(versionError).resolves.toMatchObject({ code: "PUZZLE_VERSION_MISMATCH" });
     const firstCountdown = waitForState(first, "COUNTDOWN");
     const secondCountdown = waitForState(second, "COUNTDOWN");
-    first.emit("game:loaded", { matchId: firstMatch.matchId, puzzleId: "enchanted-forest" });
-    second.emit("game:loaded", { matchId: firstMatch.matchId, puzzleId: "enchanted-forest" });
+    first.emit("game:loaded", { matchId: firstMatch.matchId, puzzleId: "enchanted-forest", puzzleVersion: firstLoad.currentPuzzleVersion! });
+    second.emit("game:loaded", { matchId: firstMatch.matchId, puzzleId: "enchanted-forest", puzzleVersion: secondLoad.currentPuzzleVersion! });
     await Promise.all([firstCountdown, secondCountdown]);
 
     const [firstPlaying, secondPlaying] = await Promise.all([waitForState(first, "PLAYING"), waitForState(second, "PLAYING")]);

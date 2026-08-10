@@ -1,7 +1,7 @@
 ﻿# 스테이징 배포
 
 > 문서 상태: CURRENT
-> 기준일: 2026-08-03
+> 기준일: 2026-08-11
 
 ## 구성
 
@@ -11,7 +11,7 @@
 - 상태 확인: `GET /health`
 - 영속 저장소: PostgreSQL
 - 기본 리전: Singapore
-- 서버 검증용 원본: 컨테이너의 `/app/game-assets`
+- 활성 문제 이미지: 웹 정적 빌드에 포함된 버전 WebP; `/app/game-assets`는 구형 제출 검증 호환용
 - 배포 정의: 루트의 `render.yaml`
 
 ## Render 테스트 배포
@@ -39,7 +39,7 @@ docker build -t spot-difference-battle:staging .
 docker run --rm -p 3001:3001 spot-difference-battle:staging
 ```
 
-브라우저에서 `http://localhost:3001`과 `http://localhost:3001/health`를 확인합니다. PostgreSQL 복구까지 확인하려면 `DATABASE_URL`을 컨테이너에 별도로 전달합니다.
+브라우저에서 `http://localhost:3001`과 `http://localhost:3001/health`를 확인합니다. PostgreSQL 복구까지 확인하려면 `DATABASE_URL`을 컨테이너에 별도로 전달합니다. 배포 시작 명령에서 마이그레이션을 실행해 `004_puzzle_manifest.sql`이 적용됐는지 확인합니다.
 
 ## 롤백
 

@@ -10,7 +10,9 @@ const snapshot: GameSnapshot = {
   stateVersion: 10,
   imageId: "enchanted-forest",
   currentPuzzleId: null,
+  currentPuzzleVersion: null,
   nextPuzzleId: null,
+  nextPuzzleVersion: null,
   totalPuzzleCount: 2,
   deadlineMs: null,
   players: [
@@ -29,10 +31,16 @@ const snapshot: GameSnapshot = {
 describe("InMemoryMatchStore", () => {
   it("stores a completed match only once", async () => {
     const store = new InMemoryMatchStore();
-    await store.saveMatch(snapshot);
-    await store.saveMatch({ ...snapshot, stateVersion: 99 });
+    const match = new GameMatch(snapshot.matchId, GAME_PUZZLES, [
+      { playerId: snapshot.players[0].playerId, nickname: "첫째" },
+      { playerId: snapshot.players[1].playerId, nickname: "둘째" },
+    ]);
+    const state = match.serialize();
+    await store.saveMatch(snapshot, state);
+    await store.saveMatch({ ...snapshot, stateVersion: 99 }, state);
     expect(store.matches.size).toBe(1);
     expect(store.matches.get(snapshot.matchId)?.stateVersion).toBe(10);
+    expect(store.completedMatchStates.get(snapshot.matchId)?.puzzles).toEqual(state.puzzles);
   });
 
   it("rejects duplicate reports", async () => {

@@ -218,7 +218,7 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
       return true;
     }
     try {
-      await matchStore.saveMatch(match.snapshot());
+      await matchStore.saveMatch(match.snapshot(), match.serialize());
       await persistRuntime(match);
       persistedMatches.add(match.matchId);
       scheduleFinishedMatchCleanup(match);
@@ -455,8 +455,9 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
       try {
         matchId = requireStringField(payload, "matchId");
         const puzzleId = requireStringField(payload, "puzzleId");
+        const puzzleVersion = requireStringField(payload, "puzzleVersion");
         const match = registry.getForPlayer(matchId, session.playerId);
-        match.markLoaded(session.playerId, puzzleId as Parameters<GameMatch["markLoaded"]>[1], Date.now());
+        match.markLoaded(session.playerId, puzzleId as Parameters<GameMatch["markLoaded"]>[1], puzzleVersion, Date.now());
         emitSnapshots(match);
       } catch (error) {
         handleActionError(socket, matchId, error);

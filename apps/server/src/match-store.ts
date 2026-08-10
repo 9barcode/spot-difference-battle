@@ -17,13 +17,14 @@ export interface MatchStore {
   loadActiveMatches(): Promise<PersistedMatchState[]>;
   saveActiveMatch(state: PersistedMatchState): Promise<void>;
   deleteActiveMatch(matchId: string): Promise<void>;
-  saveMatch(snapshot: GameSnapshot): Promise<void>;
+  saveMatch(snapshot: GameSnapshot, state: PersistedMatchState): Promise<void>;
   createReport(input: ReportInput): Promise<string>;
   close(): Promise<void>;
 }
 
 export class InMemoryMatchStore implements MatchStore {
   readonly matches = new Map<string, GameSnapshot>();
+  readonly completedMatchStates = new Map<string, PersistedMatchState>();
   readonly reports = new Map<string, ReportInput>();
   readonly guests = new Map<string, { guestToken: string; nickname: string | null }>();
   readonly activeMatches = new Map<string, PersistedMatchState>();
@@ -59,8 +60,10 @@ export class InMemoryMatchStore implements MatchStore {
     });
   }
 
-  async saveMatch(snapshot: GameSnapshot): Promise<void> {
-    if (!this.matches.has(snapshot.matchId)) this.matches.set(snapshot.matchId, structuredClone(snapshot));
+  async saveMatch(snapshot: GameSnapshot, state: PersistedMatchState): Promise<void> {
+    if (this.matches.has(snapshot.matchId)) return;
+    this.matches.set(snapshot.matchId, structuredClone(snapshot));
+    this.completedMatchStates.set(snapshot.matchId, structuredClone(state));
   }
 
   async createReport(input: ReportInput): Promise<string> {
@@ -144,25 +147,26 @@ export class PostgresMatchStore implements MatchStore {
     );
   }
 
-  async saveMatch(snapshot: GameSnapshot): Promise<void> {
+  async saveMatch(snapshot: GameSnapshot, state: PersistedMatchState): Promise<void> {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
       const inserted = await client.query(
-        `INSERT INTO matches (id, image_id, winner_player_id, end_reason, state_version, ended_at)
-         VALUES ($1, $2, $3, $4, $5, NOW())
+        `INSERT INTO matches (id, image_id, winner_player_id, end_reason, state_version, puzzle_manifest, ended_at)
+         VALUES ($1, $2, $3, $4, $5, $6::jsonb, NOW())
          ON CONFLICT (id) DO NOTHING
          RETURNING id`,
         [
           snapshot.matchId,
-          snapshot.imageId,
+          state.puzzles[0]?.id ?? "unknown",
           snapshot.winnerId,
           snapshot.endReason,
           snapshot.stateVersion,
+          JSON.stringify(state.puzzles),
         ],
       );
       if (inserted.rowCount) {
-        for (const player of snapshot.players) {
+        for (const player of state.players) {
           await client.query(
             `INSERT INTO match_players
              (match_id, player_id, nickname, found_count, wrong_answer_count, hints_used, connection_status)
@@ -171,7 +175,7 @@ export class PostgresMatchStore implements MatchStore {
               snapshot.matchId,
               player.playerId,
               player.nickname,
-              player.totalFoundCount,
+              player.foundIdsByPuzzle.reduce((total, ids) => total + ids.length, 0),
               player.wrongAnswerCount,
               0,
               player.connectionStatus,

@@ -259,7 +259,9 @@ export interface GameSnapshot {
   stateVersion: number;
   imageId: GameSceneId;
   currentPuzzleId: GamePuzzleId | null;
+  currentPuzzleVersion: string | null;
   nextPuzzleId: GamePuzzleId | null;
+  nextPuzzleVersion: string | null;
   totalPuzzleCount: number;
   deadlineMs: number | null;
   players: [PlayerProgress, PlayerProgress];
@@ -330,7 +332,7 @@ export interface ClientToServerEvents {
   "queue:join": (payload: { nickname: string }) => void;
   "queue:leave": () => void;
   "game:ready": (payload: { matchId: string }) => void;
-  "game:loaded": (payload: { matchId: string; puzzleId: GamePuzzleId }) => void;
+  "game:loaded": (payload: { matchId: string; puzzleId: GamePuzzleId; puzzleVersion: string }) => void;
   "game:submit": (
     payload: GameActionContext & {
       matchId: string;

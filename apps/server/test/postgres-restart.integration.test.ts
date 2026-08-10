@@ -28,8 +28,8 @@ describeDatabase("PostgreSQL restart recovery", () => {
       ], 1_000);
       match.markReady(firstId, 1_100);
       match.markReady(secondId, 1_100);
-      match.markLoaded(firstId, GAME_PUZZLES[0]!.id, 1_200);
-      match.markLoaded(secondId, GAME_PUZZLES[0]!.id, 1_200);
+      match.markLoaded(firstId, GAME_PUZZLES[0]!.id, GAME_PUZZLES[0]!.assetVersion, 1_200);
+      match.markLoaded(secondId, GAME_PUZZLES[0]!.id, GAME_PUZZLES[0]!.assetVersion, 1_200);
       match.expire(4_200);
       match.guess(firstId, GAME_PUZZLES[0]!.id, GAME_PUZZLES[0]!.differences[0]!.regions[0]!, 4_300);
       const before = match.serialize();
@@ -59,6 +59,49 @@ describeDatabase("PostgreSQL restart recovery", () => {
       if (secondStore) await secondStore.close();
       await pool.query("DELETE FROM active_matches WHERE match_id = $1", [matchId]);
       await pool.query("DELETE FROM guest_sessions WHERE player_id = ANY($1::uuid[])", [[firstId, secondId]]);
+      await pool.end();
+    }
+  });
+  it("stores the exact puzzle manifest and private player totals for audit", async () => {
+    const matchId = randomUUID();
+    const firstId = randomUUID();
+    const secondId = randomUUID();
+    const store = new PostgresMatchStore(databaseUrl!);
+    const pool = new Pool({ connectionString: databaseUrl });
+
+    try {
+      const match = new GameMatch(matchId, [GAME_PUZZLES[0]!], [
+        { playerId: firstId, nickname: "감사첫째" },
+        { playerId: secondId, nickname: "감사둘째" },
+      ], 1_000);
+      match.markReady(firstId, 1_100);
+      match.markReady(secondId, 1_100);
+      match.markLoaded(firstId, GAME_PUZZLES[0]!.id, GAME_PUZZLES[0]!.assetVersion, 1_200);
+      match.markLoaded(secondId, GAME_PUZZLES[0]!.id, GAME_PUZZLES[0]!.assetVersion, 1_200);
+      match.expire(4_200);
+      match.guess(firstId, GAME_PUZZLES[0]!.id, GAME_PUZZLES[0]!.differences[0]!.regions[0]!, 4_300);
+      match.guess(secondId, GAME_PUZZLES[0]!.id, { x: 0.95, y: 0.95 }, 4_300);
+      match.forfeit(secondId);
+      const state = match.serialize();
+
+      await store.saveMatch(match.snapshot(firstId), state);
+
+      const savedMatch = await pool.query<{ puzzle_manifest: typeof state.puzzles }>(
+        "SELECT puzzle_manifest FROM matches WHERE id = $1",
+        [matchId],
+      );
+      expect(savedMatch.rows[0]?.puzzle_manifest).toEqual(state.puzzles);
+      const savedPlayers = await pool.query<{ player_id: string; found_count: number; wrong_answer_count: number }>(
+        "SELECT player_id, found_count, wrong_answer_count FROM match_players WHERE match_id = $1 ORDER BY player_id",
+        [matchId],
+      );
+      expect(savedPlayers.rows).toEqual(expect.arrayContaining([
+        { player_id: firstId, found_count: 1, wrong_answer_count: 0 },
+        { player_id: secondId, found_count: 0, wrong_answer_count: 1 },
+      ]));
+    } finally {
+      await store.close();
+      await pool.query("DELETE FROM matches WHERE id = $1", [matchId]);
       await pool.end();
     }
   });

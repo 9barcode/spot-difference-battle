@@ -1,7 +1,7 @@
 # 게임 상태
 
 > 문서 상태: CURRENT
-> 기준일: 2026-08-05
+> 기준일: 2026-08-11
 > 승패와 수치는 `GAME_RULES.md`를 따른다.
 
 ## 1. 상태
@@ -11,12 +11,12 @@
 | `LOBBY` | 닉네임 설정과 대전 진입 | 매칭 요청 |
 | `MATCHING` | 상대 검색 | 두 명 매칭 또는 취소 |
 | `READY` | 양쪽 참가와 준비 확인 | 양쪽 준비 완료 또는 30초 시간초과 |
-| `PRELOADING` | 문제 순서 확정과 이미지 사전 로드 | 양쪽 로드 완료 또는 실패 |
+| `PRELOADING` | 문제 순서·버전 확정과 이미지 사전 로드 | 양쪽이 같은 첫 문제 버전 로드 완료 또는 실패 |
 | `COUNTDOWN` | 문제를 가린 3초 시작 대기 | 서버 시작 시각 도달 |
 | `PLAYING` | 양쪽이 독립적으로 차이를 찾고 다음 문제로 이동 | 제한시간, 기권 또는 기술적 오류 |
 | `FINISHED` | 최종 점수와 승패 공개 | 로비 이동 |
 
-정상 흐름은 `LOBBY → MATCHING → READY → PRELOADING → COUNTDOWN → PLAYING → FINISHED`다. 기존 `EDITING`, `SWAPPING`, `FINDING`은 제거 대상이다.
+정상 흐름은 `LOBBY → MATCHING → READY → PRELOADING → COUNTDOWN → PLAYING → FINISHED`다. 기존 `EDITING`, `SWAPPING`, `FINDING` 호환 값은 현재 매치가 생성하거나 전이하지 않으며 실행 경로 밖에 격리돼 있다.
 
 ## 2. 입력 권한
 
@@ -34,7 +34,7 @@
 
 ## 3. 플레이어별 진행
 
-- 현재 문제 인덱스와 `pairId`
+- 현재 문제 인덱스와 `pairId`·에셋 버전
 - 현재 문제에서 발견한 정답 ID
 - 완료 문제 수와 총 발견 수
 - 오답 수와 입력 잠금 종료 시각

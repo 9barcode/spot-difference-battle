@@ -1,3 +1,4 @@
+import { GAME_PUZZLE_ASSET_MANIFEST } from "@spot-battle/shared";
 import type {
   AnswerRegion,
   ClientToServerEvents,
@@ -117,7 +118,11 @@ export function useGameClient() {
     },
     cancelMatching: () => socketRef.current?.emit("queue:leave"),
     ready: () => match && socketRef.current?.emit("game:ready", { matchId: match.matchId }),
-    loaded: (puzzleId: GamePuzzleId) => match && socketRef.current?.emit("game:loaded", { matchId: match.matchId, puzzleId }),
+    loaded: (puzzleId: GamePuzzleId) => match && socketRef.current?.emit("game:loaded", {
+      matchId: match.matchId,
+      puzzleId,
+      puzzleVersion: GAME_PUZZLE_ASSET_MANIFEST[puzzleId].version,
+    }),
     guess: (puzzleId: GamePuzzleId, point: NormalizedPoint) => {
       const context = actionContext();
       if (match && context) socketRef.current?.emit("game:guess", { matchId: match.matchId, puzzleId, point, ...context });
