@@ -10,18 +10,18 @@ import {
 interface EditingMatch {
   firstContext: BrowserContext;
   secondContext: BrowserContext;
-  creator: Page;
-  finder: Page;
+  first: Page;
+  second: Page;
 }
 
 async function enterEditingMatch(
   browser: Browser,
   nicknameSuffix: string,
-  creatorOptions: BrowserContextOptions = {},
-  finderOptions: BrowserContextOptions = {},
+  firstOptions: BrowserContextOptions = {},
+  secondOptions: BrowserContextOptions = {},
 ): Promise<EditingMatch> {
-  const firstContext = await browser.newContext(creatorOptions);
-  const secondContext = await browser.newContext(finderOptions);
+  const firstContext = await browser.newContext(firstOptions);
+  const secondContext = await browser.newContext(secondOptions);
   const first = await firstContext.newPage();
   const second = await secondContext.newPage();
 
@@ -49,22 +49,17 @@ async function enterEditingMatch(
     expect(second.getByTestId("ready-screen")).toBeVisible(),
   ]);
 
-  // 네트워크 전달 순서가 바뀌어도 실제 서버가 부여한 역할을 기준으로 테스트한다.
-  const firstIsCreator = await first.getByText("내 역할: 문제 제작자").isVisible();
-  const creator = firstIsCreator ? first : second;
-  const finder = firstIsCreator ? second : first;
-
   await Promise.all([
-    creator.getByTestId("ready-button").click(),
-    finder.getByTestId("ready-button").click(),
+    first.getByTestId("ready-button").click(),
+    second.getByTestId("ready-button").click(),
   ]);
 
   await Promise.all([
-    expect(creator.getByTestId("editing-screen")).toBeVisible(),
-    expect(finder.getByTestId("editing-screen")).toBeVisible(),
+    expect(first.getByTestId("editing-screen")).toBeVisible(),
+    expect(second.getByTestId("editing-screen")).toBeVisible(),
   ]);
 
-  return { firstContext, secondContext, creator, finder };
+  return { firstContext, secondContext, first, second };
 }
 
 async function saveObjectEdit(page: Page, objectId: string, effectLabel: string): Promise<void> {
@@ -94,18 +89,18 @@ async function saveSceneSpecificEdits(page: Page): Promise<void> {
 }
 
 test("two independent players match and receive opposite forfeit results", async ({ browser }) => {
-  const { firstContext, secondContext, creator, finder } = await enterEditingMatch(
+  const { firstContext, secondContext, first, second } = await enterEditingMatch(
     browser,
     "E2E",
   );
 
   try {
-    creator.once("dialog", (dialog) => dialog.accept());
-    await creator.getByTestId("forfeit-button").click();
+    first.once("dialog", (dialog) => dialog.accept());
+    await first.getByTestId("forfeit-button").click();
 
     await Promise.all([
-      expect(creator.getByTestId("finished-screen")).toContainText("아쉽게 패배했습니다"),
-      expect(finder.getByTestId("finished-screen")).toContainText("승리했습니다!"),
+      expect(first.getByTestId("finished-screen")).toContainText("아쉽게 패배했습니다"),
+      expect(second.getByTestId("finished-screen")).toContainText("승리했습니다!"),
     ]);
   } finally {
     await firstContext.close();
@@ -113,7 +108,7 @@ test("two independent players match and receive opposite forfeit results", async
   }
 });
 
-test("finder cannot see the editor until the creator finishes, and objects are selected independently", async ({
+test("both players edit privately and start finding only after both submit", async ({
   browser,
 }) => {
   const desktop = { viewport: { width: 1280, height: 900 } };
@@ -121,7 +116,7 @@ test("finder cannot see the editor until the creator finishes, and objects are s
     viewport: { width: 390, height: 844 },
     deviceScaleFactor: 3,
   };
-  const { firstContext, secondContext, creator, finder } = await enterEditingMatch(
+  const { firstContext, secondContext, first, second } = await enterEditingMatch(
     browser,
     "비공개",
     desktop,
@@ -129,26 +124,32 @@ test("finder cannot see the editor until the creator finishes, and objects are s
   );
 
   try {
-    await expect(creator.getByTestId("editor-board")).toBeVisible();
-    await expect(finder.getByTestId("editor-board")).toHaveCount(0);
-    await expect(finder.getByTestId("editing-screen")).toContainText("수정 완료 대기 중");
-    await expect(finder.getByRole("img", { name: /게임 원본 그림|상대가 수정한 그림/ })).toHaveCount(0);
+    await expect(first.getByTestId("editor-board")).toBeVisible();
+    await expect(second.getByTestId("editor-board")).toBeVisible();
+    await expect(first.getByRole("img", { name: "상대가 수정한 그림" })).toHaveCount(0);
+    await expect(second.getByRole("img", { name: "상대가 수정한 그림" })).toHaveCount(0);
 
-    await saveSceneSpecificEdits(creator);
+    await saveSceneSpecificEdits(first);
+    await saveSceneSpecificEdits(second);
 
     const qaScreenshotPath = process.env.SCENE_QA_SCREENSHOT_PATH;
     if (qaScreenshotPath) {
-      await creator.getByTestId("editing-screen").screenshot({ path: qaScreenshotPath });
+      await first.getByTestId("editing-screen").screenshot({ path: qaScreenshotPath });
     }
 
-    const submitProblem = creator.getByTestId("submit-problem");
-    await expect(submitProblem).toContainText("완료 3/3");
-    await submitProblem.click();
+    const firstSubmit = first.getByTestId("submit-problem");
+    await expect(firstSubmit).toContainText("완료 3/3");
+    await firstSubmit.click();
+    await expect(first.getByTestId("editing-screen")).toContainText("상대의 제출을 기다리는 중");
+    await expect(second.getByTestId("editing-screen")).toBeVisible();
 
-    await expect(finder.getByTestId("finding-screen")).toBeVisible();
-    await expect(finder.getByRole("img", { name: "게임 원본 그림" })).toBeVisible();
-    await expect(finder.getByRole("img", { name: "상대가 수정한 그림" })).toBeVisible();
-    await expect(creator.getByTestId("finding-screen")).toContainText("상대가 차이점을 찾고 있습니다");
+    await second.getByTestId("submit-problem").click();
+    await Promise.all([
+      expect(first.getByTestId("finding-screen")).toBeVisible(),
+      expect(second.getByTestId("finding-screen")).toBeVisible(),
+    ]);
+    await expect(first.getByRole("img", { name: "상대가 수정한 그림" })).toBeVisible();
+    await expect(second.getByRole("img", { name: "상대가 수정한 그림" })).toBeVisible();
   } finally {
     await firstContext.close();
     await secondContext.close();
