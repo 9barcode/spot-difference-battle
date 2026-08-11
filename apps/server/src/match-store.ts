@@ -12,8 +12,14 @@ export interface ReportInput {
 
 export interface MatchStore {
   health(): Promise<boolean>;
-  loadGuests(): Promise<Array<{ playerId: string; guestToken: string; nickname: string | null }>>;
+  loadGuests(): Promise<Array<{
+    playerId: string;
+    guestToken: string;
+    nickname: string | null;
+    updatedAt: number;
+  }>>;
   upsertGuest(input: { playerId: string; guestToken: string; nickname: string | null }): Promise<void>;
+  deleteGuest(playerId: string): Promise<void>;
   loadActiveMatches(): Promise<PersistedMatchState[]>;
   saveActiveMatch(state: PersistedMatchState): Promise<void>;
   deleteActiveMatch(matchId: string): Promise<void>;
@@ -25,7 +31,7 @@ export interface MatchStore {
 export class InMemoryMatchStore implements MatchStore {
   readonly matches = new Map<string, GameSnapshot>();
   readonly reports = new Map<string, ReportInput>();
-  readonly guests = new Map<string, { guestToken: string; nickname: string | null }>();
+  readonly guests = new Map<string, { guestToken: string; nickname: string | null; updatedAt: number }>();
   readonly activeMatches = new Map<string, PersistedMatchState>();
 
   async health(): Promise<boolean> {
@@ -56,7 +62,16 @@ export class InMemoryMatchStore implements MatchStore {
     this.guests.set(input.playerId, {
       guestToken: input.guestToken,
       nickname: input.nickname,
+      updatedAt: Date.now(),
     });
+  }
+
+  async deleteGuest(playerId: string): Promise<void> {
+    this.guests.delete(playerId);
+  }
+
+  async deleteGuest(playerId: string): Promise<void> {
+    await this.pool.query("DELETE FROM guest_sessions WHERE player_id = $1", [playerId]);
   }
 
   async saveMatch(snapshot: GameSnapshot): Promise<void> {
@@ -99,11 +114,13 @@ export class PostgresMatchStore implements MatchStore {
       player_id: string;
       guest_token: string;
       nickname: string | null;
-    }>("SELECT player_id, guest_token, nickname FROM guest_sessions");
+      updated_at: Date;
+    }>("SELECT player_id, guest_token, nickname, updated_at FROM guest_sessions");
     return result.rows.map((row) => ({
       playerId: row.player_id,
       guestToken: row.guest_token,
       nickname: row.nickname,
+      updatedAt: row.updated_at.getTime(),
     }));
   }
 
