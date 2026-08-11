@@ -70,10 +70,6 @@ export class InMemoryMatchStore implements MatchStore {
     this.guests.delete(playerId);
   }
 
-  async deleteGuest(playerId: string): Promise<void> {
-    await this.pool.query("DELETE FROM guest_sessions WHERE player_id = $1", [playerId]);
-  }
-
   async saveMatch(snapshot: GameSnapshot): Promise<void> {
     if (!this.matches.has(snapshot.matchId)) this.matches.set(snapshot.matchId, structuredClone(snapshot));
   }
@@ -159,6 +155,10 @@ export class PostgresMatchStore implements MatchStore {
            updated_at = NOW()`,
       [input.playerId, input.guestToken, input.nickname],
     );
+  }
+
+  async deleteGuest(playerId: string): Promise<void> {
+    await this.pool.query("DELETE FROM guest_sessions WHERE player_id = $1", [playerId]);
   }
 
   async saveMatch(snapshot: GameSnapshot): Promise<void> {
