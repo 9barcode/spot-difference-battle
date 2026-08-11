@@ -1,183 +1,63 @@
 import { describe, expect, it } from "vitest";
-import {
-  DEFAULT_GAME_SCENE_ID,
-  type Difference,
-} from "@spot-battle/shared";
-import { GameMatch, GameRuleError } from "../src/index.js";
+import type { Difference } from "@spot-battle/shared";
+import { GameMatch } from "../src/index.js";
 
-const differences: Difference[] = [
-  { id: "a", kind: "COLOR", region: { x: 0.2, y: 0.2, radius: 0.05 } },
-  { id: "b", kind: "DRAW", region: { x: 0.5, y: 0.5, radius: 0.05 } },
-  { id: "c", kind: "COLOR", region: { x: 0.8, y: 0.8, radius: 0.05 } },
+const image = "data:image/png;base64,iVBORw0KGgo=";
+const makeDifferences = (prefix: string): Difference[] => [
+  { id: `${prefix}-1`, kind: "COLOR", region: { x: 0.2, y: 0.2, radius: 0.04 } },
+  { id: `${prefix}-2`, kind: "COLOR", region: { x: 0.5, y: 0.5, radius: 0.04 } },
+  { id: `${prefix}-3`, kind: "COLOR", region: { x: 0.8, y: 0.8, radius: 0.04 } },
 ];
 
-const IMAGE = `data:image/png;base64,${"A".repeat(512)}`;
-
-function createMatch(): GameMatch {
-  return new GameMatch("match-1", DEFAULT_GAME_SCENE_ID, [
-    { playerId: "creator", nickname: "제작자" },
-    { playerId: "finder", nickname: "찾는사람" },
+function editingMatch(now = 1_000) {
+  const match = new GameMatch("match", "prototype-room", [
+    { playerId: "a", nickname: "가" },
+    { playerId: "b", nickname: "나" },
   ]);
+  match.markReady("a", now);
+  match.markReady("b", now);
+  return match;
 }
 
-function startEditing(match: GameMatch, nowMs = 1_000): void {
-  match.markReady("creator", nowMs);
-  match.markReady("finder", nowMs);
-}
-
-function startFinding(match: GameMatch, nowMs = 2_000): void {
-  startEditing(match, nowMs - 1_000);
-  match.submitDifferences("creator", differences, IMAGE, nowMs);
-}
-
-describe("GameMatch asymmetric creator/finder lifecycle", () => {
-  it("starts finding as soon as the creator presses complete", () => {
-    const match = createMatch();
-    startEditing(match);
+describe("상호 제작·풀이 경기", () => {
+  it("양쪽 제출 전에는 풀이를 시작하지 않고 상대 문제만 전달한다", () => {
+    const match = editingMatch();
+    match.submitDifferences("a", makeDifferences("a"), image + "YQ==", 2_000);
     expect(match.currentState).toBe("EDITING");
+    expect(match.snapshot("b").problemImage).toBeNull();
 
-    match.submitDifferences("creator", differences, IMAGE, 2_000);
+    match.submitDifferences("b", makeDifferences("b"), image + "Yg==", 2_100);
     expect(match.currentState).toBe("FINDING");
-    expect(match.snapshot().players[0]).toMatchObject({ submitted: true });
-    expect(match.snapshot().players[1]).toMatchObject({ submitted: false });
+    expect(match.snapshot("a").problemImage).toBe(image + "Yg==");
+    expect(match.snapshot("b").problemImage).toBe(image + "YQ==");
   });
 
-  it("does not allow the finder to submit or the creator to guess", () => {
-    const match = createMatch();
-    startEditing(match);
-    expect(() => match.submitDifferences("finder", differences, IMAGE, 2_000)).toThrowError(GameRuleError);
+  it("각 플레이어가 상대가 만든 정답을 푼다", () => {
+    const match = editingMatch();
+    match.submitDifferences("a", makeDifferences("a"), image + "YQ==", 2_000);
+    match.submitDifferences("b", makeDifferences("b"), image + "Yg==", 2_100);
 
-    match.submitDifferences("creator", differences, IMAGE, 2_000);
-    expect(() => match.guess("creator", { x: 0.2, y: 0.2 }, 3_000)).toThrowError(GameRuleError);
-    expect(() => match.useHint("creator", 3_000)).toThrowError(GameRuleError);
+    expect(match.guess("a", { x: 0.2, y: 0.2 }, 3_000).differenceId).toBe("b-1");
+    expect(match.guess("b", { x: 0.2, y: 0.2 }, 3_100).differenceId).toBe("a-1");
   });
 
-  it("awards the finder a forfeit win when the creator misses the editing deadline", () => {
-    const match = createMatch();
-    startEditing(match, 1_000);
-    expect(match.expire(31_000)).toBe(true);
-    expect(match.snapshot()).toMatchObject({
-      state: "FINISHED",
-      winnerId: "finder",
-      endReason: "FORFEIT",
-    });
+  it("한 명이 먼저 완료해도 기다리고 양쪽 완료 후 결과를 비교한다", () => {
+    const match = editingMatch();
+    match.submitDifferences("a", makeDifferences("a"), image, 2_000);
+    match.submitDifferences("b", makeDifferences("b"), image, 2_100);
+    for (const point of [{ x: 0.2, y: 0.2 }, { x: 0.5, y: 0.5 }, { x: 0.8, y: 0.8 }]) match.guess("a", point, 3_000);
+    expect(match.currentState).toBe("FINDING");
+    expect(() => match.guess("a", { x: 0.1, y: 0.1 }, 3_500)).toThrow("이미 모든 차이점을 찾았습니다.");
+    for (const point of [{ x: 0.2, y: 0.2 }, { x: 0.5, y: 0.5 }, { x: 0.8, y: 0.8 }]) match.guess("b", point, 4_000);
+    expect(match.currentState).toBe("FINISHED");
+    expect(match.snapshot("a").winnerId).toBe("a");
   });
 
-  it("allows only the finder to locate differences", () => {
-    const match = createMatch();
-    startFinding(match);
-    expect(match.guess("finder", { x: 0.2, y: 0.2 }, 3_000)).toMatchObject({
-      correct: true,
-      differenceId: "a",
-      remainingTimeMs: 59_000,
-    });
-    expect(match.snapshot().players[1]).toMatchObject({ foundCount: 1 });
-    expect(match.snapshot().players[0]).toMatchObject({ foundCount: 0 });
-  });
-
-  it("does not penalize selecting an already found difference", () => {
-    const match = createMatch();
-    startFinding(match);
-    match.guess("finder", { x: 0.2, y: 0.2 }, 3_000);
-    const version = match.version;
-    match.guess("finder", { x: 0.2, y: 0.2 }, 4_000);
-    expect(match.version).toBe(version);
-    expect(match.snapshot().players[1]).toMatchObject({ foundCount: 1, wrongAnswerCount: 0 });
-  });
-
-  it("applies a three-second penalty and supports one hint", () => {
-    const match = createMatch();
-    startFinding(match);
-    expect(match.guess("finder", { x: 0.05, y: 0.95 }, 3_000)).toMatchObject({
-      correct: false,
-      remainingTimeMs: 56_000,
-    });
-    expect(match.useHint("finder", 4_000)).toMatchObject({ remaining: 0 });
-    expect(() => match.useHint("finder", 5_000)).toThrowError(GameRuleError);
-  });
-
-  it("finishes with the finder as winner after all three are found", () => {
-    const match = createMatch();
-    startFinding(match);
-    match.guess("finder", { x: 0.2, y: 0.2 }, 3_000);
-    match.guess("finder", { x: 0.5, y: 0.5 }, 4_000);
-    match.guess("finder", { x: 0.8, y: 0.8 }, 5_000);
-    expect(match.snapshot()).toMatchObject({ state: "FINISHED", winnerId: "finder", endReason: "COMPLETED" });
-  });
-
-  it("awards the creator a win when finding time expires", () => {
-    const match = createMatch();
-    startFinding(match, 2_000);
-    match.guess("finder", { x: 0.2, y: 0.2 }, 3_000);
-    expect(match.expire(62_000)).toBe(true);
-    expect(match.snapshot()).toMatchObject({ state: "FINISHED", winnerId: "creator", endReason: "TIMEOUT" });
-  });
-
-  it("keeps the creator's draft and answer coordinates hidden during editing", () => {
-    const match = createMatch();
-    startEditing(match);
-    const finderSnapshot = match.snapshot("finder");
-    expect(finderSnapshot.problemImage).toBeNull();
-    expect(finderSnapshot.revealedDifferences).toBeNull();
-    expect(JSON.stringify(finderSnapshot)).not.toContain('"radius"');
-  });
-
-  it("sends only the rendered image to the finder during finding", () => {
-    const match = createMatch();
-    startFinding(match);
-    const snapshot = match.snapshot("finder");
-    expect(snapshot.problemImage).toBe(IMAGE);
-    expect(snapshot.revealedDifferences).toBeNull();
-    expect(snapshot.foundMarks).toEqual([]);
-    const serialized = JSON.stringify(snapshot);
-    expect(serialized).not.toContain("strokes");
-    expect(serialized).not.toContain("fill");
-    expect(serialized).not.toContain("objectEdit");
-    expect(serialized).not.toContain('"a"');
-  });
-
-  it("returns coordinates only after the finder has found a difference", () => {
-    const match = createMatch();
-    startFinding(match);
-    match.guess("finder", { x: 0.2, y: 0.2 }, 3_000);
-    expect(match.snapshot("finder").foundMarks).toEqual([
-      { differenceId: "a", region: differences[0]!.region },
-    ]);
-  });
-
-  it("reveals all answers after finish with finder status for both viewers", () => {
-    const match = createMatch();
-    startFinding(match);
-    match.guess("finder", { x: 0.2, y: 0.2 }, 3_000);
-    match.expire(62_000);
-    expect(match.snapshot("finder").revealedDifferences).toEqual([
-      { id: "a", kind: "COLOR", region: differences[0]!.region, found: true },
-      { id: "b", kind: "DRAW", region: differences[1]!.region, found: false },
-      { id: "c", kind: "COLOR", region: differences[2]!.region, found: false },
-    ]);
-    expect(match.snapshot("creator").revealedDifferences).toEqual(match.snapshot("finder").revealedDifferences);
-  });
-
-  it("restores the active creator/finder match", () => {
-    const match = createMatch();
-    startFinding(match);
-    match.guess("finder", { x: 0.2, y: 0.2 }, 3_000);
-    match.useHint("finder", 3_500);
-    const state = match.serialize();
-    const restored = GameMatch.restore(state);
-    expect(restored.serialize()).toEqual(state);
-    expect(restored.snapshot("finder")).toMatchObject({
-      state: "FINDING",
-      problemImage: IMAGE,
-      myFoundIds: ["a"],
-      foundMarks: [{ differenceId: "a", region: differences[0]!.region }],
-    });
-  });
-
-  it("awards a forfeit win to the other role", () => {
-    const match = createMatch();
-    startEditing(match);
-    match.forfeit("creator");
-    expect(match.snapshot()).toMatchObject({ state: "FINISHED", winnerId: "finder", endReason: "FORFEIT" });
+  it("제작 마감에 한쪽만 미제출이면 제출한 플레이어가 기권승한다", () => {
+    const match = editingMatch();
+    match.submitDifferences("a", makeDifferences("a"), image, 2_000);
+    expect(match.expire(31_001)).toBe(true);
+    expect(match.snapshot("a").winnerId).toBe("a");
+    expect(match.snapshot("a").endReason).toBe("FORFEIT");
   });
 });
