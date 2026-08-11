@@ -15,6 +15,10 @@ import {
   loadGameSceneOriginals,
   type GameSceneImageOverrides,
 } from "./game-scenes.js";
+import {
+  GuestSessionRegistry,
+  type GuestSession,
+} from "./guest-session-registry.js";
 import { MatchRegistry } from "./match-registry.js";
 import { InMemoryMatchStore, type MatchStore } from "./match-store.js";
 import { validateProblemImageCoordinates } from "./problem-image-validation.js";
@@ -26,6 +30,10 @@ export interface GameServerOptions {
   inputCooldownMs?: number;
   /** 종료 결과 재조회·신고를 허용한 뒤 서버 메모리에서 경기를 제거하기까지의 시간. */
   finishedMatchRetentionMs?: number;
+  /** 연결과 경기 활동이 없는 게스트 세션을 보존하는 시간. */
+  guestSessionRetentionMs?: number;
+  /** 비활성 게스트 세션을 확인하는 주기. */
+  guestSessionCleanupIntervalMs?: number;
   matchStore?: MatchStore;
   /** 테스트에서 원본과 수정 이미지의 좌표 검증을 함께 실행하기 위한 원본 이미지 대역. */
   originalProblemImage?: Buffer;
@@ -38,13 +46,6 @@ export interface GameServerOptions {
 interface SocketData {
   playerId: string;
   guestToken: string;
-}
-
-interface GuestSession {
-  guestToken: string;
-  playerId: string;
-  nickname: string | null;
-  socketId: string | null;
 }
 
 type GameSocket = Socket<
@@ -78,8 +79,9 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
     maxHttpBufferSize: PROBLEM_IMAGE_LIMITS.maxBytes + 256 * 1024,
   });
   const registry = new MatchRegistry(options.sceneId ? [options.sceneId] : undefined);
-  const sessionsByToken = new Map<string, GuestSession>();
-  const sessionsByPlayer = new Map<string, GuestSession>();
+  const guestSessionRetentionMs = options.guestSessionRetentionMs ?? 7 * 24 * 60 * 60 * 1_000;
+  const guestSessionCleanupIntervalMs = options.guestSessionCleanupIntervalMs ?? 60 * 1_000;
+  const sessions = new GuestSessionRegistry(guestSessionRetentionMs);
   const reconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
   const finishedMatchCleanupTimers = new Map<string, ReturnType<typeof setTimeout>>();
   const persistedMatches = new Set<string>();
@@ -92,23 +94,22 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
   let waitingPlayer: { playerId: string; socketId: string; nickname: string } | null = null;
   let closing = false;
 
+  function trackGuestWrite(write: Promise<void>): void {
+    const handled = write.catch((error) => app.log.error(error));
+    guestWrites.add(handled);
+    void handled.finally(() => guestWrites.delete(handled));
+  }
+
   function persistGuest(session: GuestSession): void {
-    const write = matchStore
-      .upsertGuest(session)
-      .catch((error) => app.log.error(error));
-    guestWrites.add(write);
-    void write.finally(() => guestWrites.delete(write));
+    trackGuestWrite(matchStore.upsertGuest(session));
+  }
+
+  function deleteGuest(session: GuestSession): void {
+    trackGuestWrite(matchStore.deleteGuest(session.playerId));
   }
 
   function createSession(): GuestSession {
-    const session: GuestSession = {
-      guestToken: randomUUID(),
-      playerId: randomUUID(),
-      nickname: null,
-      socketId: null,
-    };
-    sessionsByToken.set(session.guestToken, session);
-    sessionsByPlayer.set(session.playerId, session);
+    const session = sessions.create();
     persistGuest(session);
     return session;
   }
@@ -116,7 +117,7 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
   io.use((socket, next) => {
     const requestedToken = socket.handshake.auth.guestToken;
     const session =
-      typeof requestedToken === "string" ? sessionsByToken.get(requestedToken) : undefined;
+      typeof requestedToken === "string" ? sessions.getByToken(requestedToken) : undefined;
     const activeSession = session ?? createSession();
     socket.data.playerId = activeSession.playerId;
     socket.data.guestToken = activeSession.guestToken;
@@ -260,9 +261,7 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
   try {
     const restoredGuests = await matchStore.loadGuests();
     for (const guest of restoredGuests) {
-      const session: GuestSession = { ...guest, socketId: null };
-      sessionsByToken.set(session.guestToken, session);
-      sessionsByPlayer.set(session.playerId, session);
+      sessions.restore(guest);
     }
 
     const restoredMatches = await matchStore.loadActiveMatches();
@@ -275,7 +274,7 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
       }
       for (const player of state.players) {
         match.setConnectionStatus(player.playerId, "RECONNECTING");
-        const session = sessionsByPlayer.get(player.playerId);
+        const session = sessions.getByPlayer(player.playerId);
         if (session) scheduleForfeit(session);
       }
       await persistRuntime(match);
@@ -295,12 +294,14 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
       }
       lastInputAt.set(action, now);
     };
-    const session = sessionsByPlayer.get(socket.data.playerId)!;
+    const session = sessions.getByPlayer(socket.data.playerId)!;
+    sessions.touch(session);
     const oldSocketId = session.socketId;
     if (oldSocketId && oldSocketId !== socket.id) {
       io.sockets.sockets.get(oldSocketId)?.disconnect(true);
     }
     session.socketId = socket.id;
+    persistGuest(session);
     const reconnectTimer = reconnectTimers.get(session.playerId);
     if (reconnectTimer) clearTimeout(reconnectTimer);
     reconnectTimers.delete(session.playerId);
@@ -483,6 +484,8 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
     socket.on("disconnect", () => {
       if (session.socketId !== socket.id) return;
       session.socketId = null;
+      sessions.touch(session);
+      persistGuest(session);
       if (waitingPlayer?.playerId === session.playerId) waitingPlayer = null;
       const match = registry.getCurrentForPlayer(session.playerId);
       if (!match || match.currentState === "FINISHED" || match.currentState === "CANCELLED") {
@@ -502,9 +505,22 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
   }, 250);
   expiryTimer.unref();
 
+  const guestSessionCleanupTimer = setInterval(() => {
+    const expired = sessions.removeExpired(
+      Date.now(),
+      (playerId) =>
+        waitingPlayer?.playerId === playerId ||
+        reconnectTimers.has(playerId) ||
+        registry.getCurrentForPlayer(playerId) !== null,
+    );
+    for (const session of expired) deleteGuest(session);
+  }, guestSessionCleanupIntervalMs);
+  guestSessionCleanupTimer.unref();
+
   app.addHook("onClose", async () => {
     closing = true;
     clearInterval(expiryTimer);
+    clearInterval(guestSessionCleanupTimer);
     for (const timer of reconnectTimers.values()) clearTimeout(timer);
     for (const timer of finishedMatchCleanupTimers.values()) clearTimeout(timer);
     finishedMatchCleanupTimers.clear();
