@@ -7,19 +7,19 @@ import {
   type Page,
 } from "@playwright/test";
 
-interface EditingMatch {
+interface FindingMatch {
   firstContext: BrowserContext;
   secondContext: BrowserContext;
   first: Page;
   second: Page;
 }
 
-async function enterEditingMatch(
+async function enterFindingMatch(
   browser: Browser,
   nicknameSuffix: string,
   firstOptions: BrowserContextOptions = {},
   secondOptions: BrowserContextOptions = {},
-): Promise<EditingMatch> {
+): Promise<FindingMatch> {
   const firstContext = await browser.newContext(firstOptions);
   const secondContext = await browser.newContext(secondOptions);
   const first = await firstContext.newPage();
@@ -55,8 +55,8 @@ async function enterEditingMatch(
   ]);
 
   await Promise.all([
-    expect(first.getByTestId("editing-screen")).toBeVisible(),
-    expect(second.getByTestId("editing-screen")).toBeVisible(),
+    expect(first.getByTestId("finding-screen")).toBeVisible(),
+    expect(second.getByTestId("finding-screen")).toBeVisible(),
   ]);
 
   return { firstContext, secondContext, first, second };
@@ -89,7 +89,7 @@ async function saveSceneSpecificEdits(page: Page): Promise<void> {
 }
 
 test("two independent players match and receive opposite forfeit results", async ({ browser }) => {
-  const { firstContext, secondContext, first, second } = await enterEditingMatch(
+  const { firstContext, secondContext, first, second } = await enterFindingMatch(
     browser,
     "E2E",
   );
@@ -108,7 +108,7 @@ test("two independent players match and receive opposite forfeit results", async
   }
 });
 
-test("both players edit privately and start finding only after both submit", async ({
+test("both players receive the same original and error image on desktop and mobile", async ({
   browser,
 }) => {
   const desktop = { viewport: { width: 1280, height: 900 } };
@@ -116,7 +116,7 @@ test("both players edit privately and start finding only after both submit", asy
     viewport: { width: 390, height: 844 },
     deviceScaleFactor: 3,
   };
-  const { firstContext, secondContext, first, second } = await enterEditingMatch(
+  const { firstContext, secondContext, first, second } = await enterFindingMatch(
     browser,
     "비공개",
     desktop,
@@ -124,32 +124,10 @@ test("both players edit privately and start finding only after both submit", asy
   );
 
   try {
-    await expect(first.getByTestId("editor-board")).toBeVisible();
-    await expect(second.getByTestId("editor-board")).toBeVisible();
-    await expect(first.getByRole("img", { name: "상대가 수정한 그림" })).toHaveCount(0);
-    await expect(second.getByRole("img", { name: "상대가 수정한 그림" })).toHaveCount(0);
-
-    await saveSceneSpecificEdits(first);
-    await saveSceneSpecificEdits(second);
-
-    const qaScreenshotPath = process.env.SCENE_QA_SCREENSHOT_PATH;
-    if (qaScreenshotPath) {
-      await first.getByTestId("editing-screen").screenshot({ path: qaScreenshotPath });
-    }
-
-    const firstSubmit = first.getByTestId("submit-problem");
-    await expect(firstSubmit).toContainText("완료 3/3");
-    await firstSubmit.click();
-    await expect(first.getByTestId("editing-screen")).toContainText("상대의 제출을 기다리는 중");
-    await expect(second.getByTestId("editing-screen")).toBeVisible();
-
-    await second.getByTestId("submit-problem").click();
-    await Promise.all([
-      expect(first.getByTestId("finding-screen")).toBeVisible(),
-      expect(second.getByTestId("finding-screen")).toBeVisible(),
-    ]);
-    await expect(first.getByRole("img", { name: "상대가 수정한 그림" })).toBeVisible();
-    await expect(second.getByRole("img", { name: "상대가 수정한 그림" })).toBeVisible();
+    await expect(first.getByRole("img", { name: "원본 그림" })).toBeVisible();
+    await expect(first.getByRole("img", { name: "오류가 포함된 그림" })).toBeVisible();
+    await expect(second.getByRole("img", { name: "원본 그림" })).toBeVisible();
+    await expect(second.getByRole("img", { name: "오류가 포함된 그림" })).toBeVisible();
   } finally {
     await firstContext.close();
     await secondContext.close();

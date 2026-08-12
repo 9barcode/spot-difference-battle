@@ -169,6 +169,46 @@ export interface Difference {
   objectEdit?: DifferenceObjectEdit;
 }
 
+/** 시스템이 장면별로 제공하는 고정 오류. 좌우 보드는 같은 정규화 좌표를 공유한다. */
+export const SYSTEM_SCENE_DIFFERENCES = {
+  "prototype-room": [
+    { id: "clock", kind: "COLOR", region: { x: 0.76, y: 0.20, radius: 0.055 }, objectEdit: { objectId: "clock", objectLabel: "시계", color: "#ef4444", shapeEffect: "STRIPES" } },
+    { id: "ball", kind: "COLOR", region: { x: 0.647, y: 0.895, radius: 0.042 }, objectEdit: { objectId: "ball", objectLabel: "공", color: "#22c55e", shapeEffect: "STAR" } },
+    { id: "cloud", kind: "COLOR", region: { x: 0.555, y: 0.17, radius: 0.045 }, objectEdit: { objectId: "cloud", objectLabel: "구름", color: "#8b5cf6", shapeEffect: "DOTS" } },
+  ],
+  "cartoon-laboratory": [
+    { id: "lab-clock", kind: "COLOR", region: { x: 0.75, y: 0.18, radius: 0.055 }, objectEdit: { objectId: "lab-clock", objectLabel: "연구실 시계", color: "#ef4444", shapeEffect: "STRIPES" } },
+    { id: "test-tubes", kind: "COLOR", region: { x: 0.37, y: 0.84, radius: 0.05 }, objectEdit: { objectId: "test-tubes", objectLabel: "시험관 묶음", color: "#f59e0b", shapeEffect: "DOTS" } },
+    { id: "toolbox", kind: "COLOR", region: { x: 0.89, y: 0.80, radius: 0.06 }, objectEdit: { objectId: "toolbox", objectLabel: "공구함", color: "#22c55e", shapeEffect: "STAR" } },
+  ],
+  "cozy-cafe": [
+    { id: "cafe-left-pendant", kind: "COLOR", region: { x: 0.095, y: 0.13, radius: 0.045 }, objectEdit: { objectId: "cafe-left-pendant", objectLabel: "왼쪽 펜던트 조명", color: "#8b5cf6", shapeEffect: "STRIPES" } },
+    { id: "cafe-clock", kind: "COLOR", region: { x: 0.65, y: 0.21, radius: 0.055 }, objectEdit: { objectId: "cafe-clock", objectLabel: "벽시계", color: "#ef4444", shapeEffect: "DOTS" } },
+    { id: "cafe-cake", kind: "COLOR", region: { x: 0.46, y: 0.53, radius: 0.05 }, objectEdit: { objectId: "cafe-cake", objectLabel: "딸기 케이크", color: "#3b82f6", shapeEffect: "STAR" } },
+  ],
+  "enchanted-forest": [
+    { id: "forest-chimney", kind: "COLOR", region: { x: 0.27, y: 0.25, radius: 0.04 }, objectEdit: { objectId: "forest-chimney", objectLabel: "굴뚝", color: "#3b82f6", shapeEffect: "STRIPES" } },
+    { id: "forest-sun", kind: "COLOR", region: { x: 0.68, y: 0.12, radius: 0.055 }, objectEdit: { objectId: "forest-sun", objectLabel: "해", color: "#8b5cf6", shapeEffect: "DOTS" } },
+    { id: "forest-scarf", kind: "COLOR", region: { x: 0.18, y: 0.75, radius: 0.038 }, objectEdit: { objectId: "forest-scarf", objectLabel: "토끼 목도리", color: "#22c55e", shapeEffect: "STAR" } },
+  ],
+  "cyber-city": [
+    { id: "city-dragon-sign", kind: "COLOR", region: { x: 0.28, y: 0.17, radius: 0.055 }, objectEdit: { objectId: "city-dragon-sign", objectLabel: "용 네온사인", color: "#f59e0b", shapeEffect: "STRIPES" } },
+    { id: "city-tech-sign", kind: "COLOR", region: { x: 0.96, y: 0.52, radius: 0.05 }, objectEdit: { objectId: "city-tech-sign", objectLabel: "오른쪽 테크 간판", color: "#ef4444", shapeEffect: "DOTS" } },
+    { id: "city-headphone-person", kind: "COLOR", region: { x: 0.20, y: 0.72, radius: 0.06 }, objectEdit: { objectId: "city-headphone-person", objectLabel: "헤드폰을 쓴 사람", color: "#22c55e", shapeEffect: "STAR" } },
+  ],
+  "underwater-treasure": [
+    { id: "underwater-jellyfish", kind: "COLOR", region: { x: 0.34, y: 0.20, radius: 0.065 }, objectEdit: { objectId: "underwater-jellyfish", objectLabel: "빛나는 해파리", color: "#ef4444", shapeEffect: "STRIPES" } },
+    { id: "underwater-chest", kind: "COLOR", region: { x: 0.27, y: 0.77, radius: 0.075 }, objectEdit: { objectId: "underwater-chest", objectLabel: "보물상자", color: "#3b82f6", shapeEffect: "DOTS" } },
+    { id: "underwater-starfish", kind: "COLOR", region: { x: 0.10, y: 0.56, radius: 0.045 }, objectEdit: { objectId: "underwater-starfish", objectLabel: "불가사리", color: "#22c55e", shapeEffect: "STAR" } },
+  ],
+} as const satisfies Record<GameSceneId, readonly Difference[]>;
+
+export function getSystemSceneDifferences(sceneId: GameSceneId): Difference[] {
+  return SYSTEM_SCENE_DIFFERENCES[sceneId].map((difference) =>
+    structuredClone(difference),
+  ) as Difference[];
+}
+
 /**
  * 제작자가 렌더해 서버로 올리는 문제.
  * `differences`는 서버 밖으로 나가지 않고, `renderedImage`만 상대에게 전달된다.
@@ -311,3 +351,4 @@ export interface ClientToServerEvents {
     details?: string;
   }) => void;
 }
+
