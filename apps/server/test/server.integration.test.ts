@@ -1,5 +1,6 @@
 import {
   DEFAULT_GAME_SCENE_ID,
+  getSystemSceneDifferences,
   type ClientToServerEvents,
   type Difference,
   type GameSnapshot,
@@ -100,7 +101,7 @@ function waitForConnection(
 }
 
 describe("game server", () => {
-  it("keeps both edits private, swaps problems, and compares both results", async () => {
+  it("starts one shared system problem and compares both results", async () => {
     const matchStore = new InMemoryMatchStore();
     const app = await createGameServer({
       webOrigin: "http://localhost:5173",
@@ -125,36 +126,16 @@ describe("game server", () => {
       second.emit("queue:join", { nickname: "둘째" });
       const [firstMatch, secondMatch] = await Promise.all([firstFound, secondFound]);
 
-      const firstEditingPromise = waitForState(first, "EDITING");
-      const secondEditingPromise = waitForState(second, "EDITING");
-      first.emit("game:ready", { matchId: firstMatch.matchId });
-      second.emit("game:ready", { matchId: secondMatch.matchId });
-      const [firstEditing, secondEditing] = await Promise.all([firstEditingPromise, secondEditingPromise]);
-
-      const afterFirstSubmit = waitForNewerVersion(first, firstEditing.stateVersion);
-      first.emit("game:submit", {
-        matchId: firstMatch.matchId,
-        differences,
-        renderedImage: problemImageFixture.renderedImage,
-        expectedState: firstEditing.state,
-        expectedStateVersion: firstEditing.stateVersion,
-      });
-      expect(await afterFirstSubmit).toMatchObject({ state: "EDITING", problemImage: null });
-
       const firstFinding = waitForState(first, "FINDING");
       const secondFinding = waitForState(second, "FINDING");
-      second.emit("game:submit", {
-        matchId: secondMatch.matchId,
-        differences,
-        renderedImage: problemImageFixture.renderedImage,
-        expectedState: secondEditing.state,
-        expectedStateVersion: secondEditing.stateVersion,
-      });
+      first.emit("game:ready", { matchId: firstMatch.matchId });
+      second.emit("game:ready", { matchId: secondMatch.matchId });
       let [firstSnapshot, secondSnapshot] = await Promise.all([firstFinding, secondFinding]);
-      expect(firstSnapshot.problemImage).toBe(problemImageFixture.renderedImage);
-      expect(secondSnapshot.problemImage).toBe(problemImageFixture.renderedImage);
+      expect(firstSnapshot.problemImage).toBeNull();
+      expect(secondSnapshot.problemImage).toBeNull();
+      const systemDifferences = getSystemSceneDifferences(DEFAULT_GAME_SCENE_ID);
 
-      for (const point of [{ x: 0.2, y: 0.2 }, { x: 0.5, y: 0.5 }, { x: 0.8, y: 0.8 }]) {
+      for (const { region: point } of systemDifferences) {
         const next = waitForNewerVersion(first, firstSnapshot.stateVersion);
         first.emit("game:guess", {
           matchId: firstMatch.matchId,
@@ -167,7 +148,7 @@ describe("game server", () => {
       expect(firstSnapshot.state).toBe("FINDING");
       secondSnapshot = { ...secondSnapshot, stateVersion: firstSnapshot.stateVersion };
 
-      for (const point of [{ x: 0.2, y: 0.2 }, { x: 0.5, y: 0.5 }]) {
+      for (const { region: point } of systemDifferences.slice(0, 2)) {
         const next = waitForNewerVersion(second, secondSnapshot.stateVersion);
         second.emit("game:guess", {
           matchId: secondMatch.matchId,
@@ -180,14 +161,14 @@ describe("game server", () => {
       const finished = waitForState(second, "FINISHED");
       second.emit("game:guess", {
         matchId: secondMatch.matchId,
-        point: { x: 0.8, y: 0.8 },
+        point: systemDifferences[2]!.region,
         expectedState: secondSnapshot.state,
         expectedStateVersion: secondSnapshot.stateVersion,
       });
 
       const result = await finished;
       expect(result).toMatchObject({ state: "FINISHED", winnerId: firstMatch.playerId });
-      expect(result.players.every((player) => player.foundCount === 3 && player.submitted)).toBe(true);
+      expect(result.players.every((player) => player.foundCount === 3 && !player.submitted)).toBe(true);
       expect(result.revealedDifferences).toHaveLength(3);
       await new Promise((resolve) => setTimeout(resolve, 0));
       expect(matchStore.matches.has(firstMatch.matchId)).toBe(true);
@@ -287,10 +268,10 @@ describe("game server", () => {
       first.emit("queue:join", { nickname: "재시작첫째" });
       second.emit("queue:join", { nickname: "재시작둘째" });
       const [firstMatch, secondMatch] = await Promise.all([firstFound, secondFound]);
-      const editing = waitForState(first, "EDITING");
+      const finding = waitForState(first, "FINDING");
       first.emit("game:ready", { matchId: firstMatch.matchId });
       second.emit("game:ready", { matchId: secondMatch.matchId });
-      await editing;
+      await finding;
 
       first.disconnect();
       second.disconnect();
@@ -316,15 +297,15 @@ describe("game server", () => {
       const restoredSecondConnected = once(restoredSecond, "connect");
       const restoredFirstSession = once<SessionReadyPayload>(restoredFirst, "session:ready");
       const restoredFirstMatch = once<MatchFoundPayload>(restoredFirst, "match:found");
-      const restoredEditing = waitForState(restoredFirst, "EDITING");
+      const restoredFinding = waitForState(restoredFirst, "FINDING");
       restoredFirst.connect();
       restoredSecond.connect();
       await Promise.all([restoredFirstConnected, restoredSecondConnected]);
 
       await expect(restoredFirstSession).resolves.toMatchObject({ playerId: firstSession.playerId });
       await expect(restoredFirstMatch).resolves.toMatchObject({ matchId: firstMatch.matchId });
-      await expect(restoredEditing).resolves.toMatchObject({
-        state: "EDITING",
+      await expect(restoredFinding).resolves.toMatchObject({
+        state: "FINDING",
         matchId: firstMatch.matchId,
       });
     } finally {
@@ -410,4 +391,3 @@ describe("game server", () => {
     }
   });
 });
-

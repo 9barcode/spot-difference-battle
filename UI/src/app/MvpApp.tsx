@@ -1,5 +1,6 @@
 import {
   GAME_CONFIG,
+  getSystemSceneDifferences,
   type AnswerRegion,
   type Difference,
   type FoundMark,
@@ -102,12 +103,14 @@ function OriginalBoard({ scene }: { scene: GameSceneDefinition }) {
  */
 function ProblemBoard({
   imageSrc,
+  imageAlt = "오류가 포함된 그림",
   foundMarks,
   hintArea,
   reveal,
   onSelect,
 }: {
   imageSrc: string | null;
+  imageAlt?: string;
   foundMarks: FoundMark[];
   hintArea?: AnswerRegion | null;
   reveal?: RevealedDifference[] | null;
@@ -128,7 +131,7 @@ function ProblemBoard({
 
   return (
     <BoardFrame onSelect={onSelect}>
-      <img src={imageSrc} alt="상대가 수정한 그림" className="block h-auto w-full select-none" draggable={false} />
+      <img src={imageSrc} alt={imageAlt} className="block h-auto w-full select-none" draggable={false} />
       {reveal
         ? reveal.map((difference) => (
             <RegionMarker
@@ -315,6 +318,16 @@ export default function MvpApp() {
   const me = game.snapshot?.players.find((player) => player.playerId === game.match?.playerId);
   const opponent = game.snapshot?.players.find((player) => player.playerId !== game.match?.playerId);
   const remaining = useRemainingSeconds(game.snapshot?.deadlineMs, me?.wrongAnswerCount ?? 0);
+  const [systemProblemImage, setSystemProblemImage] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    setSystemProblemImage(null);
+    void renderProblemImage(getSystemSceneDifferences(scene.id), scene).then((image) => {
+      if (active) setSystemProblemImage(image);
+    });
+    return () => { active = false; };
+  }, [scene]);
 
   const [submitPhase, setSubmitPhase] = useState<"IDLE" | "RENDERING" | "SENT" | "ERROR">("IDLE");
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -408,8 +421,8 @@ export default function MvpApp() {
         <section className="mx-auto max-w-3xl rounded-3xl bg-violet-700 p-10 text-center text-white shadow-xl">
           <div className="text-6xl">⚔️</div>
           <h2 className="mt-4 text-3xl font-black">틀린그림찾기 시작</h2>
-          <p className="mt-2 text-violet-200">두 플레이어가 각자 문제를 만든 뒤 서로 교환하고, 동시에 상대의 차이를 찾습니다.</p>
-          <div className="mt-6 grid grid-cols-3 gap-3 text-sm"><span className="rounded-xl bg-white/10 p-3">객체별 수정</span><span className="rounded-xl bg-white/10 p-3">풀이 60초</span><span className="rounded-xl bg-white/10 p-3">힌트 1회</span></div>
+          <p className="mt-2 text-violet-200">같은 원본과 오류 그림을 보고 상대보다 더 많은 차이를 찾습니다.</p>
+          <div className="mt-6 grid grid-cols-3 gap-3 text-sm"><span className="rounded-xl bg-white/10 p-3">동일 문제 대결</span><span className="rounded-xl bg-white/10 p-3">풀이 60초</span><span className="rounded-xl bg-white/10 p-3">좌우 모두 클릭</span></div>
           <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
             <button data-testid="matchmaking-start" disabled={!game.connected} onClick={game.startMatching} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-amber-400 px-8 py-4 font-black text-slate-900 disabled:opacity-40"><UsersRound size={20}/>{game.connected ? "온라인 상대 찾기" : "서버 연결 중"}</button>
             <button onClick={() => setSoloMode(true)} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-8 py-4 font-black text-violet-700"><UserRound size={20}/>1인 테스트 모드</button>
@@ -432,7 +445,7 @@ export default function MvpApp() {
       {header}
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-white px-5 py-3 shadow-sm">
         <div>
-          <span className="rounded-full bg-violet-100 px-3 py-1 text-xs font-black text-violet-700">상호 제작 배틀</span>
+          <span className="rounded-full bg-violet-100 px-3 py-1 text-xs font-black text-violet-700">실시간 찾기 배틀</span>
           <span className="ml-3 font-black">내 결과 {me?.foundCount ?? 0}/{GAME_CONFIG.differenceCount} · 오답 {me?.wrongAnswerCount ?? 0} · 상대 {opponent?.foundCount ?? 0}/{GAME_CONFIG.differenceCount}</span>
         </div>
         <div className="flex items-center gap-2">{remaining !== null && <span className={`flex items-center gap-2 rounded-full px-4 py-2 font-black ${remaining <= 10 ? "bg-red-100 text-red-600" : "bg-violet-100 text-violet-700"}`}><Clock size={18}/>{remaining}초</span>}{game.snapshot.state !== "FINISHED" && <button data-testid="forfeit-button" onClick={() => window.confirm("경기를 나가면 기권패로 처리됩니다. 나갈까요?") && game.forfeit()} className="rounded-full bg-slate-100 p-2 text-slate-500 hover:bg-red-100 hover:text-red-600" title="경기 나가기"><LogOut size={18}/></button>}</div>
@@ -440,7 +453,7 @@ export default function MvpApp() {
 
       {opponent?.connectionStatus === "RECONNECTING" && <div className="mb-5 rounded-2xl bg-amber-100 px-5 py-4 text-center font-bold text-amber-800">상대의 연결이 끊겼습니다. 10초 동안 복귀를 기다립니다.</div>}
 
-      {game.snapshot.state === "READY" && <section data-testid="ready-screen" className="rounded-3xl bg-white p-10 text-center shadow-xl"><div className="text-6xl">🎨</div><h2 className="mt-4 text-2xl font-black">상대: {game.match.opponentNickname}</h2><p className="mt-2 font-black text-violet-700">각자 문제를 만들고 서로 풉니다</p><p className="mt-2 text-slate-500">객체 3개를 수정해 제출하면, 양쪽 제출 완료 후 동시에 찾기가 시작됩니다.</p><button data-testid="ready-button" disabled={me?.ready} onClick={game.ready} className="mt-6 rounded-2xl bg-violet-600 px-8 py-4 font-black text-white disabled:bg-emerald-500">{me?.ready ? "준비 완료 · 상대 대기 중" : "준비 완료"}</button></section>}
+      {game.snapshot.state === "READY" && <section data-testid="ready-screen" className="rounded-3xl bg-white p-10 text-center shadow-xl"><div className="text-6xl">🔍</div><h2 className="mt-4 text-2xl font-black">상대: {game.match.opponentNickname}</h2><p className="mt-2 font-black text-violet-700">같은 틀린그림 문제로 대결합니다</p><p className="mt-2 text-slate-500">양쪽이 준비하면 바로 시작합니다. 원본과 오류 그림 어느 쪽을 눌러도 정답 처리됩니다.</p><button data-testid="ready-button" disabled={me?.ready} onClick={game.ready} className="mt-6 rounded-2xl bg-violet-600 px-8 py-4 font-black text-white disabled:bg-emerald-500">{me?.ready ? "준비 완료 · 상대 대기 중" : "준비 완료"}</button></section>}
 
       {game.snapshot.state === "EDITING" && (
           <section data-testid="editing-screen">
@@ -474,8 +487,8 @@ export default function MvpApp() {
 
       {game.snapshot.state === "FINDING" && (
           <section data-testid="finding-screen">
-            <div className="mb-4 text-center"><h2 className="text-2xl font-black">상대가 만든 차이를 찾으세요</h2><p className="text-sm text-slate-500">수정 완료 후 전달된 결과 이미지만 표시됩니다. 오답은 3초가 차감됩니다.</p></div>
-            <div className="grid gap-5 lg:grid-cols-2"><div><p className="mb-2 text-center text-sm font-black">원본</p><OriginalBoard scene={scene}/></div><div><p className="mb-2 text-center text-sm font-black">상대의 수정 그림</p><ProblemBoard imageSrc={game.snapshot.problemImage} foundMarks={game.foundMarks} hintArea={game.hintArea} onSelect={game.snapshot.problemImage ? game.guess : undefined}/></div></div>
+            <div className="mb-4 text-center"><h2 className="text-2xl font-black">두 그림의 차이를 찾으세요</h2><p className="text-sm text-slate-500">원본·오류 그림 어느 쪽의 같은 위치를 눌러도 정답입니다. 오답은 3초가 차감됩니다.</p></div>
+            <div className="grid gap-5 lg:grid-cols-2"><div><p className="mb-2 text-center text-sm font-black">원본</p><ProblemBoard imageSrc={scene.imageSrc} imageAlt="원본 그림" foundMarks={game.foundMarks} hintArea={game.hintArea} onSelect={game.guess}/></div><div><p className="mb-2 text-center text-sm font-black">오류 그림</p><ProblemBoard imageSrc={systemProblemImage} imageAlt="오류가 포함된 그림" foundMarks={game.foundMarks} hintArea={game.hintArea} onSelect={systemProblemImage ? game.guess : undefined}/></div></div>
             <div className="mt-5 flex justify-center gap-3"><button disabled={!me?.hintsRemaining} onClick={game.hint} className="inline-flex items-center gap-2 rounded-xl bg-amber-400 px-5 py-3 font-black disabled:opacity-40"><Eye size={18}/>힌트 {me?.hintsRemaining ?? 0}</button>{game.lastGuess && <span className={`rounded-xl px-5 py-3 font-black ${game.lastGuess.correct ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-600"}`}>{game.lastGuess.correct ? "정답!" : "오답 · 3초 차감"}</span>}</div>
           </section>
       )}
@@ -490,10 +503,10 @@ export default function MvpApp() {
             <p className="mt-1 text-2xl font-black">{me?.foundCount}/{GAME_CONFIG.differenceCount} · 오답 {me?.wrongAnswerCount}</p>
             <p className="mt-1 text-xs text-slate-500">상대 {opponent?.foundCount}/{GAME_CONFIG.differenceCount} · 오답 {opponent?.wrongAnswerCount} · 내 힌트 {GAME_CONFIG.hintsPerGame - (me?.hintsRemaining ?? 0)}회 사용</p>
           </div>
-          {game.snapshot.revealedDifferences && game.snapshot.problemImage && (
+          {game.snapshot.revealedDifferences && systemProblemImage && (
             <div className="mt-6">
-              <p className="mb-2 text-sm font-black">상대가 만든 차이점 전체와 내 결과</p>
-              <ProblemBoard imageSrc={game.snapshot.problemImage} foundMarks={game.foundMarks} reveal={game.snapshot.revealedDifferences}/>
+              <p className="mb-2 text-sm font-black">전체 차이점과 내 결과</p>
+              <ProblemBoard imageSrc={systemProblemImage} foundMarks={game.foundMarks} reveal={game.snapshot.revealedDifferences}/>
               <p className="mt-2 text-xs text-slate-500">초록 ✓ 찾은 곳 · 빨강 ✗ 놓친 곳</p>
             </div>
           )}

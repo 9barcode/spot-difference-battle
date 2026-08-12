@@ -1,5 +1,6 @@
 import {
   GAME_CONFIG,
+  getSystemSceneDifferences,
   type AnswerRegion,
   type Difference,
   type FoundMark,
@@ -176,7 +177,7 @@ export class GameMatch {
     player.ready = true;
     this.bumpVersion();
     if (this.players.every((candidate) => candidate.ready)) {
-      this.transition("EDITING", nowMs + GAME_CONFIG.editingDurationSeconds * 1_000);
+      this.startFinding(nowMs);
     }
   }
 
@@ -221,8 +222,7 @@ export class GameMatch {
     if (player.foundIds.size === GAME_CONFIG.differenceCount) {
       throw new GameRuleError("PLAYER_ALREADY_COMPLETED", "이미 모든 차이점을 찾았습니다.");
     }
-    const target = this.getOpponent(playerId);
-    const differences = target.differences ?? [];
+    const differences = getSystemSceneDifferences(this.imageId);
     const hit = differences.find((difference) =>
       isPointInAnswerRegion(point, difference.region),
     );
@@ -259,8 +259,7 @@ export class GameMatch {
       throw new GameRuleError("NO_HINTS", "사용할 수 있는 힌트가 없습니다.");
     }
 
-    const target = this.getOpponent(playerId);
-    const difference = target.differences?.find((item) => !player.foundIds.has(item.id));
+    const difference = getSystemSceneDifferences(this.imageId).find((item) => !player.foundIds.has(item.id));
     if (!difference) {
       throw new GameRuleError("NO_HINT_TARGET", "힌트를 표시할 차이점이 없습니다.");
     }
@@ -303,9 +302,7 @@ export class GameMatch {
    */
   snapshot(viewerId?: string): GameSnapshot {
     const viewer = viewerId ? this.getPlayer(viewerId) : null;
-    const canViewProblem = this.state === "FINDING" || this.state === "FINISHED";
-    const opponent = viewer ? this.getOpponent(viewer.playerId) : null;
-    const targetDifferences = opponent?.differences ?? [];
+    const targetDifferences = getSystemSceneDifferences(this.imageId);
 
     return {
       matchId: this.matchId,
@@ -318,7 +315,7 @@ export class GameMatch {
         PlayerProgress,
       ],
       winnerId: this.winnerId,
-      problemImage: canViewProblem ? opponent?.renderedImage ?? null : null,
+      problemImage: null,
       myFoundIds: viewer ? [...viewer.foundIds] : [],
       foundMarks: viewer ? this.toFoundMarks(viewer, targetDifferences) : [],
       revealedDifferences:
@@ -467,3 +464,4 @@ export class GameMatch {
     return { ...region, radius: Math.min(region.radius * 2.5, 0.25) };
   }
 }
+
