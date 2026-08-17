@@ -171,4 +171,44 @@ describe("GameMatch simultaneous race", () => {
     match.forfeit("p1");
     expect(match.snapshot("p2")).toMatchObject({ state: "FINISHED", winnerId: "p2", endReason: "FORFEIT" });
   });
+
+  it("uses the selected mode duration", () => {
+    const match = new GameMatch("sprint", puzzles, [
+      { playerId: "p1", nickname: "첫째" },
+      { playerId: "p2", nickname: "둘째" },
+    ], 1_000, { mode: "SPRINT", difficulty: "NORMAL" });
+    const startedAt = startPlaying(match);
+    expect(match.snapshot("p1").settings).toEqual({ mode: "SPRINT", difficulty: "NORMAL" });
+    expect(match.expire(startedAt + 59_999)).toBe(false);
+    expect(match.expire(startedAt + 60_000)).toBe(true);
+    expect(match.snapshot("p1")).toMatchObject({ state: "FINISHED", endReason: "TIMEOUT" });
+  });
+
+  it("ends survival mode when a player reaches three wrong answers", () => {
+    const match = new GameMatch("survival", puzzles, [
+      { playerId: "p1", nickname: "첫째" },
+      { playerId: "p2", nickname: "둘째" },
+    ], 1_000, { mode: "SURVIVAL", difficulty: "NORMAL" });
+    const now = startPlaying(match);
+    match.guess("p1", "enchanted-forest", { x: 0.95, y: 0.1 }, now + 10);
+    match.guess("p1", "enchanted-forest", { x: 0.95, y: 0.1 }, now + 1_011);
+    const finalWrong = match.guess("p1", "enchanted-forest", { x: 0.95, y: 0.1 }, now + 2_012);
+    expect(finalWrong.matchFinished).toBe(true);
+    expect(match.snapshot("p1")).toMatchObject({ state: "FINISHED", winnerId: "p2", endReason: "MISTAKE_LIMIT" });
+  });
+
+  it("adjusts hit tolerance and wrong-answer lock by difficulty", () => {
+    const players = [
+      { playerId: "p1", nickname: "첫째" },
+      { playerId: "p2", nickname: "둘째" },
+    ] as [{ playerId: string; nickname: string }, { playerId: string; nickname: string }];
+    const easy = new GameMatch("easy", puzzles, players, 1_000, { mode: "STANDARD", difficulty: "EASY" });
+    const easyNow = startPlaying(easy);
+    expect(easy.guess("p1", "enchanted-forest", { x: 0.255, y: 0.2 }, easyNow + 10).correct).toBe(true);
+
+    const hard = new GameMatch("hard", puzzles, players, 1_000, { mode: "STANDARD", difficulty: "HARD" });
+    const hardNow = startPlaying(hard);
+    const wrong = hard.guess("p1", "enchanted-forest", { x: 0.255, y: 0.2 }, hardNow + 10);
+    expect(wrong).toMatchObject({ correct: false, inputLockedUntilMs: hardNow + 2_010 });
+  });
 });

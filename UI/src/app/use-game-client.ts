@@ -7,6 +7,7 @@ import type {
   GamePuzzleId,
   GameSnapshot,
   GuessResult,
+  MatchSettings,
   MatchFoundPayload,
   NormalizedPoint,
   ReportReason,
@@ -111,10 +112,10 @@ export function useGameClient() {
       setPhase("LOBBY");
       return true;
     },
-    startMatching: () => {
+    startMatching: (settings: MatchSettings) => {
       if (!connected || !nickname) return;
       setError(null); setSnapshot(null); setMatch(null); setPhase("MATCHING");
-      socketRef.current?.emit("queue:join", { nickname });
+      socketRef.current?.emit("queue:join", { nickname, settings });
     },
     cancelMatching: () => socketRef.current?.emit("queue:leave"),
     ready: () => match && socketRef.current?.emit("game:ready", { matchId: match.matchId }),

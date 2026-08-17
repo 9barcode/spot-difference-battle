@@ -2,9 +2,13 @@ import cors from "@fastify/cors";
 import fastifyStatic from "@fastify/static";
 import { GameMatch, GameRuleError } from "@spot-battle/game-core";
 import {
+  DEFAULT_MATCH_SETTINGS,
   GAME_CONFIG,
+  GAME_DIFFICULTIES,
+  GAME_MODES,
   type ClientToServerEvents,
   type GameSceneId,
+  type MatchSettings,
   type ServerToClientEvents,
 } from "@spot-battle/shared";
 import Fastify, { type FastifyInstance } from "fastify";
@@ -134,7 +138,14 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
     options.reconnectGraceMs ?? GAME_CONFIG.reconnectGraceSeconds * 1_000;
   const inputCooldownMs = options.inputCooldownMs ?? 120;
   const finishedMatchRetentionMs = options.finishedMatchRetentionMs ?? 5 * 60 * 1_000;
-  let waitingPlayer: { playerId: string; socketId: string; nickname: string } | null = null;
+  type WaitingPlayer = { playerId: string; socketId: string; nickname: string; settings: MatchSettings };
+  const waitingPlayers = new Map<string, WaitingPlayer>();
+  const queueKey = ({ mode, difficulty }: MatchSettings) => `${mode}:${difficulty}`;
+  const removeWaitingPlayer = (playerId: string) => {
+    for (const [key, player] of waitingPlayers) {
+      if (player.playerId === playerId) waitingPlayers.delete(key);
+    }
+  };
   let closing = false;
 
   function persistGuest(session: GuestSession): void {
@@ -386,25 +397,42 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
         if (normalizedNickname.length < 2) {
           throw new GameRuleError("INVALID_NICKNAME", "닉네임은 2자 이상이어야 합니다.");
         }
+        const input = requirePayload(payload);
+        if (input.settings !== undefined && (typeof input.settings !== "object" || Array.isArray(input.settings))) {
+          throw new GameRuleError("INVALID_SETTINGS", "게임 설정 형식이 올바르지 않습니다.");
+        }
+        const rawSettings = (input.settings ?? DEFAULT_MATCH_SETTINGS) as Record<string, unknown>;
+        if (!GAME_MODES.includes(rawSettings.mode as never) || !GAME_DIFFICULTIES.includes(rawSettings.difficulty as never)) {
+          throw new GameRuleError("INVALID_SETTINGS", "지원하지 않는 게임 모드 또는 난이도입니다.");
+        }
+        const settings: MatchSettings = {
+          mode: rawSettings.mode as MatchSettings["mode"],
+          difficulty: rawSettings.difficulty as MatchSettings["difficulty"],
+        };
+        const key = queueKey(settings);
         session.nickname = normalizedNickname;
         persistGuest(session);
 
+        const waitingPlayer = waitingPlayers.get(key);
         if (!waitingPlayer || waitingPlayer.playerId === session.playerId) {
-          waitingPlayer = {
+          removeWaitingPlayer(session.playerId);
+          waitingPlayers.set(key, {
             playerId: session.playerId,
             socketId: socket.id,
             nickname: normalizedNickname,
-          };
+            settings,
+          });
           return;
         }
 
         const opponentSocket = io.sockets.sockets.get(waitingPlayer.socketId);
         if (!opponentSocket || registry.getCurrentForPlayer(waitingPlayer.playerId)) {
-          waitingPlayer = {
+          waitingPlayers.set(key, {
             playerId: session.playerId,
             socketId: socket.id,
             nickname: normalizedNickname,
-          };
+            settings,
+          });
           return;
         }
 
@@ -415,7 +443,7 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
         const match = registry.create(matchId, [
           { playerId: waitingPlayer.playerId, nickname: waitingPlayer.nickname },
           { playerId: session.playerId, nickname: normalizedNickname },
-        ]);
+        ], settings);
 
         socket.emit("match:found", {
           matchId,
@@ -428,13 +456,13 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
           opponentNickname: normalizedNickname,
         });
         emitSnapshots(match);
-        waitingPlayer = null;
+        waitingPlayers.delete(key);
       } catch (error) {
         emitGameError(socket, error);
       }
     });
     socket.on("queue:leave", () => {
-      if (waitingPlayer?.playerId === session.playerId) waitingPlayer = null;
+      removeWaitingPlayer(session.playerId);
       socket.emit("queue:left");
     });
 
@@ -556,7 +584,7 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
     socket.on("disconnect", () => {
       if (session.socketId !== socket.id) return;
       session.socketId = null;
-      if (waitingPlayer?.playerId === session.playerId) waitingPlayer = null;
+      removeWaitingPlayer(session.playerId);
       const match = registry.getCurrentForPlayer(session.playerId);
       if (!match || match.currentState === "FINISHED" || match.currentState === "CANCELLED") {
         return;

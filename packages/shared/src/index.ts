@@ -12,12 +12,34 @@ export {
 
 export const GAME_CONFIG = {
   differenceCount: 3,
-  gameDurationSeconds: 180,
   countdownSeconds: 3,
   readyTimeoutSeconds: 30,
   preloadTimeoutSeconds: 15,
-  wrongAnswerLockSeconds: 1,
   reconnectGraceSeconds: 10,
+} as const;
+
+export const GAME_MODES = ["STANDARD", "SPRINT", "SURVIVAL"] as const;
+export type GameMode = (typeof GAME_MODES)[number];
+export const GAME_DIFFICULTIES = ["EASY", "NORMAL", "HARD"] as const;
+export type GameDifficulty = (typeof GAME_DIFFICULTIES)[number];
+
+export interface MatchSettings {
+  mode: GameMode;
+  difficulty: GameDifficulty;
+}
+
+export const DEFAULT_MATCH_SETTINGS: MatchSettings = { mode: "STANDARD", difficulty: "NORMAL" };
+
+export const GAME_MODE_RULES = {
+  STANDARD: { durationSeconds: 180, wrongAnswerLimit: null },
+  SPRINT: { durationSeconds: 60, wrongAnswerLimit: null },
+  SURVIVAL: { durationSeconds: 120, wrongAnswerLimit: 3 },
+} as const;
+
+export const GAME_DIFFICULTY_RULES = {
+  EASY: { hitRadiusMultiplier: 1.25, wrongAnswerLockSeconds: 0.5 },
+  NORMAL: { hitRadiusMultiplier: 1, wrongAnswerLockSeconds: 1 },
+  HARD: { hitRadiusMultiplier: 0.8, wrongAnswerLockSeconds: 2 },
 } as const;
 
 /**
@@ -228,6 +250,8 @@ export interface PlayerProgress {
   foundCount: number;
   connectionStatus: "CONNECTED" | "RECONNECTING" | "FORFEITED";
   perspective: "SELF" | "OPPONENT";
+  correctStreak?: number;
+  bestStreak?: number;
   /** Present only for the player receiving this snapshot. */
   puzzleIndex?: number;
   /** Present only for the player receiving this snapshot. */
@@ -250,13 +274,14 @@ export interface OpponentPlayerProgress extends PlayerProgress {
   perspective: "OPPONENT";
 }
 
-export type GameEndReason = "COMPLETED" | "TIMEOUT" | "FORFEIT" | "CANCELLED";
+export type GameEndReason = "COMPLETED" | "TIMEOUT" | "FORFEIT" | "MISTAKE_LIMIT" | "CANCELLED";
 export type ReportReason = "UNFAIR" | "INAPPROPRIATE" | "SYSTEM_ERROR" | "OTHER";
 
 export interface GameSnapshot {
   matchId: string;
   state: GameState;
   stateVersion: number;
+  settings?: MatchSettings;
   imageId: GameSceneId;
   currentPuzzleId: GamePuzzleId | null;
   currentPuzzleVersion: string | null;
@@ -296,6 +321,8 @@ export interface GuessResult {
   matchFinished: boolean;
   inputLockedUntilMs: number | null;
   currentPuzzleId: GamePuzzleId | null;
+  correctStreak: number;
+  bestStreak: number;
 }
 
 export interface HintResult {
@@ -329,7 +356,7 @@ export interface ServerToClientEvents {
 }
 
 export interface ClientToServerEvents {
-  "queue:join": (payload: { nickname: string }) => void;
+  "queue:join": (payload: { nickname: string; settings?: MatchSettings }) => void;
   "queue:leave": () => void;
   "game:ready": (payload: { matchId: string }) => void;
   "game:loaded": (payload: { matchId: string; puzzleId: GamePuzzleId; puzzleVersion: string }) => void;

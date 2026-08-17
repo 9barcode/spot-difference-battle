@@ -1,4 +1,5 @@
 import { GameMatch, GameRuleError, type MatchPuzzle, type PersistedMatchState } from "@spot-battle/game-core";
+import type { MatchSettings } from "@spot-battle/shared";
 import { ACTIVE_GAME_PUZZLES, shuffledGamePuzzles } from "./game-puzzles.js";
 
 export class MatchRegistry {
@@ -12,9 +13,10 @@ export class MatchRegistry {
   create(
     matchId: string,
     players: [{ playerId: string; nickname: string }, { playerId: string; nickname: string }],
+    settings?: MatchSettings,
   ): GameMatch {
     const selected = this.puzzles === ACTIVE_GAME_PUZZLES ? shuffledGamePuzzles() : structuredClone(this.puzzles) as MatchPuzzle[];
-    const match = new GameMatch(matchId, selected, players);
+    const match = new GameMatch(matchId, selected, players, undefined, settings);
     this.matches.set(matchId, match);
     for (const player of players) this.playerMatches.set(player.playerId, matchId);
     return match;

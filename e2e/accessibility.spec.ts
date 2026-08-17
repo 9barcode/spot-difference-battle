@@ -12,7 +12,9 @@ test("keyboard users can set a nickname and start matchmaking with visible focus
 
   const matchmaking = page.getByTestId("matchmaking-start");
   await expect(matchmaking).toBeEnabled();
-  await page.keyboard.press("Tab");
+  for (let control = 0; control < 7; control += 1) {
+    await page.keyboard.press("Tab");
+  }
   await expect(matchmaking).toBeFocused();
   await expect(matchmaking).toHaveCSS("outline-style", "solid");
   await expect(matchmaking).toHaveCSS("outline-width", "3px");

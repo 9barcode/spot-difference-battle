@@ -1,5 +1,8 @@
 import {
+  DEFAULT_MATCH_SETTINGS,
   GAME_CONFIG,
+  GAME_DIFFICULTY_RULES,
+  GAME_MODE_RULES,
   type AnswerRegion,
   type FoundMark,
   type GameEndReason,
@@ -8,6 +11,7 @@ import {
   type GameSnapshot,
   type GameState,
   type GuessResult,
+  type MatchSettings,
   type NormalizedPoint,
   type OpponentPlayerProgress,
   type PlayerProgress,
@@ -49,11 +53,14 @@ export interface PersistedMatchPlayer extends MatchPlayer {
   inputLockedUntilMs: number | null;
   lastCorrectAtMs: number | null;
   connectionStatus: "CONNECTED" | "RECONNECTING" | "FORFEITED";
+  correctStreak?: number;
+  bestStreak?: number;
 }
 
 export interface PersistedMatchState {
-  schemaVersion: 2;
+  schemaVersion: 2 | 3;
   matchId: string;
+  settings?: MatchSettings;
   puzzles: MatchPuzzle[];
   state: GameState;
   stateVersion: number;
@@ -73,6 +80,8 @@ interface InternalPlayer extends MatchPlayer {
   inputLockedUntilMs: number | null;
   lastCorrectAtMs: number | null;
   connectionStatus: "CONNECTED" | "RECONNECTING" | "FORFEITED";
+  correctStreak: number;
+  bestStreak: number;
 }
 
 export class GameMatch {
@@ -89,6 +98,7 @@ export class GameMatch {
     public readonly puzzles: readonly MatchPuzzle[],
     players: [MatchPlayer, MatchPlayer],
     createdAtMs = Date.now(),
+    public readonly settings: MatchSettings = DEFAULT_MATCH_SETTINGS,
   ) {
     if (players[0].playerId === players[1].playerId) {
       throw new GameRuleError("DUPLICATE_PLAYER", "서로 다른 두 플레이어가 필요합니다.");
@@ -107,16 +117,20 @@ export class GameMatch {
       inputLockedUntilMs: null,
       lastCorrectAtMs: null,
       connectionStatus: "CONNECTED",
+      correctStreak: 0,
+      bestStreak: 0,
     })) as [InternalPlayer, InternalPlayer];
     this.deadlineMs = createdAtMs + GAME_CONFIG.readyTimeoutSeconds * 1_000;
   }
 
   static restore(state: PersistedMatchState): GameMatch {
-    if (state.schemaVersion !== 2) throw new Error("지원하지 않는 활성 경기 형식입니다.");
+    if (state.schemaVersion !== 2 && state.schemaVersion !== 3) throw new Error("지원하지 않는 활성 경기 형식입니다.");
     const match = new GameMatch(
       state.matchId,
       state.puzzles,
       state.players.map(({ playerId, nickname }) => ({ playerId, nickname })) as [MatchPlayer, MatchPlayer],
+      undefined,
+      state.settings ?? DEFAULT_MATCH_SETTINGS,
     );
     match.state = state.state;
     match.stateVersion = state.stateVersion;
@@ -126,6 +140,8 @@ export class GameMatch {
     match.cancelReason = state.cancelReason;
     match.players = state.players.map((player) => ({
       ...structuredClone(player),
+      correctStreak: player.correctStreak ?? 0,
+      bestStreak: player.bestStreak ?? 0,
       foundIdsByPuzzle: player.foundIdsByPuzzle.map((ids) => new Set(ids)),
     })) as [InternalPlayer, InternalPlayer];
     return match;
@@ -133,8 +149,9 @@ export class GameMatch {
 
   serialize(): PersistedMatchState {
     return {
-      schemaVersion: 2,
+      schemaVersion: 3,
       matchId: this.matchId,
+      settings: { ...this.settings },
       puzzles: structuredClone(this.puzzles) as MatchPuzzle[],
       state: this.state,
       stateVersion: this.stateVersion,
@@ -153,6 +170,8 @@ export class GameMatch {
         inputLockedUntilMs: player.inputLockedUntilMs,
         lastCorrectAtMs: player.lastCorrectAtMs,
         connectionStatus: player.connectionStatus,
+        correctStreak: player.correctStreak,
+        bestStreak: player.bestStreak,
       })) as [PersistedMatchPlayer, PersistedMatchPlayer],
     };
   }
@@ -203,15 +222,20 @@ export class GameMatch {
       throw new GameRuleError("WRONG_PUZZLE", "현재 풀고 있는 문제가 아닙니다.");
     }
     const foundIds = player.foundIdsByPuzzle[player.puzzleIndex]!;
+    const radiusMultiplier = GAME_DIFFICULTY_RULES[this.settings.difficulty].hitRadiusMultiplier;
     const hit = puzzle.differences.find((difference) =>
-      difference.regions.some((region) => isPointInAnswerRegion(point, region)),
+      difference.regions.some((region) => isPointInAnswerRegion(point, { ...region, radius: region.radius * radiusMultiplier })),
     );
-    const matchedRegion = hit?.regions.find((region) => isPointInAnswerRegion(point, region)) ?? null;
+    const matchedRegion = hit?.regions.find((region) =>
+      isPointInAnswerRegion(point, { ...region, radius: region.radius * radiusMultiplier }),
+    ) ?? null;
     const alreadyFound = hit ? foundIds.has(hit.id) : false;
     let puzzleCompleted = false;
 
     if (hit && !alreadyFound) {
       foundIds.add(hit.id);
+      player.correctStreak += 1;
+      player.bestStreak = Math.max(player.bestStreak, player.correctStreak);
       player.lastCorrectAtMs = nowMs;
       player.inputLockedUntilMs = null;
       if (foundIds.size === GAME_CONFIG.differenceCount) {
@@ -221,8 +245,13 @@ export class GameMatch {
       this.bumpVersion();
     } else if (!hit) {
       player.wrongAnswerCount += 1;
-      player.inputLockedUntilMs = nowMs + GAME_CONFIG.wrongAnswerLockSeconds * 1_000;
+      player.correctStreak = 0;
+      player.inputLockedUntilMs = nowMs + GAME_DIFFICULTY_RULES[this.settings.difficulty].wrongAnswerLockSeconds * 1_000;
       this.bumpVersion();
+      const limit = GAME_MODE_RULES[this.settings.mode].wrongAnswerLimit;
+      if (limit !== null && player.wrongAnswerCount >= limit) {
+        this.finish(this.getOpponent(playerId).playerId, "MISTAKE_LIMIT");
+      }
     }
 
     return {
@@ -235,6 +264,8 @@ export class GameMatch {
       matchFinished: this.state === "FINISHED",
       inputLockedUntilMs: player.inputLockedUntilMs,
       currentPuzzleId: this.puzzles[player.puzzleIndex]?.id ?? null,
+      correctStreak: player.correctStreak,
+      bestStreak: player.bestStreak,
     };
   }
 
@@ -249,7 +280,7 @@ export class GameMatch {
       return true;
     }
     if (this.state === "COUNTDOWN") {
-      this.transition("PLAYING", nowMs + GAME_CONFIG.gameDurationSeconds * 1_000);
+      this.transition("PLAYING", nowMs + GAME_MODE_RULES[this.settings.mode].durationSeconds * 1_000);
       return true;
     }
     if (this.state === "PLAYING") {
@@ -269,6 +300,7 @@ export class GameMatch {
       matchId: this.matchId,
       state: this.state,
       stateVersion: this.stateVersion,
+      settings: { ...this.settings },
       imageId: currentPuzzle.id as GameSceneId,
       currentPuzzleId: viewer.puzzleIndex < this.puzzles.length ? currentPuzzle.id : null,
       currentPuzzleVersion: viewer.puzzleIndex < this.puzzles.length ? currentPuzzle.assetVersion : null,
@@ -370,6 +402,8 @@ export class GameMatch {
       foundCount,
       connectionStatus: player.connectionStatus,
       perspective: "OPPONENT",
+      correctStreak: player.correctStreak,
+      bestStreak: player.bestStreak,
     };
     if (!isViewer) return publicProgress;
     return {
