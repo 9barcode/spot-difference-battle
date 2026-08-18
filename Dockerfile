@@ -13,23 +13,14 @@ RUN pnpm install --frozen-lockfile
 COPY . .
 RUN pnpm build
 RUN pnpm --filter @spot-battle/server deploy --prod --legacy /app
-RUN cp -R UI/dist /app/public && \
-    mkdir -p /app/game-assets && \
-    cp UI/src/imports/image.png \
-       UI/src/imports/laboratory-1920.png \
-       UI/src/imports/cozy-cafe.png \
-       UI/src/imports/enchanted-forest.png \
-       UI/src/imports/cyber-city.png \
-       UI/src/imports/underwater-treasure.png \
-       /app/game-assets/
+RUN cp -R UI/dist /app/public
 
 FROM node:22-alpine AS runtime
 
 ENV NODE_ENV=production \
     HOST=0.0.0.0 \
     PORT=3001 \
-    WEB_ROOT=/app/public \
-    GAME_ASSET_ROOT=/app/game-assets
+    WEB_ROOT=/app/public
 WORKDIR /app
 
 COPY --from=build /app ./
