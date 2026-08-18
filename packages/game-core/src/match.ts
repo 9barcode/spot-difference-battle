@@ -1,30 +1,27 @@
 import {
+  DEFAULT_MATCH_SETTINGS,
   GAME_CONFIG,
-  getSystemSceneDifferences,
+  GAME_DIFFICULTY_RULES,
+  GAME_MODE_RULES,
   type AnswerRegion,
-  type Difference,
   type FoundMark,
+  type GameEndReason,
+  type GamePuzzleId,
+  type GameSceneId,
   type GameSnapshot,
   type GameState,
-  type GameEndReason,
-  type GameSceneId,
   type GuessResult,
-  type HintResult,
+  type MatchSettings,
   type NormalizedPoint,
+  type OpponentPlayerProgress,
   type PlayerProgress,
   type RevealedDifference,
+  type SelfPlayerProgress,
 } from "@spot-battle/shared";
-import {
-  determineWinner,
-  getRemainingTimeMs,
-  isPointInAnswerRegion,
-} from "./index.js";
+import { isPointInAnswerRegion } from "./index.js";
 
 export class GameRuleError extends Error {
-  constructor(
-    public readonly code: string,
-    message: string,
-  ) {
+  constructor(public readonly code: string, message: string) {
     super(message);
     this.name = "GameRuleError";
   }
@@ -35,18 +32,36 @@ export interface MatchPlayer {
   nickname: string;
 }
 
+export interface PuzzleDifference {
+  id: string;
+  label: string;
+  regions: AnswerRegion[];
+}
+
+export interface MatchPuzzle {
+  id: GamePuzzleId;
+  assetVersion: string;
+  differences: PuzzleDifference[];
+}
+
 export interface PersistedMatchPlayer extends MatchPlayer {
   ready: boolean;
-  foundIds: string[];
+  loaded: boolean;
+  puzzleIndex: number;
+  foundIdsByPuzzle: string[][];
   wrongAnswerCount: number;
-  hintsUsed: number;
+  inputLockedUntilMs: number | null;
   lastCorrectAtMs: number | null;
   connectionStatus: "CONNECTED" | "RECONNECTING" | "FORFEITED";
+  correctStreak?: number;
+  bestStreak?: number;
 }
 
 export interface PersistedMatchState {
+  schemaVersion: 2 | 3;
   matchId: string;
-  imageId: GameSceneId;
+  settings?: MatchSettings;
+  puzzles: MatchPuzzle[];
   state: GameState;
   stateVersion: number;
   deadlineMs: number | null;
@@ -58,11 +73,15 @@ export interface PersistedMatchState {
 
 interface InternalPlayer extends MatchPlayer {
   ready: boolean;
-  foundIds: Set<string>;
+  loaded: boolean;
+  puzzleIndex: number;
+  foundIdsByPuzzle: Set<string>[];
   wrongAnswerCount: number;
-  hintsUsed: number;
+  inputLockedUntilMs: number | null;
   lastCorrectAtMs: number | null;
   connectionStatus: "CONNECTED" | "RECONNECTING" | "FORFEITED";
+  correctStreak: number;
+  bestStreak: number;
 }
 
 export class GameMatch {
@@ -76,54 +95,64 @@ export class GameMatch {
 
   constructor(
     public readonly matchId: string,
-    public readonly imageId: GameSceneId,
+    public readonly puzzles: readonly MatchPuzzle[],
     players: [MatchPlayer, MatchPlayer],
+    createdAtMs = Date.now(),
+    public readonly settings: MatchSettings = DEFAULT_MATCH_SETTINGS,
   ) {
     if (players[0].playerId === players[1].playerId) {
       throw new GameRuleError("DUPLICATE_PLAYER", "서로 다른 두 플레이어가 필요합니다.");
     }
-
+    if (puzzles.length === 0) {
+      throw new GameRuleError("NO_PUZZLES", "경기에 사용할 문제가 없습니다.");
+    }
+    for (const puzzle of puzzles) this.validatePuzzle(puzzle);
     this.players = players.map((player) => ({
       ...player,
       ready: false,
-      foundIds: new Set<string>(),
+      loaded: false,
+      puzzleIndex: 0,
+      foundIdsByPuzzle: puzzles.map(() => new Set<string>()),
       wrongAnswerCount: 0,
-      hintsUsed: 0,
+      inputLockedUntilMs: null,
       lastCorrectAtMs: null,
       connectionStatus: "CONNECTED",
+      correctStreak: 0,
+      bestStreak: 0,
     })) as [InternalPlayer, InternalPlayer];
+    this.deadlineMs = createdAtMs + GAME_CONFIG.readyTimeoutSeconds * 1_000;
   }
 
   static restore(state: PersistedMatchState): GameMatch {
+    if (state.schemaVersion !== 2 && state.schemaVersion !== 3) throw new Error("지원하지 않는 활성 경기 형식입니다.");
     const match = new GameMatch(
       state.matchId,
-      state.imageId,
-      state.players.map(({ playerId, nickname }) => ({ playerId, nickname })) as [
-        MatchPlayer,
-        MatchPlayer,
-      ],
+      state.puzzles,
+      state.players.map(({ playerId, nickname }) => ({ playerId, nickname })) as [MatchPlayer, MatchPlayer],
+      undefined,
+      state.settings ?? DEFAULT_MATCH_SETTINGS,
     );
-    const persistedState = state.state as string;
-    const isLegacySubmissionState = persistedState === "EDITING" || persistedState === "SWAPPING";
-    match.state = isLegacySubmissionState ? "CANCELLED" : state.state;
+    match.state = state.state;
     match.stateVersion = state.stateVersion;
-    match.deadlineMs = isLegacySubmissionState ? null : state.deadlineMs;
+    match.deadlineMs = state.deadlineMs;
     match.winnerId = state.winnerId;
-    match.endReason = isLegacySubmissionState ? "CANCELLED" : state.endReason;
-    match.cancelReason = isLegacySubmissionState
-      ? "이전 제작 방식의 경기는 게임 규칙 변경으로 안전하게 취소되었습니다."
-      : state.cancelReason;
+    match.endReason = state.endReason;
+    match.cancelReason = state.cancelReason;
     match.players = state.players.map((player) => ({
       ...structuredClone(player),
-      foundIds: new Set(player.foundIds),
+      correctStreak: player.correctStreak ?? 0,
+      bestStreak: player.bestStreak ?? 0,
+      foundIdsByPuzzle: player.foundIdsByPuzzle.map((ids) => new Set(ids)),
     })) as [InternalPlayer, InternalPlayer];
     return match;
   }
 
   serialize(): PersistedMatchState {
     return {
+      schemaVersion: 3,
       matchId: this.matchId,
-      imageId: this.imageId,
+      settings: { ...this.settings },
+      puzzles: structuredClone(this.puzzles) as MatchPuzzle[],
       state: this.state,
       stateVersion: this.stateVersion,
       deadlineMs: this.deadlineMs,
@@ -134,141 +163,163 @@ export class GameMatch {
         playerId: player.playerId,
         nickname: player.nickname,
         ready: player.ready,
-        foundIds: [...player.foundIds],
+        loaded: player.loaded,
+        puzzleIndex: player.puzzleIndex,
+        foundIdsByPuzzle: player.foundIdsByPuzzle.map((ids) => [...ids]),
         wrongAnswerCount: player.wrongAnswerCount,
-        hintsUsed: player.hintsUsed,
+        inputLockedUntilMs: player.inputLockedUntilMs,
         lastCorrectAtMs: player.lastCorrectAtMs,
         connectionStatus: player.connectionStatus,
+        correctStreak: player.correctStreak,
+        bestStreak: player.bestStreak,
       })) as [PersistedMatchPlayer, PersistedMatchPlayer],
     };
   }
 
-  get currentState(): GameState {
-    return this.state;
-  }
-
-  get version(): number {
-    return this.stateVersion;
-  }
+  get currentState(): GameState { return this.state; }
+  get version(): number { return this.stateVersion; }
 
   markReady(playerId: string, nowMs: number): void {
     this.requireState("READY");
+    this.requireBeforeDeadline(nowMs);
     const player = this.getPlayer(playerId);
     if (player.ready) return;
-
     player.ready = true;
     this.bumpVersion();
     if (this.players.every((candidate) => candidate.ready)) {
-      this.startFinding(nowMs);
+      this.transition("PRELOADING", nowMs + GAME_CONFIG.preloadTimeoutSeconds * 1_000);
     }
   }
 
-  guess(playerId: string, point: NormalizedPoint, nowMs: number): GuessResult {
-    this.requireState("FINDING");
+  markLoaded(playerId: string, puzzleId: GamePuzzleId, puzzleVersion: string, nowMs: number): void {
+    this.requireState("PRELOADING");
+    this.requireBeforeDeadline(nowMs);
     const player = this.getPlayer(playerId);
-    this.requireBeforeDeadline(playerId, nowMs);
-    if (player.foundIds.size === GAME_CONFIG.differenceCount) {
-      throw new GameRuleError("PLAYER_ALREADY_COMPLETED", "이미 모든 차이점을 찾았습니다.");
+    const expectedPuzzle = this.puzzles[0];
+    if (puzzleId !== expectedPuzzle?.id) {
+      throw new GameRuleError("WRONG_PUZZLE", "현재 경기의 첫 문제가 아닙니다.");
     }
-    const differences = getSystemSceneDifferences(this.imageId);
-    const hit = differences.find((difference) =>
-      isPointInAnswerRegion(point, difference.region),
+    if (puzzleVersion !== expectedPuzzle.assetVersion) {
+      throw new GameRuleError("PUZZLE_VERSION_MISMATCH", "문제 이미지 버전이 서버와 다릅니다. 새로고침 후 다시 시도해주세요.");
+    }
+    if (player.loaded) return;
+    player.loaded = true;
+    this.bumpVersion();
+    if (this.players.every((candidate) => candidate.loaded)) {
+      this.transition("COUNTDOWN", nowMs + GAME_CONFIG.countdownSeconds * 1_000);
+    }
+  }
+
+  guess(playerId: string, puzzleId: GamePuzzleId, point: NormalizedPoint, nowMs: number): GuessResult {
+    this.requireState("PLAYING");
+    this.requireBeforeDeadline(nowMs);
+    const player = this.getPlayer(playerId);
+    if (player.inputLockedUntilMs && nowMs < player.inputLockedUntilMs) {
+      throw new GameRuleError("INPUT_LOCKED", "오답 입력 잠금이 끝난 뒤 다시 시도해주세요.");
+    }
+    const puzzle = this.puzzles[player.puzzleIndex];
+    if (!puzzle || puzzle.id !== puzzleId) {
+      throw new GameRuleError("WRONG_PUZZLE", "현재 풀고 있는 문제가 아닙니다.");
+    }
+    const foundIds = player.foundIdsByPuzzle[player.puzzleIndex]!;
+    const radiusMultiplier = GAME_DIFFICULTY_RULES[this.settings.difficulty].hitRadiusMultiplier;
+    const hit = puzzle.differences.find((difference) =>
+      difference.regions.some((region) => isPointInAnswerRegion(point, { ...region, radius: region.radius * radiusMultiplier })),
     );
-    const alreadyFound = hit ? player.foundIds.has(hit.id) : false;
+    const matchedRegion = hit?.regions.find((region) =>
+      isPointInAnswerRegion(point, { ...region, radius: region.radius * radiusMultiplier }),
+    ) ?? null;
+    const alreadyFound = hit ? foundIds.has(hit.id) : false;
+    let puzzleCompleted = false;
 
     if (hit && !alreadyFound) {
-      player.foundIds.add(hit.id);
+      foundIds.add(hit.id);
+      player.correctStreak += 1;
+      player.bestStreak = Math.max(player.bestStreak, player.correctStreak);
       player.lastCorrectAtMs = nowMs;
+      player.inputLockedUntilMs = null;
+      if (foundIds.size === GAME_CONFIG.differenceCount) {
+        puzzleCompleted = true;
+        player.puzzleIndex += 1;
+      }
       this.bumpVersion();
     } else if (!hit) {
       player.wrongAnswerCount += 1;
+      player.correctStreak = 0;
+      player.inputLockedUntilMs = nowMs + GAME_DIFFICULTY_RULES[this.settings.difficulty].wrongAnswerLockSeconds * 1_000;
       this.bumpVersion();
-    }
-
-    const remainingTimeMs = this.getPlayerRemainingTime(player, nowMs);
-    if (this.players.every((candidate) => candidate.foundIds.size === GAME_CONFIG.differenceCount)) {
-      this.finishByResults("COMPLETED");
+      const limit = GAME_MODE_RULES[this.settings.mode].wrongAnswerLimit;
+      if (limit !== null && player.wrongAnswerCount >= limit) {
+        this.finish(this.getOpponent(playerId).playerId, "MISTAKE_LIMIT");
+      }
     }
 
     return {
+      outcome: hit ? (alreadyFound ? "DUPLICATE" : "CORRECT") : "WRONG",
       correct: Boolean(hit),
       differenceId: hit?.id ?? null,
-      // 이미 맞힌 곳이므로 위치를 알려줘도 정보가 새지 않는다.
-      region: hit ? { ...hit.region } : null,
-      remainingTimeMs,
-    };
-  }
-
-  useHint(playerId: string, nowMs: number): HintResult {
-    this.requireState("FINDING");
-    const player = this.getPlayer(playerId);
-    this.requireBeforeDeadline(playerId, nowMs);
-    if (player.hintsUsed >= GAME_CONFIG.hintsPerGame) {
-      throw new GameRuleError("NO_HINTS", "사용할 수 있는 힌트가 없습니다.");
-    }
-
-    const difference = getSystemSceneDifferences(this.imageId).find((item) => !player.foundIds.has(item.id));
-    if (!difference) {
-      throw new GameRuleError("NO_HINT_TARGET", "힌트를 표시할 차이점이 없습니다.");
-    }
-
-    player.hintsUsed += 1;
-    this.bumpVersion();
-    return {
-      area: this.toHintArea(difference.region),
-      remaining: GAME_CONFIG.hintsPerGame - player.hintsUsed,
+      region: matchedRegion ? { ...matchedRegion } : null,
+      remainingTimeMs: this.getRemainingTime(nowMs),
+      puzzleCompleted,
+      matchFinished: this.state === "FINISHED",
+      inputLockedUntilMs: player.inputLockedUntilMs,
+      currentPuzzleId: this.puzzles[player.puzzleIndex]?.id ?? null,
+      correctStreak: player.correctStreak,
+      bestStreak: player.bestStreak,
     };
   }
 
   expire(nowMs: number): boolean {
     if (this.deadlineMs === null || nowMs < this.deadlineMs) return false;
-
-    if (this.state === "FINDING") {
-      this.finishByResults("TIMEOUT");
+    if (this.state === "READY") {
+      this.cancel("준비 제한시간 안에 양쪽 준비가 끝나지 않았습니다.");
       return true;
     }
-
+    if (this.state === "PRELOADING") {
+      this.cancel("문제 이미지를 제한시간 안에 불러오지 못했습니다.");
+      return true;
+    }
+    if (this.state === "COUNTDOWN") {
+      this.transition("PLAYING", nowMs + GAME_MODE_RULES[this.settings.mode].durationSeconds * 1_000);
+      return true;
+    }
+    if (this.state === "PLAYING") {
+      this.finish(this.determineWinner(), "TIMEOUT");
+      return true;
+    }
     return false;
   }
 
-  /**
-   * 뷰어별 스냅샷.
-   *
-   * 여기서 상대의 제작 명령(strokes/fill)이나 미발견 정답 좌표를 내보내면
-   * 풀이 클라이언트에서 개발자도구만 열어도 정답이 보인다.
-   * 그래서 풀이 중에는 렌더된 이미지와 "이미 맞힌 위치"만 내보내고,
-   * 전체 정답은 FINISHED가 된 뒤에만 공개한다.
-   */
   snapshot(viewerId?: string): GameSnapshot {
-    const viewer = viewerId ? this.getPlayer(viewerId) : null;
-    const targetDifferences = getSystemSceneDifferences(this.imageId);
-
+    const viewer = viewerId ? this.getPlayer(viewerId) : this.players[0];
+    const currentIndex = Math.min(viewer.puzzleIndex, this.puzzles.length - 1);
+    const currentPuzzle = this.puzzles[currentIndex]!;
+    const nextPuzzle = this.puzzles[viewer.puzzleIndex + 1] ?? null;
+    const currentFound = viewer.foundIdsByPuzzle[currentIndex] ?? new Set<string>();
     return {
       matchId: this.matchId,
       state: this.state,
       stateVersion: this.stateVersion,
-      imageId: this.imageId,
+      settings: { ...this.settings },
+      imageId: currentPuzzle.id as GameSceneId,
+      currentPuzzleId: viewer.puzzleIndex < this.puzzles.length ? currentPuzzle.id : null,
+      currentPuzzleVersion: viewer.puzzleIndex < this.puzzles.length ? currentPuzzle.assetVersion : null,
+      nextPuzzleId: nextPuzzle?.id ?? null,
+      nextPuzzleVersion: nextPuzzle?.assetVersion ?? null,
+      totalPuzzleCount: this.puzzles.length,
       deadlineMs: this.deadlineMs,
-      players: this.players.map((player) => this.toProgress(player)) as [
-        PlayerProgress,
-        PlayerProgress,
-      ],
+      players: this.players.map((player) => this.toProgress(player, !viewerId || player.playerId === viewer.playerId)) as [PlayerProgress, PlayerProgress],
       winnerId: this.winnerId,
-      myFoundIds: viewer ? [...viewer.foundIds] : [],
-      foundMarks: viewer ? this.toFoundMarks(viewer, targetDifferences) : [],
-      revealedDifferences:
-        this.state === "FINISHED" && viewer
-          ? this.toRevealed(viewer, targetDifferences)
-          : null,
+      problemImage: null,
+      myFoundIds: viewer.puzzleIndex < this.puzzles.length ? [...currentFound] : [],
+      foundMarks: viewer.puzzleIndex < this.puzzles.length ? this.toFoundMarks(currentPuzzle, currentFound) : [],
+      revealedDifferences: this.state === "FINISHED" ? this.toRevealed(currentPuzzle, currentFound) : null,
       endReason: this.endReason,
       cancelReason: this.cancelReason,
     };
   }
 
-  setConnectionStatus(
-    playerId: string,
-    status: "CONNECTED" | "RECONNECTING",
-  ): void {
+  setConnectionStatus(playerId: string, status: "CONNECTED" | "RECONNECTING"): void {
     if (this.state === "FINISHED" || this.state === "CANCELLED") return;
     const player = this.getPlayer(playerId);
     if (player.connectionStatus === status) return;
@@ -290,8 +341,14 @@ export class GameMatch {
     this.transition("CANCELLED", null);
   }
 
-  private startFinding(nowMs: number): void {
-    this.transition("FINDING", nowMs + GAME_CONFIG.findingDurationSeconds * 1_000);
+  private determineWinner(): string | null {
+    const [first, second] = this.players;
+    if (first.puzzleIndex !== second.puzzleIndex) return first.puzzleIndex > second.puzzleIndex ? first.playerId : second.playerId;
+    const firstFound = first.foundIdsByPuzzle[first.puzzleIndex]?.size ?? 0;
+    const secondFound = second.foundIdsByPuzzle[second.puzzleIndex]?.size ?? 0;
+    if (firstFound !== secondFound) return firstFound > secondFound ? first.playerId : second.playerId;
+    if (first.wrongAnswerCount !== second.wrongAnswerCount) return first.wrongAnswerCount < second.wrongAnswerCount ? first.playerId : second.playerId;
+    return null;
   }
 
   private finish(winnerId: string | null, reason: GameEndReason): void {
@@ -300,40 +357,15 @@ export class GameMatch {
     this.transition("FINISHED", null);
   }
 
-  private finishByResults(reason: GameEndReason): void {
-    const [first, second] = this.players;
-    this.finish(
-      determineWinner(
-        { playerId: first.playerId, foundCount: first.foundIds.size, wrongAnswerCount: first.wrongAnswerCount, lastCorrectAtMs: first.lastCorrectAtMs },
-        { playerId: second.playerId, foundCount: second.foundIds.size, wrongAnswerCount: second.wrongAnswerCount, lastCorrectAtMs: second.lastCorrectAtMs },
-      ),
-      reason,
-    );
-  }
-
-
-  private requireBeforeDeadline(playerId: string, nowMs: number): void {
-    if (this.deadlineMs === null) return;
-    if (this.state === "FINDING") {
-      const player = this.getPlayer(playerId);
-      if (this.getPlayerRemainingTime(player, nowMs) > 0) return;
-      this.finishByResults("TIMEOUT");
-      throw new GameRuleError("DEADLINE_EXPIRED", "이 단계의 제한시간이 종료되었습니다.");
-    } else if (nowMs < this.deadlineMs) {
-      return;
+  private requireBeforeDeadline(nowMs: number): void {
+    if (this.deadlineMs !== null && nowMs >= this.deadlineMs) {
+      this.expire(nowMs);
+      throw new GameRuleError("DEADLINE_EXPIRED", "경기 제한시간이 종료되었습니다.");
     }
-
-    this.expire(nowMs);
-    throw new GameRuleError("DEADLINE_EXPIRED", "이 단계의 제한시간이 종료되었습니다.");
   }
 
   private requireState(expected: GameState): void {
-    if (this.state !== expected) {
-      throw new GameRuleError(
-        "INVALID_STATE",
-        `${this.state} 상태에서는 이 행동을 수행할 수 없습니다.`,
-      );
-    }
+    if (this.state !== expected) throw new GameRuleError("INVALID_STATE", `${this.state} 상태에서는 이 행동을 수행할 수 없습니다.`);
   }
 
   private getPlayer(playerId: string): InternalPlayer {
@@ -347,9 +379,8 @@ export class GameMatch {
     return this.players.find((candidate) => candidate.playerId !== playerId)!;
   }
 
-  private getPlayerRemainingTime(player: InternalPlayer, nowMs: number): number {
-    if (this.deadlineMs === null) return 0;
-    return getRemainingTimeMs(this.deadlineMs, nowMs, player.wrongAnswerCount);
+  private getRemainingTime(nowMs: number): number {
+    return this.deadlineMs === null ? 0 : Math.max(0, this.deadlineMs - nowMs);
   }
 
   private transition(state: GameState, deadlineMs: number | null): void {
@@ -358,44 +389,82 @@ export class GameMatch {
     this.bumpVersion();
   }
 
-  private bumpVersion(): void {
-    this.stateVersion += 1;
-  }
+  private bumpVersion(): void { this.stateVersion += 1; }
 
-  private toProgress(player: InternalPlayer): PlayerProgress {
-    return {
+  private toProgress(player: InternalPlayer, isViewer: boolean): SelfPlayerProgress | OpponentPlayerProgress {
+    const foundCount = player.foundIdsByPuzzle[player.puzzleIndex]?.size ?? 0;
+    const publicProgress: OpponentPlayerProgress = {
       playerId: player.playerId,
       nickname: player.nickname,
       ready: player.ready,
-      foundCount: player.foundIds.size,
-      wrongAnswerCount: player.wrongAnswerCount,
-      hintsRemaining: GAME_CONFIG.hintsPerGame - player.hintsUsed,
+      loaded: player.loaded,
+      completedPuzzleCount: player.puzzleIndex,
+      foundCount,
       connectionStatus: player.connectionStatus,
+      perspective: "OPPONENT",
+      correctStreak: player.correctStreak,
+      bestStreak: player.bestStreak,
+    };
+    if (!isViewer) return publicProgress;
+    return {
+      ...publicProgress,
+      perspective: "SELF",
+      puzzleIndex: player.puzzleIndex,
+      totalFoundCount: player.puzzleIndex * GAME_CONFIG.differenceCount + foundCount,
+      wrongAnswerCount: player.wrongAnswerCount,
+      inputLockedUntilMs: player.inputLockedUntilMs,
     };
   }
 
-
-  /** 뷰어가 이미 맞힌 차이점만 위치와 함께 돌려준다. */
-  private toFoundMarks(viewer: InternalPlayer, differences: Difference[]): FoundMark[] {
-    return differences
-      .filter((difference) => viewer.foundIds.has(difference.id))
-      .map((difference) => ({
-        differenceId: difference.id,
-        region: { ...difference.region },
-      }));
+  private validatePuzzle(puzzle: MatchPuzzle): void {
+    if (typeof puzzle.assetVersion !== "string" || !puzzle.assetVersion.trim()) {
+      throw new GameRuleError("INVALID_PUZZLE", puzzle.id + " 문제의 에셋 버전이 없습니다.");
+    }
+    if (puzzle.differences.length !== GAME_CONFIG.differenceCount) {
+      throw new GameRuleError("INVALID_PUZZLE", puzzle.id + " 문제의 차이점 수가 올바르지 않습니다.");
+    }
+    const ids = new Set<string>();
+    for (const difference of puzzle.differences) {
+      if (!difference.id || ids.has(difference.id)) {
+        throw new GameRuleError("INVALID_PUZZLE", puzzle.id + " 문제에 비어 있거나 중복된 차이점 ID가 있습니다.");
+      }
+      ids.add(difference.id);
+      if (difference.regions.length !== 1) {
+        throw new GameRuleError("INVALID_PUZZLE", puzzle.id + " 문제의 각 차이점은 정확히 하나의 영역이어야 합니다.");
+      }
+      const region = difference.regions[0]!;
+      if (
+        !Number.isFinite(region.x) || !Number.isFinite(region.y) || !Number.isFinite(region.radius) ||
+        region.radius <= 0 || region.radius > 0.5 ||
+        region.x - region.radius < 0 || region.x + region.radius > 1 ||
+        region.y - region.radius < 0 || region.y + region.radius > 1
+      ) {
+        throw new GameRuleError("INVALID_PUZZLE", puzzle.id + " 문제에 유효하지 않은 정답 영역이 있습니다.");
+      }
+    }
+    for (let left = 0; left < puzzle.differences.length; left += 1) {
+      for (let right = left + 1; right < puzzle.differences.length; right += 1) {
+        const a = puzzle.differences[left]!.regions[0]!;
+        const b = puzzle.differences[right]!.regions[0]!;
+        if (Math.hypot(a.x - b.x, a.y - b.y) < a.radius + b.radius) {
+          throw new GameRuleError("INVALID_PUZZLE", puzzle.id + " 문제의 정답 영역이 서로 겹칩니다.");
+        }
+      }
+    }
   }
 
-  /** 경기 종료 후에만 호출한다. 진행 중에 부르면 정답이 노출된다. */
-  private toRevealed(viewer: InternalPlayer, differences: Difference[]): RevealedDifference[] {
-    return differences.map((difference) => ({
+  private toFoundMarks(puzzle: MatchPuzzle, foundIds: Set<string>): FoundMark[] {
+    return puzzle.differences
+      .filter((difference) => foundIds.has(difference.id))
+      .flatMap((difference) => difference.regions.map((region) => ({ differenceId: difference.id, region: { ...region } })));
+  }
+
+  private toRevealed(puzzle: MatchPuzzle, foundIds: Set<string>): RevealedDifference[] {
+    return puzzle.differences.map((difference) => ({
       id: difference.id,
-      kind: difference.kind,
-      region: { ...difference.region },
-      found: viewer.foundIds.has(difference.id),
+      kind: "COLOR",
+      region: { ...difference.regions[0]! },
+      found: foundIds.has(difference.id),
     }));
-  }
-
-  private toHintArea(region: AnswerRegion): AnswerRegion {
-    return { ...region, radius: Math.min(region.radius * 2.5, 0.25) };
   }
 }

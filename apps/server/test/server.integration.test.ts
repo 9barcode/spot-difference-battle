@@ -1,366 +1,152 @@
-import {
-  DEFAULT_GAME_SCENE_ID,
-  getSystemSceneDifferences,
-  type ClientToServerEvents,
-  type GameSnapshot,
-  type GameErrorPayload,
-  type MatchFoundPayload,
-  type SessionReadyPayload,
-  type ServerToClientEvents,
-} from "@spot-battle/shared";
+import type { ClientToServerEvents, GameErrorPayload, GameSnapshot, MatchFoundPayload, ServerToClientEvents } from "@spot-battle/shared";
 import type { AddressInfo } from "node:net";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { io as createClient, type Socket } from "socket.io-client";
-import { afterEach, describe, expect, it } from "vitest";
-import { createGameServer } from "../src/server.js";
 import { InMemoryMatchStore } from "../src/match-store.js";
+import { createGameServer } from "../src/server.js";
 
 type TestSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 
-const sockets: TestSocket[] = [];
-
-afterEach(() => {
-  for (const socket of sockets.splice(0)) socket.disconnect();
-});
-
-function once<T>(socket: TestSocket, event: string): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error(`${event} event timed out`)), 3_000);
-    socket.once(event as never, ((payload: T) => {
-      clearTimeout(timeout);
-      resolve(payload);
-    }) as never);
+function waitForEvent<T>(socket: TestSocket, event: string, predicate: (value: T) => boolean = () => true): Promise<T> {
+  return new Promise((resolve) => {
+    const listener = (value: T) => {
+      if (!predicate(value)) return;
+      socket.off(event as never, listener as never);
+      resolve(value);
+    };
+    socket.on(event as never, listener as never);
   });
 }
 
 function waitForState(socket: TestSocket, state: GameSnapshot["state"]): Promise<GameSnapshot> {
-  return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error(`${state} state timed out`)), 3_000);
-    const listener = (snapshot: GameSnapshot) => {
-      if (snapshot.state !== state) return;
-      clearTimeout(timeout);
-      socket.off("game:snapshot", listener);
-      resolve(snapshot);
-    };
-    socket.on("game:snapshot", listener);
-  });
+  return waitForEvent<GameSnapshot>(socket, "game:snapshot", (snapshot) => snapshot.state === state);
 }
 
-function waitForNewerVersion(socket: TestSocket, stateVersion: number): Promise<GameSnapshot> {
-  return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error("newer snapshot timed out")), 3_000);
-    const listener = (snapshot: GameSnapshot) => {
-      if (snapshot.stateVersion <= stateVersion) return;
-      clearTimeout(timeout);
-      socket.off("game:snapshot", listener);
-      resolve(snapshot);
-    };
-    socket.on("game:snapshot", listener);
-  });
-}
+describe("simultaneous game server", () => {
+  let app: Awaited<ReturnType<typeof createGameServer>>;
+  const sockets: TestSocket[] = [];
 
-function waitForConnection(
-  socket: TestSocket,
-  playerId: string,
-  status: "CONNECTED" | "RECONNECTING" | "FORFEITED",
-): Promise<GameSnapshot> {
-  return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error(`${status} connection timed out`)), 3_000);
-    const listener = (snapshot: GameSnapshot) => {
-      const player = snapshot.players.find((candidate) => candidate.playerId === playerId);
-      if (player?.connectionStatus !== status) return;
-      clearTimeout(timeout);
-      socket.off("game:snapshot", listener);
-      resolve(snapshot);
-    };
-    socket.on("game:snapshot", listener);
-  });
-}
-
-describe("game server", () => {
-  it("starts one shared system problem and compares both results", async () => {
-    const matchStore = new InMemoryMatchStore();
-    const app = await createGameServer({
-      webOrigin: "http://localhost:5173",
-      matchStore,
-      inputCooldownMs: 0,
-      sceneId: DEFAULT_GAME_SCENE_ID,
-      logger: false,
-    });
+  beforeEach(async () => {
+    app = await createGameServer({ sceneId: "enchanted-forest", inputCooldownMs: 0 });
     await app.listen({ host: "127.0.0.1", port: 0 });
+  });
 
-    try {
-      const port = (app.server.address() as AddressInfo).port;
-      const first = createClient(`http://127.0.0.1:${port}`) as TestSocket;
-      const second = createClient(`http://127.0.0.1:${port}`) as TestSocket;
-      sockets.push(first, second);
-      await Promise.all([once(first, "connect"), once(second, "connect")]);
+  afterEach(async () => {
+    for (const socket of sockets) socket.disconnect();
+    await app.close();
+  });
 
-      const firstFound = once<MatchFoundPayload>(first, "match:found");
-      const secondFound = once<MatchFoundPayload>(second, "match:found");
-      first.emit("queue:join", { nickname: "첫째" });
-      second.emit("queue:join", { nickname: "둘째" });
-      const [firstMatch, secondMatch] = await Promise.all([firstFound, secondFound]);
+  async function connect(): Promise<TestSocket> {
+    const { port } = app.server.address() as AddressInfo;
+    const socket: TestSocket = createClient(`http://127.0.0.1:${port}`, { forceNew: true, transports: ["websocket"], autoConnect: false });
+    sockets.push(socket);
+    const ready = waitForEvent(socket, "session:ready");
+    socket.connect();
+    await ready;
+    return socket;
+  }
 
-      const firstFinding = waitForState(first, "FINDING");
-      const secondFinding = waitForState(second, "FINDING");
-      first.emit("game:ready", { matchId: firstMatch.matchId });
-      second.emit("game:ready", { matchId: secondMatch.matchId });
-      let [firstSnapshot, secondSnapshot] = await Promise.all([firstFinding, secondFinding]);
-      const systemDifferences = getSystemSceneDifferences(DEFAULT_GAME_SCENE_ID);
-
-      for (const { region: point } of systemDifferences) {
-        const next = waitForNewerVersion(first, firstSnapshot.stateVersion);
-        first.emit("game:guess", {
-          matchId: firstMatch.matchId,
-          point,
-          expectedState: firstSnapshot.state,
-          expectedStateVersion: firstSnapshot.stateVersion,
-        });
-        firstSnapshot = await next;
+  it("does not accept a report when finished-match cleanup persistence fails", async () => {
+    await app.close();
+    const store = new class extends InMemoryMatchStore {
+      override async deleteActiveMatch(): Promise<void> {
+        throw new Error("DELETE_FAILED");
       }
-      expect(firstSnapshot.state).toBe("FINDING");
-      secondSnapshot = { ...secondSnapshot, stateVersion: firstSnapshot.stateVersion };
-
-      for (const { region: point } of systemDifferences.slice(0, 2)) {
-        const next = waitForNewerVersion(second, secondSnapshot.stateVersion);
-        second.emit("game:guess", {
-          matchId: secondMatch.matchId,
-          point,
-          expectedState: secondSnapshot.state,
-          expectedStateVersion: secondSnapshot.stateVersion,
-        });
-        secondSnapshot = await next;
-      }
-      const finished = waitForState(second, "FINISHED");
-      second.emit("game:guess", {
-        matchId: secondMatch.matchId,
-        point: systemDifferences[2]!.region,
-        expectedState: secondSnapshot.state,
-        expectedStateVersion: secondSnapshot.stateVersion,
-      });
-
-      const result = await finished;
-      expect(result).toMatchObject({ state: "FINISHED", winnerId: firstMatch.playerId });
-      expect(result.players.every((player) => player.foundCount === 3)).toBe(true);
-      expect(result.revealedDifferences).toHaveLength(3);
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      expect(matchStore.matches.has(firstMatch.matchId)).toBe(true);
-      expect(matchStore.activeMatches.has(firstMatch.matchId)).toBe(false);
-    } finally {
-      for (const socket of sockets.splice(0)) socket.disconnect();
-      await app.close();
-    }
-  });
-
-  it("restores the same player and match with a guest token", async () => {
-    const app = await createGameServer({
-      webOrigin: "http://localhost:5173",
-      reconnectGraceMs: 200,
-    });
+    }();
+    app = await createGameServer({ matchStore: store, inputCooldownMs: 0 });
     await app.listen({ host: "127.0.0.1", port: 0 });
 
-    try {
-      const port = (app.server.address() as AddressInfo).port;
-      const url = `http://127.0.0.1:${port}`;
-      const first = createClient(url) as TestSocket;
-      const second = createClient(url) as TestSocket;
-      sockets.push(first, second);
-      const firstSessionPromise = once<SessionReadyPayload>(first, "session:ready");
-      await Promise.all([once(first, "connect"), once(second, "connect")]);
-      const firstSession = await firstSessionPromise;
-
-      const firstFound = once<MatchFoundPayload>(first, "match:found");
-      const secondFound = once<MatchFoundPayload>(second, "match:found");
-      first.emit("queue:join", { nickname: "첫째" });
-      second.emit("queue:join", { nickname: "둘째" });
-      const [firstMatch, secondMatch] = await Promise.all([firstFound, secondFound]);
-
-      const reconnecting = waitForConnection(second, firstSession.playerId, "RECONNECTING");
-      first.disconnect();
-      await reconnecting;
-
-      const resumed = createClient(url, {
-        autoConnect: false,
-        auth: { guestToken: firstSession.guestToken },
-      }) as TestSocket;
-      sockets.push(resumed);
-      const resumedSession = once<SessionReadyPayload>(resumed, "session:ready");
-      const resumedMatch = once<MatchFoundPayload>(resumed, "match:found");
-      const connectedAgain = waitForConnection(second, firstSession.playerId, "CONNECTED");
-      resumed.connect();
-
-      await expect(resumedSession).resolves.toMatchObject({ playerId: firstSession.playerId });
-      await expect(resumedMatch).resolves.toMatchObject({ matchId: firstMatch.matchId });
-      const resumedSnapshot = await connectedAgain;
-
-      const finished = waitForState(second, "FINISHED");
-      resumed.emit("game:forfeit", {
-        matchId: firstMatch.matchId,
-        expectedState: resumedSnapshot.state,
-        expectedStateVersion: resumedSnapshot.stateVersion,
-      });
-      await expect(finished).resolves.toMatchObject({
-        winnerId: secondMatch.playerId,
-        endReason: "FORFEIT",
-      });
-    } finally {
-      for (const socket of sockets.splice(0)) socket.disconnect();
-      await app.close();
-    }
-  });
-
-  it("restores guest sessions and an active match after a server restart", async () => {
-    const matchStore = new InMemoryMatchStore();
-    const firstApp = await createGameServer({
-      webOrigin: "http://localhost:5173",
-      matchStore,
-      reconnectGraceMs: 5_000,
+    const first = await connect();
+    const second = await connect();
+    const firstFound = waitForEvent<MatchFoundPayload>(first, "match:found");
+    const secondFound = waitForEvent<MatchFoundPayload>(second, "match:found");
+    const firstReadySnapshot = waitForState(first, "READY");
+    first.emit("queue:join", { nickname: "first" });
+    second.emit("queue:join", { nickname: "second" });
+    const [firstMatch] = await Promise.all([firstFound, secondFound]);
+    const ready = await firstReadySnapshot;
+    const finished = waitForState(first, "FINISHED");
+    first.emit("game:forfeit", {
+      matchId: firstMatch.matchId,
+      expectedState: ready.state,
+      expectedStateVersion: ready.stateVersion,
     });
-    await firstApp.listen({ host: "127.0.0.1", port: 0 });
-
-    let secondApp: Awaited<ReturnType<typeof createGameServer>> | null = null;
-    try {
-      const firstPort = (firstApp.server.address() as AddressInfo).port;
-      const first = createClient(`http://127.0.0.1:${firstPort}`, { autoConnect: false }) as TestSocket;
-      const second = createClient(`http://127.0.0.1:${firstPort}`, { autoConnect: false }) as TestSocket;
-      sockets.push(first, second);
-      const firstConnected = once(first, "connect");
-      const secondConnected = once(second, "connect");
-      const firstSessionPromise = once<SessionReadyPayload>(first, "session:ready");
-      const secondSessionPromise = once<SessionReadyPayload>(second, "session:ready");
-      first.connect();
-      second.connect();
-      await Promise.all([firstConnected, secondConnected]);
-      const [firstSession, secondSession] = await Promise.all([
-        firstSessionPromise,
-        secondSessionPromise,
-      ]);
-
-      const firstFound = once<MatchFoundPayload>(first, "match:found");
-      const secondFound = once<MatchFoundPayload>(second, "match:found");
-      first.emit("queue:join", { nickname: "재시작첫째" });
-      second.emit("queue:join", { nickname: "재시작둘째" });
-      const [firstMatch, secondMatch] = await Promise.all([firstFound, secondFound]);
-      const finding = waitForState(first, "FINDING");
-      first.emit("game:ready", { matchId: firstMatch.matchId });
-      second.emit("game:ready", { matchId: secondMatch.matchId });
-      await finding;
-
-      first.disconnect();
-      second.disconnect();
-      await firstApp.close();
-
-      secondApp = await createGameServer({
-        webOrigin: "http://localhost:5173",
-        matchStore,
-        reconnectGraceMs: 5_000,
-      });
-      await secondApp.listen({ host: "127.0.0.1", port: 0 });
-      const secondPort = (secondApp.server.address() as AddressInfo).port;
-      const restoredFirst = createClient(`http://127.0.0.1:${secondPort}`, {
-        autoConnect: false,
-        auth: { guestToken: firstSession.guestToken },
-      }) as TestSocket;
-      const restoredSecond = createClient(`http://127.0.0.1:${secondPort}`, {
-        autoConnect: false,
-        auth: { guestToken: secondSession.guestToken },
-      }) as TestSocket;
-      sockets.push(restoredFirst, restoredSecond);
-      const restoredFirstConnected = once(restoredFirst, "connect");
-      const restoredSecondConnected = once(restoredSecond, "connect");
-      const restoredFirstSession = once<SessionReadyPayload>(restoredFirst, "session:ready");
-      const restoredFirstMatch = once<MatchFoundPayload>(restoredFirst, "match:found");
-      const restoredFinding = waitForState(restoredFirst, "FINDING");
-      restoredFirst.connect();
-      restoredSecond.connect();
-      await Promise.all([restoredFirstConnected, restoredSecondConnected]);
-
-      await expect(restoredFirstSession).resolves.toMatchObject({ playerId: firstSession.playerId });
-      await expect(restoredFirstMatch).resolves.toMatchObject({ matchId: firstMatch.matchId });
-      await expect(restoredFinding).resolves.toMatchObject({
-        state: "FINDING",
-        matchId: firstMatch.matchId,
-      });
-    } finally {
-      for (const socket of sockets.splice(0)) socket.disconnect();
-      if (secondApp) await secondApp.close();
-      else await firstApp.close();
-    }
-  });
-
-  it("forfeits a disconnected player after the grace period", async () => {
-    const app = await createGameServer({
-      webOrigin: "http://localhost:5173",
-      reconnectGraceMs: 50,
+    const result = await finished;
+    const persistenceError = waitForEvent<GameErrorPayload>(
+      first,
+      "game:error",
+      (error) => error.code === "INTERNAL_ERROR",
+    );
+    first.emit("game:report", {
+      matchId: firstMatch.matchId,
+      expectedState: result.state,
+      expectedStateVersion: result.stateVersion,
+      reason: "SYSTEM_ERROR",
     });
-    await app.listen({ host: "127.0.0.1", port: 0 });
-
-    try {
-      const port = (app.server.address() as AddressInfo).port;
-      const first = createClient(`http://127.0.0.1:${port}`) as TestSocket;
-      const second = createClient(`http://127.0.0.1:${port}`) as TestSocket;
-      sockets.push(first, second);
-      await Promise.all([once(first, "connect"), once(second, "connect")]);
-
-      const firstFound = once<MatchFoundPayload>(first, "match:found");
-      const secondFound = once<MatchFoundPayload>(second, "match:found");
-      first.emit("queue:join", { nickname: "첫째" });
-      second.emit("queue:join", { nickname: "둘째" });
-      const [firstMatch, secondMatch] = await Promise.all([firstFound, secondFound]);
-
-      const finished = waitForState(second, "FINISHED");
-      first.disconnect();
-      await expect(finished).resolves.toMatchObject({
-        winnerId: secondMatch.playerId,
-        endReason: "FORFEIT",
-      });
-      expect(firstMatch.playerId).not.toBe(secondMatch.playerId);
-    } finally {
-      for (const socket of sockets.splice(0)) socket.disconnect();
-      await app.close();
-    }
+    await persistenceError;
+    expect(store.reports.size).toBe(0);
   });
+  it("keeps a cleared player waiting until timeout or forfeit", async () => {
+    const first = await connect();
+    const second = await connect();
+    const firstFound = waitForEvent<MatchFoundPayload>(first, "match:found");
+    const secondFound = waitForEvent<MatchFoundPayload>(second, "match:found");
+    first.emit("queue:join", { nickname: "첫째" });
+    second.emit("queue:join", { nickname: "둘째" });
+    const [firstMatch, secondMatch] = await Promise.all([firstFound, secondFound]);
+    expect(firstMatch.matchId).toBe(secondMatch.matchId);
 
-  it("keeps the authoritative result when persistence fails", async () => {
-    class FailingStore extends InMemoryMatchStore {
-      override async saveMatch(): Promise<void> {
-        throw new Error("database unavailable");
-      }
+    const firstPreloading = waitForState(first, "PRELOADING");
+    const secondPreloading = waitForState(second, "PRELOADING");
+    first.emit("game:ready", { matchId: firstMatch.matchId });
+    second.emit("game:ready", { matchId: firstMatch.matchId });
+    const [firstLoad, secondLoad] = await Promise.all([firstPreloading, secondPreloading]);
+    expect(firstLoad.currentPuzzleId).toBe("enchanted-forest");
+
+    const versionError = waitForEvent<GameErrorPayload>(first, "game:error", (error) => error.code === "PUZZLE_VERSION_MISMATCH");
+    first.emit("game:loaded", { matchId: firstMatch.matchId, puzzleId: "enchanted-forest", puzzleVersion: "stale-version" });
+    await expect(versionError).resolves.toMatchObject({ code: "PUZZLE_VERSION_MISMATCH" });
+    const firstCountdown = waitForState(first, "COUNTDOWN");
+    const secondCountdown = waitForState(second, "COUNTDOWN");
+    first.emit("game:loaded", { matchId: firstMatch.matchId, puzzleId: "enchanted-forest", puzzleVersion: firstLoad.currentPuzzleVersion! });
+    second.emit("game:loaded", { matchId: firstMatch.matchId, puzzleId: "enchanted-forest", puzzleVersion: secondLoad.currentPuzzleVersion! });
+    await Promise.all([firstCountdown, secondCountdown]);
+
+    const [firstPlaying, secondPlaying] = await Promise.all([waitForState(first, "PLAYING"), waitForState(second, "PLAYING")]);
+    const context = { expectedState: "PLAYING" as const, expectedStateVersion: firstPlaying.stateVersion };
+    const malformedError = waitForEvent<GameErrorPayload>(first, "game:error", (error) => error.code === "INVALID_POINT");
+    first.emit("game:guess", {
+      matchId: firstMatch.matchId,
+      puzzleId: "enchanted-forest",
+      point: null,
+      ...context,
+    } as never);
+    await expect(malformedError).resolves.toMatchObject({ code: "INVALID_POINT" });
+
+    const requeueError = waitForEvent<GameErrorPayload>(first, "game:error", (error) => error.code === "ALREADY_IN_MATCH");
+    first.emit("queue:join", { nickname: "재매칭시도" });
+    await expect(requeueError).resolves.toMatchObject({ code: "ALREADY_IN_MATCH" });
+    second.emit("game:guess", { matchId: firstMatch.matchId, puzzleId: "enchanted-forest", point: { x: 0.31, y: 0.33 }, ...context });
+    const secondProgress = await waitForEvent<GameSnapshot>(second, "game:snapshot", (snapshot) => snapshot.players.some((player) => player.playerId === secondMatch.playerId && player.foundCount === 1));
+    expect(secondProgress.foundMarks).toHaveLength(1);
+    expect(firstPlaying.foundMarks).toHaveLength(0);
+
+    const exhaustedFirst = waitForEvent<GameSnapshot>(first, "game:snapshot", (snapshot) => snapshot.state === "PLAYING" && snapshot.currentPuzzleId === null);
+    for (const point of [{ x: 0.31, y: 0.33 }, { x: 0.27, y: 0.78 }, { x: 0.79, y: 0.17 }]) {
+      first.emit("game:guess", { matchId: firstMatch.matchId, puzzleId: "enchanted-forest", point, ...context });
     }
-    const app = await createGameServer({
-      webOrigin: "http://localhost:5173",
-      matchStore: new FailingStore(),
+    const stillPlaying = await exhaustedFirst;
+    expect(stillPlaying).toMatchObject({ state: "PLAYING", currentPuzzleId: null, winnerId: null });
+
+    const finishedFirst = waitForState(first, "FINISHED");
+    const finishedSecond = waitForState(second, "FINISHED");
+    second.emit("game:forfeit", {
+      matchId: firstMatch.matchId,
+      expectedState: "PLAYING",
+      expectedStateVersion: stillPlaying.stateVersion,
     });
-    await app.listen({ host: "127.0.0.1", port: 0 });
-
-    try {
-      const port = (app.server.address() as AddressInfo).port;
-      const first = createClient(`http://127.0.0.1:${port}`) as TestSocket;
-      const second = createClient(`http://127.0.0.1:${port}`) as TestSocket;
-      sockets.push(first, second);
-      await Promise.all([once(first, "connect"), once(second, "connect")]);
-
-      const firstFound = once<MatchFoundPayload>(first, "match:found");
-      const secondFound = once<MatchFoundPayload>(second, "match:found");
-      const ready = waitForState(first, "READY");
-      first.emit("queue:join", { nickname: "첫째" });
-      second.emit("queue:join", { nickname: "둘째" });
-      const [firstMatch, secondMatch] = await Promise.all([firstFound, secondFound]);
-      const readySnapshot = await ready;
-
-      const finished = waitForState(second, "FINISHED");
-      first.emit("game:forfeit", {
-        matchId: firstMatch.matchId,
-        expectedState: readySnapshot.state,
-        expectedStateVersion: readySnapshot.stateVersion,
-      });
-      await expect(finished).resolves.toMatchObject({
-        winnerId: secondMatch.playerId,
-        endReason: "FORFEIT",
-      });
-    } finally {
-      for (const socket of sockets.splice(0)) socket.disconnect();
-      await app.close();
-    }
-  });
+    const [firstResult, secondResult] = await Promise.all([finishedFirst, finishedSecond]);
+    expect(firstResult).toMatchObject({ winnerId: firstMatch.playerId, endReason: "FORFEIT" });
+    expect(secondResult.winnerId).toBe(firstMatch.playerId);
+  }, 15_000);
 });

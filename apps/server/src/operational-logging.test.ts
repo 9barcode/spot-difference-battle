@@ -7,14 +7,14 @@ describe("operationalLogFields", () => {
     expect(
       operationalLogFields(
         "database.match_save_failed",
-        { matchId: "match-1", playerId: "player-1", action: "game:submit" },
+        { matchId: "match-1", playerId: "player-1", action: "game:guess" },
         error,
       ),
     ).toEqual({
       event: "database.match_save_failed",
       matchId: "match-1",
       playerId: "player-1",
-      action: "game:submit",
+      action: "game:guess",
       errorType: "Error",
       errorCode: "ECONNREFUSED",
     });

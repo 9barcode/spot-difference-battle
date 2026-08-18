@@ -1,114 +1,107 @@
-import type {
-  ClientToServerEvents,
-  GameSnapshot,
-  MatchFoundPayload,
-  SessionReadyPayload,
-  ServerToClientEvents,
-} from "@spot-battle/shared";
-import type { AddressInfo } from "node:net";
+import { GameMatch } from "@spot-battle/game-core";
+import { randomUUID } from "node:crypto";
 import { Pool } from "pg";
-import { io as createClient, type Socket } from "socket.io-client";
 import { describe, expect, it } from "vitest";
+import { GAME_PUZZLES } from "../src/game-puzzles.js";
 import { PostgresMatchStore } from "../src/match-store.js";
-import { createGameServer } from "../src/server.js";
 
-type TestSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 const databaseUrl = process.env.DATABASE_URL;
 const describeDatabase = databaseUrl ? describe : describe.skip;
 
-function once<T>(socket: TestSocket, event: string): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error(`${event} event timed out`)), 5_000);
-    socket.once(event as never, ((payload: T) => {
-      clearTimeout(timeout);
-      resolve(payload);
-    }) as never);
-  });
-}
-
-function waitForState(socket: TestSocket, state: GameSnapshot["state"]): Promise<GameSnapshot> {
-  return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error(`${state} state timed out`)), 5_000);
-    const listener = (snapshot: GameSnapshot) => {
-      if (snapshot.state !== state) return;
-      clearTimeout(timeout);
-      socket.off("game:snapshot", listener);
-      resolve(snapshot);
-    };
-    socket.on("game:snapshot", listener);
-  });
-}
-
 describeDatabase("PostgreSQL restart recovery", () => {
-  it("restores guest identities and an active match in a new server instance", async () => {
-    const sockets: TestSocket[] = [];
+  it("restores schema-v2 identity, puzzle order, deadline, and progress through a new store instance", async () => {
+    const matchId = randomUUID();
+    const firstId = randomUUID();
+    const secondId = randomUUID();
+    const firstToken = randomUUID();
+    const secondToken = randomUUID();
     const pool = new Pool({ connectionString: databaseUrl });
-    const playerIds: string[] = [];
-    let matchId: string | null = null;
-    let firstApp = await createGameServer({
-      webOrigin: "http://localhost:5173",
-      matchStore: new PostgresMatchStore(databaseUrl!),
-      reconnectGraceMs: 10_000,
-    });
-    await firstApp.listen({ host: "127.0.0.1", port: 0 });
-    let secondApp: Awaited<ReturnType<typeof createGameServer>> | null = null;
+    let firstStore: PostgresMatchStore | null = new PostgresMatchStore(databaseUrl!);
+    let secondStore: PostgresMatchStore | null = null;
 
     try {
-      const firstPort = (firstApp.server.address() as AddressInfo).port;
-      const first = createClient(`http://127.0.0.1:${firstPort}`) as TestSocket;
-      const second = createClient(`http://127.0.0.1:${firstPort}`) as TestSocket;
-      sockets.push(first, second);
-      const firstSessionPromise = once<SessionReadyPayload>(first, "session:ready");
-      const secondSessionPromise = once<SessionReadyPayload>(second, "session:ready");
-      await Promise.all([once(first, "connect"), once(second, "connect")]);
-      const [firstSession, secondSession] = await Promise.all([
-        firstSessionPromise,
-        secondSessionPromise,
-      ]);
-      playerIds.push(firstSession.playerId, secondSession.playerId);
+      await firstStore.upsertGuest({ playerId: firstId, guestToken: firstToken, nickname: "재시작첫째" });
+      await firstStore.upsertGuest({ playerId: secondId, guestToken: secondToken, nickname: "재시작둘째" });
+      const match = new GameMatch(matchId, GAME_PUZZLES, [
+        { playerId: firstId, nickname: "재시작첫째" },
+        { playerId: secondId, nickname: "재시작둘째" },
+      ], 1_000);
+      match.markReady(firstId, 1_100);
+      match.markReady(secondId, 1_100);
+      match.markLoaded(firstId, GAME_PUZZLES[0]!.id, GAME_PUZZLES[0]!.assetVersion, 1_200);
+      match.markLoaded(secondId, GAME_PUZZLES[0]!.id, GAME_PUZZLES[0]!.assetVersion, 1_200);
+      match.expire(4_200);
+      match.guess(firstId, GAME_PUZZLES[0]!.id, GAME_PUZZLES[0]!.differences[0]!.regions[0]!, 4_300);
+      const before = match.serialize();
+      await firstStore.saveActiveMatch(before);
+      await firstStore.close();
+      firstStore = null;
 
-      const firstFound = once<MatchFoundPayload>(first, "match:found");
-      const secondFound = once<MatchFoundPayload>(second, "match:found");
-      first.emit("queue:join", { nickname: "재시작첫째" });
-      second.emit("queue:join", { nickname: "재시작둘째" });
-      const [firstMatch, secondMatch] = await Promise.all([firstFound, secondFound]);
-      matchId = firstMatch.matchId;
-
-      const editing = waitForState(first, "EDITING");
-      first.emit("game:ready", { matchId: firstMatch.matchId });
-      second.emit("game:ready", { matchId: secondMatch.matchId });
-      await editing;
-      first.disconnect();
-      second.disconnect();
-      await firstApp.close();
-
-      secondApp = await createGameServer({
-        webOrigin: "http://localhost:5173",
-        matchStore: new PostgresMatchStore(databaseUrl!),
-        reconnectGraceMs: 10_000,
+      secondStore = new PostgresMatchStore(databaseUrl!);
+      const states = await secondStore.loadActiveMatches();
+      const persisted = states.find((state) => state.matchId === matchId);
+      expect(persisted).toBeDefined();
+      const restored = GameMatch.restore(persisted!);
+      expect(restored.serialize()).toMatchObject({
+        schemaVersion: 2,
+        matchId,
+        state: "PLAYING",
+        deadlineMs: before.deadlineMs,
+        puzzles: before.puzzles,
       });
-      await secondApp.listen({ host: "127.0.0.1", port: 0 });
-      const secondPort = (secondApp.server.address() as AddressInfo).port;
-      const restored = createClient(`http://127.0.0.1:${secondPort}`, {
-        auth: { guestToken: firstSession.guestToken },
-      }) as TestSocket;
-      sockets.push(restored);
-      const restoredSession = once<SessionReadyPayload>(restored, "session:ready");
-      const restoredMatch = once<MatchFoundPayload>(restored, "match:found");
-      const restoredEditing = waitForState(restored, "EDITING");
-
-      await once(restored, "connect");
-      await expect(restoredSession).resolves.toMatchObject({ playerId: firstSession.playerId });
-      await expect(restoredMatch).resolves.toMatchObject({ matchId: firstMatch.matchId });
-      await expect(restoredEditing).resolves.toMatchObject({ state: "EDITING" });
+      expect(restored.snapshot(firstId)).toMatchObject({ myFoundIds: [GAME_PUZZLES[0]!.differences[0]!.id] });
+      await expect(secondStore.loadGuests()).resolves.toEqual(expect.arrayContaining([
+        expect.objectContaining({ playerId: firstId, guestToken: firstToken }),
+        expect.objectContaining({ playerId: secondId, guestToken: secondToken }),
+      ]));
     } finally {
-      for (const socket of sockets) socket.disconnect();
-      if (secondApp) await secondApp.close();
-      else await firstApp.close();
-      if (matchId) await pool.query("DELETE FROM active_matches WHERE match_id = $1", [matchId]);
-      if (playerIds.length) {
-        await pool.query("DELETE FROM guest_sessions WHERE player_id = ANY($1::uuid[])", [playerIds]);
-      }
+      if (firstStore) await firstStore.close();
+      if (secondStore) await secondStore.close();
+      await pool.query("DELETE FROM active_matches WHERE match_id = $1", [matchId]);
+      await pool.query("DELETE FROM guest_sessions WHERE player_id = ANY($1::uuid[])", [[firstId, secondId]]);
+      await pool.end();
+    }
+  });
+  it("stores the exact puzzle manifest and private player totals for audit", async () => {
+    const matchId = randomUUID();
+    const firstId = randomUUID();
+    const secondId = randomUUID();
+    const store = new PostgresMatchStore(databaseUrl!);
+    const pool = new Pool({ connectionString: databaseUrl });
+
+    try {
+      const match = new GameMatch(matchId, [GAME_PUZZLES[0]!], [
+        { playerId: firstId, nickname: "감사첫째" },
+        { playerId: secondId, nickname: "감사둘째" },
+      ], 1_000);
+      match.markReady(firstId, 1_100);
+      match.markReady(secondId, 1_100);
+      match.markLoaded(firstId, GAME_PUZZLES[0]!.id, GAME_PUZZLES[0]!.assetVersion, 1_200);
+      match.markLoaded(secondId, GAME_PUZZLES[0]!.id, GAME_PUZZLES[0]!.assetVersion, 1_200);
+      match.expire(4_200);
+      match.guess(firstId, GAME_PUZZLES[0]!.id, GAME_PUZZLES[0]!.differences[0]!.regions[0]!, 4_300);
+      match.guess(secondId, GAME_PUZZLES[0]!.id, { x: 0.95, y: 0.95 }, 4_300);
+      match.forfeit(secondId);
+      const state = match.serialize();
+
+      await store.saveMatch(match.snapshot(firstId), state);
+
+      const savedMatch = await pool.query<{ puzzle_manifest: typeof state.puzzles }>(
+        "SELECT puzzle_manifest FROM matches WHERE id = $1",
+        [matchId],
+      );
+      expect(savedMatch.rows[0]?.puzzle_manifest).toEqual(state.puzzles);
+      const savedPlayers = await pool.query<{ player_id: string; found_count: number; wrong_answer_count: number }>(
+        "SELECT player_id, found_count, wrong_answer_count FROM match_players WHERE match_id = $1 ORDER BY player_id",
+        [matchId],
+      );
+      expect(savedPlayers.rows).toEqual(expect.arrayContaining([
+        { player_id: firstId, found_count: 1, wrong_answer_count: 0 },
+        { player_id: secondId, found_count: 0, wrong_answer_count: 1 },
+      ]));
+    } finally {
+      await store.close();
+      await pool.query("DELETE FROM matches WHERE id = $1", [matchId]);
       await pool.end();
     }
   });

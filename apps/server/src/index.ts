@@ -4,10 +4,12 @@ import {
   GAME_SCENE_IDS,
   type GameSceneId,
 } from "@spot-battle/shared";
+import { resolveWebOrigin } from "./web-origin.js";
 
 const host = process.env.HOST ?? "0.0.0.0";
 const port = Number.parseInt(process.env.PORT ?? "3001", 10);
-const webOrigin = process.env.WEB_ORIGIN ?? "http://localhost:5173";
+const webOrigin = resolveWebOrigin(process.env.WEB_ORIGIN, process.env.NODE_ENV);
+const staticRoot = process.env.WEB_ROOT?.trim() || undefined;
 const configuredSceneId = process.env.GAME_SCENE_ID?.trim();
 if (
   configuredSceneId &&
@@ -21,7 +23,12 @@ const sceneId = configuredSceneId as GameSceneId | undefined;
 const matchStore = process.env.DATABASE_URL
   ? new PostgresMatchStore(process.env.DATABASE_URL)
   : new InMemoryMatchStore();
-const app = await createGameServer({ webOrigin, matchStore, sceneId });
+const app = await createGameServer({
+  webOrigin,
+  staticRoot,
+  matchStore,
+  sceneId,
+});
 
 try {
   await app.listen({ host, port });

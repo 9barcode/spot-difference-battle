@@ -1,34 +1,10 @@
-import { describe, expect, it } from "vitest";
-import type { Difference, PlayerResult } from "@spot-battle/shared";
+﻿import { describe, expect, it } from "vitest";
+import type { PlayerResult } from "@spot-battle/shared";
 import {
   determineWinner,
   getRemainingTimeMs,
   isPointInAnswerRegion,
-  validateDifferences,
 } from "../src/index.js";
-
-const validDifferences: Difference[] = [
-  { id: "a", kind: "ADD", region: { x: 0.2, y: 0.2, radius: 0.05 } },
-  { id: "b", kind: "COVER", region: { x: 0.5, y: 0.5, radius: 0.05 } },
-  { id: "c", kind: "COLOR", region: { x: 0.8, y: 0.8, radius: 0.05 } },
-];
-
-describe("validateDifferences", () => {
-  it("accepts three separated normalized differences", () => {
-    expect(validateDifferences(validDifferences)).toEqual({ valid: true, errors: [] });
-  });
-
-  it("rejects overlapping and boundary-crossing differences", () => {
-    const result = validateDifferences([
-      { id: "a", kind: "ADD", region: { x: 0.01, y: 0.2, radius: 0.05 } },
-      { id: "b", kind: "COVER", region: { x: 0.5, y: 0.5, radius: 0.05 } },
-      { id: "c", kind: "COLOR", region: { x: 0.55, y: 0.5, radius: 0.05 } },
-    ]);
-
-    expect(result.valid).toBe(false);
-    expect(result.errors).toHaveLength(2);
-  });
-});
 
 describe("answer and time rules", () => {
   it("uses a circular answer region", () => {
@@ -37,8 +13,8 @@ describe("answer and time rules", () => {
     expect(isPointInAnswerRegion({ x: 0.7, y: 0.7 }, region)).toBe(false);
   });
 
-  it("subtracts three seconds for every wrong answer", () => {
-    expect(getRemainingTimeMs(60_000, 10_000, 2)).toBe(44_000);
+  it("keeps the shared deadline independent from wrong answers", () => {
+    expect(getRemainingTimeMs(60_000, 10_000, 2)).toBe(50_000);
     expect(getRemainingTimeMs(10_000, 20_000, 0)).toBe(0);
   });
 });
