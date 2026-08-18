@@ -2,7 +2,6 @@ import {
   DEFAULT_GAME_SCENE_ID,
   getSystemSceneDifferences,
   type ClientToServerEvents,
-  type Difference,
   type GameSnapshot,
   type GameErrorPayload,
   type MatchFoundPayload,
@@ -14,31 +13,8 @@ import { io as createClient, type Socket } from "socket.io-client";
 import { afterEach, describe, expect, it } from "vitest";
 import { createGameServer } from "../src/server.js";
 import { InMemoryMatchStore } from "../src/match-store.js";
-import { createProblemImageFixture } from "./png-fixture.js";
 
 type TestSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
-
-const differences: Difference[] = [
-  {
-    id: "a",
-    kind: "ADD",
-    region: { x: 0.2, y: 0.2, radius: 0.05 },
-    objectEdit: { objectId: "plant", objectLabel: "화분", color: "#ef2b2d", shapeEffect: "NONE" },
-  },
-  {
-    id: "b",
-    kind: "COVER",
-    region: { x: 0.5, y: 0.5, radius: 0.05 },
-    objectEdit: { objectId: "sofa", objectLabel: "소파", color: "#1775e5", shapeEffect: "WIDE" },
-  },
-  {
-    id: "c",
-    kind: "COLOR",
-    region: { x: 0.8, y: 0.8, radius: 0.05 },
-    objectEdit: { objectId: "cat", objectLabel: "고양이", color: "#18a83a", shapeEffect: "STRIPES" },
-  },
-];
-const problemImageFixture = createProblemImageFixture(differences);
 
 const sockets: TestSocket[] = [];
 
@@ -107,7 +83,6 @@ describe("game server", () => {
       webOrigin: "http://localhost:5173",
       matchStore,
       inputCooldownMs: 0,
-      originalProblemImage: problemImageFixture.originalImage,
       sceneId: DEFAULT_GAME_SCENE_ID,
       logger: false,
     });
@@ -131,8 +106,6 @@ describe("game server", () => {
       first.emit("game:ready", { matchId: firstMatch.matchId });
       second.emit("game:ready", { matchId: secondMatch.matchId });
       let [firstSnapshot, secondSnapshot] = await Promise.all([firstFinding, secondFinding]);
-      expect(firstSnapshot.problemImage).toBeNull();
-      expect(secondSnapshot.problemImage).toBeNull();
       const systemDifferences = getSystemSceneDifferences(DEFAULT_GAME_SCENE_ID);
 
       for (const { region: point } of systemDifferences) {
@@ -168,7 +141,7 @@ describe("game server", () => {
 
       const result = await finished;
       expect(result).toMatchObject({ state: "FINISHED", winnerId: firstMatch.playerId });
-      expect(result.players.every((player) => player.foundCount === 3 && !player.submitted)).toBe(true);
+      expect(result.players.every((player) => player.foundCount === 3)).toBe(true);
       expect(result.revealedDifferences).toHaveLength(3);
       await new Promise((resolve) => setTimeout(resolve, 0));
       expect(matchStore.matches.has(firstMatch.matchId)).toBe(true);

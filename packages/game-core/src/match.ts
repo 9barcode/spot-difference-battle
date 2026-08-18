@@ -18,8 +18,6 @@ import {
   determineWinner,
   getRemainingTimeMs,
   isPointInAnswerRegion,
-  validateDifferences,
-  validateProblemImage,
 } from "./index.js";
 
 export class GameRuleError extends Error {
@@ -39,9 +37,6 @@ export interface MatchPlayer {
 
 export interface PersistedMatchPlayer extends MatchPlayer {
   ready: boolean;
-  differences: Difference[] | null;
-  renderedImage: string | null;
-  autoFilled: boolean;
   foundIds: string[];
   wrongAnswerCount: number;
   hintsUsed: number;
@@ -63,10 +58,6 @@ export interface PersistedMatchState {
 
 interface InternalPlayer extends MatchPlayer {
   ready: boolean;
-  differences: Difference[] | null;
-  /** 제작자가 렌더해 올린 문제 이미지. 상대에게 전달되는 유일한 제작 결과물. */
-  renderedImage: string | null;
-  autoFilled: boolean;
   foundIds: Set<string>;
   wrongAnswerCount: number;
   hintsUsed: number;
@@ -83,12 +74,6 @@ export class GameMatch {
   private cancelReason: string | null = null;
   private players: [InternalPlayer, InternalPlayer];
 
-  /**
-   * 자동 보충(부족한 차이점 채우기)은 클라이언트에서 처리한다.
-   * 서버는 픽셀을 렌더하지 않으므로 서버가 차이점을 주입하면
-   * 그에 맞는 문제 이미지를 만들 수 없기 때문이다.
-   * 마감까지 문제를 제출하지 않은 제작자는 기권으로 처리한다.
-   */
   constructor(
     public readonly matchId: string,
     public readonly imageId: GameSceneId,
@@ -101,9 +86,6 @@ export class GameMatch {
     this.players = players.map((player) => ({
       ...player,
       ready: false,
-      differences: null,
-      renderedImage: null,
-      autoFilled: false,
       foundIds: new Set<string>(),
       wrongAnswerCount: 0,
       hintsUsed: 0,
@@ -121,15 +103,18 @@ export class GameMatch {
         MatchPlayer,
       ],
     );
-    match.state = state.state;
+    const persistedState = state.state as string;
+    const isLegacySubmissionState = persistedState === "EDITING" || persistedState === "SWAPPING";
+    match.state = isLegacySubmissionState ? "CANCELLED" : state.state;
     match.stateVersion = state.stateVersion;
-    match.deadlineMs = state.deadlineMs;
+    match.deadlineMs = isLegacySubmissionState ? null : state.deadlineMs;
     match.winnerId = state.winnerId;
-    match.endReason = state.endReason;
-    match.cancelReason = state.cancelReason;
+    match.endReason = isLegacySubmissionState ? "CANCELLED" : state.endReason;
+    match.cancelReason = isLegacySubmissionState
+      ? "이전 제작 방식의 경기는 게임 규칙 변경으로 안전하게 취소되었습니다."
+      : state.cancelReason;
     match.players = state.players.map((player) => ({
       ...structuredClone(player),
-      autoFilled: player.autoFilled ?? false,
       foundIds: new Set(player.foundIds),
     })) as [InternalPlayer, InternalPlayer];
     return match;
@@ -149,9 +134,6 @@ export class GameMatch {
         playerId: player.playerId,
         nickname: player.nickname,
         ready: player.ready,
-        differences: structuredClone(player.differences),
-        renderedImage: player.renderedImage,
-        autoFilled: player.autoFilled,
         foundIds: [...player.foundIds],
         wrongAnswerCount: player.wrongAnswerCount,
         hintsUsed: player.hintsUsed,
@@ -177,40 +159,6 @@ export class GameMatch {
     player.ready = true;
     this.bumpVersion();
     if (this.players.every((candidate) => candidate.ready)) {
-      this.startFinding(nowMs);
-    }
-  }
-
-  submitDifferences(
-    playerId: string,
-    differences: Difference[],
-    renderedImage: string,
-    nowMs: number,
-    autoFilled = false,
-  ): void {
-    this.requireState("EDITING");
-    const player = this.getPlayer(playerId);
-    this.requireBeforeDeadline(playerId, nowMs);
-    if (player.differences) {
-      throw new GameRuleError("ALREADY_SUBMITTED", "이미 차이점을 제출했습니다.");
-    }
-
-    const validation = validateDifferences(differences);
-    if (!validation.valid) {
-      throw new GameRuleError("INVALID_DIFFERENCES", validation.errors.join(" "));
-    }
-
-    const imageValidation = validateProblemImage(renderedImage);
-    if (!imageValidation.valid) {
-      throw new GameRuleError("INVALID_PROBLEM_IMAGE", imageValidation.errors.join(" "));
-    }
-
-    player.differences = structuredClone(differences);
-    player.renderedImage = renderedImage;
-    player.autoFilled = autoFilled;
-    this.bumpVersion();
-    // 두 플레이어가 모두 제출할 때까지 상대의 결과와 정답은 공개하지 않는다.
-    if (this.players.every((candidate) => candidate.differences !== null)) {
       this.startFinding(nowMs);
     }
   }
@@ -275,15 +223,6 @@ export class GameMatch {
   expire(nowMs: number): boolean {
     if (this.deadlineMs === null || nowMs < this.deadlineMs) return false;
 
-    if (this.state === "EDITING") {
-      const missing = this.players.filter((player) => player.differences === null);
-      if (missing.length === 0) return false;
-      for (const player of missing) player.connectionStatus = "FORFEITED";
-      const winner = missing.length === 1 ? this.getOpponent(missing[0]!.playerId).playerId : null;
-      this.finish(winner, missing.length === 1 ? "FORFEIT" : "TIMEOUT");
-      return true;
-    }
-
     if (this.state === "FINDING") {
       this.finishByResults("TIMEOUT");
       return true;
@@ -315,7 +254,6 @@ export class GameMatch {
         PlayerProgress,
       ],
       winnerId: this.winnerId,
-      problemImage: null,
       myFoundIds: viewer ? [...viewer.foundIds] : [],
       foundMarks: viewer ? this.toFoundMarks(viewer, targetDifferences) : [],
       revealedDifferences:
@@ -353,7 +291,6 @@ export class GameMatch {
   }
 
   private startFinding(nowMs: number): void {
-    this.transition("SWAPPING", null);
     this.transition("FINDING", nowMs + GAME_CONFIG.findingDurationSeconds * 1_000);
   }
 
@@ -430,8 +367,6 @@ export class GameMatch {
       playerId: player.playerId,
       nickname: player.nickname,
       ready: player.ready,
-      submitted: player.differences !== null,
-      autoFilled: player.autoFilled,
       foundCount: player.foundIds.size,
       wrongAnswerCount: player.wrongAnswerCount,
       hintsRemaining: GAME_CONFIG.hintsPerGame - player.hintsUsed,
@@ -464,4 +399,3 @@ export class GameMatch {
     return { ...region, radius: Math.min(region.radius * 2.5, 0.25) };
   }
 }
-
