@@ -1,7 +1,7 @@
 # 게임 상태
 
 > 문서 상태: CURRENT
-> 기준일: 2026-08-11
+> 기준일: 2026-08-18
 > 승패와 수치는 `GAME_RULES.md`를 따른다.
 
 ## 1. 상태
@@ -16,7 +16,7 @@
 | `PLAYING` | 양쪽이 독립적으로 차이를 찾고 다음 문제로 이동 | 제한시간, 기권 또는 기술적 오류 |
 | `FINISHED` | 최종 점수와 승패 공개 | 로비 이동 |
 
-정상 흐름은 `LOBBY → MATCHING → READY → PRELOADING → COUNTDOWN → PLAYING → FINISHED`다. 기존 `EDITING`, `SWAPPING`, `FINDING` 호환 값은 현재 매치가 생성하거나 전이하지 않으며 실행 경로 밖에 격리돼 있다.
+정상 흐름은 `LOBBY → MATCHING → READY → PRELOADING → COUNTDOWN → PLAYING → FINISHED`다. 제작·교환 단계는 상태와 실행 경로에서 제거됐다.
 
 ## 2. 입력 권한
 

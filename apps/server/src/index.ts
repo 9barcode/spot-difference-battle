@@ -10,7 +10,6 @@ const host = process.env.HOST ?? "0.0.0.0";
 const port = Number.parseInt(process.env.PORT ?? "3001", 10);
 const webOrigin = resolveWebOrigin(process.env.WEB_ORIGIN, process.env.NODE_ENV);
 const staticRoot = process.env.WEB_ROOT?.trim() || undefined;
-const gameAssetRoot = process.env.GAME_ASSET_ROOT?.trim() || undefined;
 const configuredSceneId = process.env.GAME_SCENE_ID?.trim();
 if (
   configuredSceneId &&
@@ -27,7 +26,6 @@ const matchStore = process.env.DATABASE_URL
 const app = await createGameServer({
   webOrigin,
   staticRoot,
-  gameAssetRoot,
   matchStore,
   sceneId,
 });

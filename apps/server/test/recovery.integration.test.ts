@@ -21,8 +21,8 @@ function once<T>(socket: TestSocket, event: string): Promise<T> {
 
 it("isolates an invalid active row and restores the following valid match", async () => {
   const store = new InMemoryMatchStore();
-  store.guests.set("p1", { guestToken: "token-1", nickname: "첫째" });
-  store.guests.set("p2", { guestToken: "token-2", nickname: "둘째" });
+  store.guests.set("p1", { guestToken: "token-1", nickname: "첫째", updatedAt: Date.now() });
+  store.guests.set("p2", { guestToken: "token-2", nickname: "둘째", updatedAt: Date.now() });
   store.activeMatches.set("legacy", {
     schemaVersion: 1,
     matchId: "legacy",
