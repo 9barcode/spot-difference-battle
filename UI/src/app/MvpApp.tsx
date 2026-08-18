@@ -9,7 +9,7 @@ import {
   type RevealedDifference,
 } from "@spot-battle/shared";
 import { ArrowLeft, Clock, Eye, Flag, LoaderCircle, LogOut, Play, RotateCcw, Send, UserRound, UsersRound, WifiOff, X } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import { useEffect, useMemo, useState, type MouseEvent } from "react";
 import { FreeformEditor, buildAutoFilledDifferences, renderProblemImage } from "./FreeformEditor";
 import {
   DEFAULT_GAME_SCENE,
@@ -313,7 +313,6 @@ export default function MvpApp() {
   const scene = getGameScene(game.snapshot?.imageId);
   const [nicknameInput, setNicknameInput] = useState(game.nickname);
   const [soloMode, setSoloMode] = useState(false);
-  const [draft, setDraft] = useState<Difference[]>([]);
   const [reportReason, setReportReason] = useState<ReportReason>("UNFAIR");
   const me = game.snapshot?.players.find((player) => player.playerId === game.match?.playerId);
   const opponent = game.snapshot?.players.find((player) => player.playerId !== game.match?.playerId);
@@ -328,73 +327,6 @@ export default function MvpApp() {
     });
     return () => { active = false; };
   }, [scene]);
-
-  const [submitPhase, setSubmitPhase] = useState<"IDLE" | "RENDERING" | "SENT" | "ERROR">("IDLE");
-  const [submitError, setSubmitError] = useState<string | null>(null);
-  const autoSubmittedRef = useRef(false);
-
-  useEffect(() => {
-    if (game.snapshot?.state === "EDITING" && !me?.submitted) {
-      setDraft([]);
-      setSubmitPhase("IDLE");
-      setSubmitError(null);
-      autoSubmittedRef.current = false;
-    }
-  }, [game.snapshot?.matchId, game.snapshot?.state, me?.submitted]);
-
-  useEffect(() => {
-    if (submitPhase !== "SENT" || me?.submitted || game.snapshot?.state !== "EDITING") return;
-
-    if (!game.connected || game.error) {
-      setSubmitPhase("ERROR");
-      setSubmitError(
-        game.error?.message ?? "서버에 문제를 전송하지 못했습니다. 연결을 확인하고 다시 시도해주세요.",
-      );
-      return;
-    }
-
-    const timeout = window.setTimeout(() => {
-      setSubmitPhase("ERROR");
-      setSubmitError("서버의 제출 확인이 없습니다. 다시 시도해주세요.");
-    }, 5_000);
-
-    return () => window.clearTimeout(timeout);
-  }, [submitPhase, me?.submitted, game.snapshot?.state, game.connected, game.error]);
-
-  /**
-   * 제작 결과를 이미지로 합성한 뒤 서버로 올린다.
-   * 제작 명령은 서버에서 판정용으로만 쓰이고 상대에게는 이미지만 전달된다.
-   */
-  const submitProblem = useCallback(
-    async (differences: Difference[], autoFilled: boolean) => {
-      setSubmitPhase("RENDERING");
-      setSubmitError(null);
-      try {
-        const renderedImage = await renderProblemImage(differences, scene);
-        game.clearError();
-        const sent = game.submit(differences, renderedImage, autoFilled);
-        if (!sent) {
-          setSubmitPhase("ERROR");
-          setSubmitError("서버에 문제를 전송하지 못했습니다. 연결을 확인하고 다시 시도해주세요.");
-          return;
-        }
-        setSubmitPhase("SENT");
-      } catch {
-        setSubmitPhase("ERROR");
-        setSubmitError("문제 이미지를 만들지 못했습니다. 다시 시도해주세요.");
-      }
-    },
-    [game, scene],
-  );
-
-  // 마감 직전에 부족한 차이점을 채워 자동 제출한다.
-  // 여기서 실패하면 서버가 미제출로 보고 기권 처리한다.
-  useEffect(() => {
-    if (game.snapshot?.state !== "EDITING" || me?.submitted || autoSubmittedRef.current) return;
-    if (remaining === null || remaining > GAME_CONFIG.autoSubmitLeadSeconds) return;
-    autoSubmittedRef.current = true;
-    void submitProblem(buildAutoFilledDifferences(draft, scene), true);
-  }, [game.snapshot?.state, me?.submitted, remaining, draft, scene, submitProblem]);
 
   const header = useMemo(
     () => (
@@ -454,36 +386,6 @@ export default function MvpApp() {
       {opponent?.connectionStatus === "RECONNECTING" && <div className="mb-5 rounded-2xl bg-amber-100 px-5 py-4 text-center font-bold text-amber-800">상대의 연결이 끊겼습니다. 10초 동안 복귀를 기다립니다.</div>}
 
       {game.snapshot.state === "READY" && <section data-testid="ready-screen" className="rounded-3xl bg-white p-10 text-center shadow-xl"><div className="text-6xl">🔍</div><h2 className="mt-4 text-2xl font-black">상대: {game.match.opponentNickname}</h2><p className="mt-2 font-black text-violet-700">같은 틀린그림 문제로 대결합니다</p><p className="mt-2 text-slate-500">양쪽이 준비하면 바로 시작합니다. 원본과 오류 그림 어느 쪽을 눌러도 정답 처리됩니다.</p><button data-testid="ready-button" disabled={me?.ready} onClick={game.ready} className="mt-6 rounded-2xl bg-violet-600 px-8 py-4 font-black text-white disabled:bg-emerald-500">{me?.ready ? "준비 완료 · 상대 대기 중" : "준비 완료"}</button></section>}
-
-      {game.snapshot.state === "EDITING" && (
-          <section data-testid="editing-screen">
-            <div className="mb-4 text-center">
-              <h2 className="text-2xl font-black">객체 3개를 수정하세요</h2>
-              <p className="text-sm text-slate-500">상대 화면에는 현재 그림과 선택 정보가 전혀 표시되지 않습니다.</p>
-              {remaining !== null && remaining <= GAME_CONFIG.autoSubmitLeadSeconds + 5 && !me?.submitted && (
-                <p className="mt-2 text-sm font-bold text-amber-600">마감 {GAME_CONFIG.autoSubmitLeadSeconds}초 전에는 남은 차이점이 자동으로 채워집니다.</p>
-              )}
-            </div>
-            <div className="mx-auto max-w-5xl"><FreeformEditor value={draft} onChange={setDraft} scene={scene} disabled={Boolean(me?.submitted) || submitPhase === "RENDERING" || submitPhase === "SENT"} /></div>
-            <div className="mt-5 flex flex-col items-center gap-3">
-              <button data-testid="submit-problem" disabled={draft.length !== GAME_CONFIG.differenceCount || Boolean(me?.submitted) || submitPhase === "RENDERING" || submitPhase === "SENT"} onClick={() => void submitProblem(draft, false)} className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-7 py-3 font-black text-white disabled:opacity-40">
-                {submitPhase === "RENDERING" ? <LoaderCircle className="animate-spin" size={18}/> : <Send size={18}/>}
-                {submitPhase === "RENDERING" ? "문제 이미지 만드는 중" : me?.submitted ? "수정 완료" : `수정 완료 ${draft.length}/${GAME_CONFIG.differenceCount}`}
-              </button>
-              {me?.submitted && <p className="flex items-center gap-2 text-sm font-bold text-emerald-700"><LoaderCircle className="animate-spin" size={16}/>제출 완료 · 상대의 제출을 기다리는 중입니다.</p>}
-              {me?.submitted && me.autoFilled && <p className="rounded-xl bg-amber-100 px-4 py-2 text-sm font-bold text-amber-800">시간이 끝나 남은 객체가 자동으로 채워졌습니다.</p>}
-              {submitPhase === "ERROR" && <div className="rounded-xl bg-red-100 px-4 py-3 text-center text-sm font-bold text-red-700">{submitError}<button onClick={() => void submitProblem(draft.length === GAME_CONFIG.differenceCount ? draft : buildAutoFilledDifferences(draft, scene), true)} className="ml-3 rounded-lg bg-red-600 px-3 py-1 font-black text-white">다시 시도</button></div>}
-            </div>
-          </section>
-      )}
-
-      {game.snapshot.state === "SWAPPING" && (
-        <section className="rounded-3xl bg-white p-10 text-center shadow-xl">
-          <LoaderCircle className="mx-auto animate-spin text-violet-600" size={48} />
-          <h2 className="mt-4 text-2xl font-black">수정 완료를 처리하는 중입니다</h2>
-          <p className="mt-2 text-sm text-slate-500">각 플레이어에게 상대가 만든 결과 이미지 한 장만 전달합니다.</p>
-        </section>
-      )}
 
       {game.snapshot.state === "FINDING" && (
           <section data-testid="finding-screen">

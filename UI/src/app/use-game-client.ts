@@ -1,7 +1,6 @@
 import type {
   AnswerRegion,
   ClientToServerEvents,
-  Difference,
   FoundMark,
   GameErrorPayload,
   GameSnapshot,
@@ -158,19 +157,6 @@ export function useGameClient() {
     startMatching,
     cancelMatching,
     ready: () => match && socketRef.current?.emit("game:ready", { matchId: match.matchId }),
-    submit: (differences: Difference[], renderedImage: string, autoFilled = false) => {
-      const context = actionContext();
-      const socket = socketRef.current;
-      if (!match || !context || !socket?.connected) return false;
-      socket.emit("game:submit", {
-        matchId: match.matchId,
-        differences,
-        renderedImage,
-        autoFilled,
-        ...context,
-      });
-      return true;
-    },
     guess: (point: NormalizedPoint) => {
       const context = actionContext();
       if (match && context) socketRef.current?.emit("game:guess", { matchId: match.matchId, point, ...context });

@@ -2,7 +2,6 @@ import cors from "@fastify/cors";
 import { GameMatch, GameRuleError } from "@spot-battle/game-core";
 import {
   GAME_CONFIG,
-  PROBLEM_IMAGE_LIMITS,
   type ClientToServerEvents,
   type GameSceneId,
   type ServerToClientEvents,
@@ -11,19 +10,12 @@ import Fastify, { type FastifyInstance } from "fastify";
 import { randomUUID } from "node:crypto";
 import { Server, type Socket } from "socket.io";
 import {
-  defaultSceneOverride,
-  loadGameSceneOriginals,
-  type GameSceneImageOverrides,
-} from "./game-scenes.js";
-import {
   GuestSessionRegistry,
   type GuestSession,
 } from "./guest-session-registry.js";
 import { MatchRegistry } from "./match-registry.js";
 import { operationalLogFields } from "./operational-logging.js";
 import { InMemoryMatchStore, type MatchStore } from "./match-store.js";
-import { validateProblemImageCoordinates } from "./problem-image-validation.js";
-import { validateSceneObjectEdits } from "./scene-validation.js";
 
 export interface GameServerOptions {
   webOrigin: string;
@@ -38,10 +30,6 @@ export interface GameServerOptions {
   /** 비활성 게스트 세션을 확인하는 주기. */
   guestSessionCleanupIntervalMs?: number;
   matchStore?: MatchStore;
-  /** 테스트에서 원본과 수정 이미지의 좌표 검증을 함께 실행하기 위한 원본 이미지 대역. */
-  originalProblemImage?: Buffer;
-  /** 장면별 원본 이미지 대역. 지정하지 않은 장면은 서버 카탈로그의 번들 원본을 사용한다. */
-  originalProblemImages?: GameSceneImageOverrides;
   /** 통합 테스트 등에서 특정 장면으로 매칭을 고정한다. */
   sceneId?: GameSceneId;
 }
@@ -62,10 +50,6 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
   const app = Fastify({ logger: options.logger ?? true });
   await app.register(cors, { origin: options.webOrigin });
   const matchStore = options.matchStore ?? new InMemoryMatchStore();
-  const originalProblemImages = await loadGameSceneOriginals({
-    ...defaultSceneOverride(options.originalProblemImage),
-    ...options.originalProblemImages,
-  });
   app.get("/health", async () => {
     const database = await matchStore.health();
     return { status: database ? "ok" : "degraded", server: "ok", database };
@@ -76,11 +60,7 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
     ServerToClientEvents,
     Record<string, never>,
     SocketData
-  >(app.server, {
-    cors: { origin: options.webOrigin },
-    // 제작자가 렌더한 문제 이미지가 오간다. 게임 코어가 다시 한 번 용량을 검증한다.
-    maxHttpBufferSize: PROBLEM_IMAGE_LIMITS.maxBytes + 256 * 1024,
-  });
+  >(app.server, { cors: { origin: options.webOrigin } });
   const registry = new MatchRegistry(options.sceneId ? [options.sceneId] : undefined);
   const guestSessionRetentionMs = options.guestSessionRetentionMs ?? 7 * 24 * 60 * 60 * 1_000;
   const guestSessionCleanupIntervalMs = options.guestSessionCleanupIntervalMs ?? 60 * 1_000;
@@ -417,39 +397,6 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
       try {
         const match = registry.getForPlayer(matchId, session.playerId);
         match.markReady(session.playerId, Date.now());
-        emitSnapshots(match);
-      } catch (error) {
-        handleActionError(socket, matchId, error);
-      }
-    });
-
-    socket.on("game:submit", async ({ matchId, differences, renderedImage, autoFilled, expectedState, expectedStateVersion }) => {
-      try {
-        const match = registry.getForPlayer(matchId, session.playerId);
-        assertClientState(match, session.playerId, expectedState, expectedStateVersion, true);
-        validateSceneObjectEdits(match.imageId, differences);
-        const originalProblemImage = originalProblemImages.get(match.imageId);
-        if (!originalProblemImage) {
-          throw new GameRuleError(
-            "UNKNOWN_GAME_SCENE",
-            "경기 장면의 서버 원본을 찾을 수 없습니다.",
-          );
-        }
-        try {
-          validateProblemImageCoordinates(originalProblemImage, renderedImage, differences);
-        } catch (error) {
-          throw new GameRuleError(
-            "INVALID_PROBLEM_COORDINATES",
-            error instanceof Error ? error.message : "문제 이미지와 정답 좌표가 일치하지 않습니다.",
-          );
-        }
-        match.submitDifferences(
-          session.playerId,
-          differences,
-          renderedImage,
-          Date.now(),
-          Boolean(autoFilled),
-        );
         emitSnapshots(match);
       } catch (error) {
         handleActionError(socket, matchId, error);

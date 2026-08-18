@@ -13,10 +13,20 @@ function readyMatch(now = 1_000) {
 }
 
 describe("시스템 문제 실시간 1:1 경기", () => {
+  it("이전 제작 단계의 저장 경기는 승패 없이 안전하게 취소한다", () => {
+    const current = readyMatch().serialize();
+    const restored = GameMatch.restore({ ...current, state: "EDITING" as never });
+    expect(restored.snapshot("a")).toMatchObject({
+      state: "CANCELLED",
+      endReason: "CANCELLED",
+      winnerId: null,
+    });
+  });
+
   it("양쪽 준비가 끝나면 제작 단계 없이 즉시 풀이를 시작한다", () => {
     const match = readyMatch();
     expect(match.currentState).toBe("FINDING");
-    expect(match.snapshot("a").problemImage).toBeNull();
+    expect(match.snapshot("a").state).toBe("FINDING");
   });
 
   it("두 플레이어가 동일한 시스템 정답을 푼다", () => {
@@ -51,4 +61,3 @@ describe("시스템 문제 실시간 1:1 경기", () => {
     expect(match.snapshot("a").winnerId).toBe("a");
   });
 });
-
