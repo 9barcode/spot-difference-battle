@@ -11,7 +11,8 @@ export {
 } from "./puzzle-asset-manifest.js";
 
 export const GAME_CONFIG = {
-  differenceCount: 3,
+  differenceScore: 10,
+  remainingTimeScorePerSecond: 0.5,
   countdownSeconds: 3,
   readyTimeoutSeconds: 30,
   preloadTimeoutSeconds: 15,
@@ -112,14 +113,18 @@ export interface PlayerProgress {
   loaded: boolean;
   completedPuzzleCount: number;
   foundCount: number;
+  currentDifferenceCount: number;
+  totalFoundCount: number;
+  totalDifferenceCount: number;
+  completedAllPuzzles: boolean;
+  score: number;
+  timeBonus: number;
   connectionStatus: "CONNECTED" | "RECONNECTING" | "FORFEITED";
   perspective: "SELF" | "OPPONENT";
   correctStreak?: number;
   bestStreak?: number;
   /** Present only for the player receiving this snapshot. */
   puzzleIndex?: number;
-  /** Present only for the player receiving this snapshot. */
-  totalFoundCount?: number;
   /** Present only for the player receiving this snapshot. */
   wrongAnswerCount?: number;
   /** Present only for the player receiving this snapshot. */
@@ -129,7 +134,6 @@ export interface PlayerProgress {
 export interface SelfPlayerProgress extends PlayerProgress {
   perspective: "SELF";
   puzzleIndex: number;
-  totalFoundCount: number;
   wrongAnswerCount: number;
   inputLockedUntilMs: number | null;
 }
@@ -152,6 +156,7 @@ export interface GameSnapshot {
   nextPuzzleId: GamePuzzleId | null;
   nextPuzzleVersion: string | null;
   totalPuzzleCount: number;
+  totalDifferenceCount: number;
   deadlineMs: number | null;
   players: [PlayerProgress, PlayerProgress];
   winnerId: string | null;
