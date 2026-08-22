@@ -87,7 +87,7 @@ test("one player who clears the deck waits while the opponent is still playing",
     }
 
     await expect(first.page.getByTestId("finished-screen")).not.toBeVisible();
-    await expect(first.page.getByTestId("deck-complete-screen")).toContainText("상대가 전체 문제를 완료하면 경기가 끝납니다");
+    await expect(first.page.getByTestId("deck-complete-screen")).toContainText("상대가 전체 문제를 완료하면 즉시 결과를 확정합니다");
     second.page.once("dialog", (dialog) => dialog.accept());
     await second.page.getByTestId("forfeit-button").click();
 
