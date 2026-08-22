@@ -25,7 +25,7 @@ function pointsForPuzzle(label: string | null): Array<{ x: number; y: number }> 
   if (label?.includes("겨울")) return [{ x: 0.66, y: 0.12 }, { x: 0.84, y: 0.6 }, { x: 0.51, y: 0.78 }];
   throw new Error(`등록되지 않은 문제 제목입니다: ${label}`);
 }
-test("a player who clears the deck waits until timeout or forfeit", async ({ browser }) => {
+test("one player who clears the deck waits while the opponent is still playing", async ({ browser }) => {
   const first = await createPlayer(browser, "빠른사람", { width: 1280, height: 900 });
   const second = await createPlayer(browser, "도전자", { width: 390, height: 844 });
   try {
@@ -71,12 +71,12 @@ test("a player who clears the deck waits until timeout or forfeit", async ({ bro
     await second.page.mouse.down();
     await second.page.mouse.move(boardBox.x + boardBox.width / 2, boardBox.y + boardBox.height / 2 + 120, { steps: 5 });
     await second.page.mouse.up();
-    await expect(second.page.getByText("나 0판 · 0/3", { exact: true })).toBeVisible();
+    await expect(second.page.getByText("나 1/5번 · 0/3", { exact: true })).toBeVisible();
     await second.page.getByRole("button", { name: "원래 크기" }).click();
     await expect(second.page.getByTestId("zoom-controls")).toContainText("1.0배");
 
     await clickNormalized(second.page, firstPoints[0]!.x, firstPoints[0]!.y);
-    await expect(second.page.getByText("나 0판 · 1/3", { exact: true })).toBeVisible();
+    await expect(second.page.getByText("나 1/5번 · 1/3", { exact: true })).toBeVisible();
     for (let puzzleIndex = 0; puzzleIndex < 5; puzzleIndex += 1) {
       const puzzleLabel = await heading.textContent();
       const points = pointsForPuzzle(puzzleLabel);
@@ -87,7 +87,7 @@ test("a player who clears the deck waits until timeout or forfeit", async ({ bro
     }
 
     await expect(first.page.getByTestId("finished-screen")).not.toBeVisible();
-    await expect(first.page.getByTestId("deck-complete-screen")).toContainText("제한시간까지 계속됩니다");
+    await expect(first.page.getByTestId("deck-complete-screen")).toContainText("상대가 전체 문제를 완료하면 즉시 결과를 확정합니다");
     second.page.once("dialog", (dialog) => dialog.accept());
     await second.page.getByTestId("forfeit-button").click();
 
@@ -98,3 +98,4 @@ test("a player who clears the deck waits until timeout or forfeit", async ({ bro
     await second.context.close();
   }
 });
+
