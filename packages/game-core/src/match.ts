@@ -55,10 +55,12 @@ export interface PersistedMatchPlayer extends MatchPlayer {
   connectionStatus: "CONNECTED" | "RECONNECTING" | "FORFEITED";
   correctStreak?: number;
   bestStreak?: number;
+  completedAtMs?: number | null;
+  completionRemainingTimeMs?: number | null;
 }
 
 export interface PersistedMatchState {
-  schemaVersion: 2 | 3;
+  schemaVersion: 2 | 3 | 4;
   matchId: string;
   settings?: MatchSettings;
   puzzles: MatchPuzzle[];
@@ -82,6 +84,8 @@ interface InternalPlayer extends MatchPlayer {
   connectionStatus: "CONNECTED" | "RECONNECTING" | "FORFEITED";
   correctStreak: number;
   bestStreak: number;
+  completedAtMs: number | null;
+  completionRemainingTimeMs: number | null;
 }
 
 export class GameMatch {
@@ -119,12 +123,14 @@ export class GameMatch {
       connectionStatus: "CONNECTED",
       correctStreak: 0,
       bestStreak: 0,
+      completedAtMs: null,
+      completionRemainingTimeMs: null,
     })) as [InternalPlayer, InternalPlayer];
     this.deadlineMs = createdAtMs + GAME_CONFIG.readyTimeoutSeconds * 1_000;
   }
 
   static restore(state: PersistedMatchState): GameMatch {
-    if (state.schemaVersion !== 2 && state.schemaVersion !== 3) throw new Error("지원하지 않는 활성 경기 형식입니다.");
+    if (state.schemaVersion !== 2 && state.schemaVersion !== 3 && state.schemaVersion !== 4) throw new Error("지원하지 않는 활성 경기 형식입니다.");
     const match = new GameMatch(
       state.matchId,
       state.puzzles,
@@ -142,6 +148,8 @@ export class GameMatch {
       ...structuredClone(player),
       correctStreak: player.correctStreak ?? 0,
       bestStreak: player.bestStreak ?? 0,
+      completedAtMs: player.completedAtMs ?? null,
+      completionRemainingTimeMs: player.completionRemainingTimeMs ?? null,
       foundIdsByPuzzle: player.foundIdsByPuzzle.map((ids) => new Set(ids)),
     })) as [InternalPlayer, InternalPlayer];
     return match;
@@ -149,7 +157,7 @@ export class GameMatch {
 
   serialize(): PersistedMatchState {
     return {
-      schemaVersion: 3,
+      schemaVersion: 4,
       matchId: this.matchId,
       settings: { ...this.settings },
       puzzles: structuredClone(this.puzzles) as MatchPuzzle[],
@@ -172,6 +180,8 @@ export class GameMatch {
         connectionStatus: player.connectionStatus,
         correctStreak: player.correctStreak,
         bestStreak: player.bestStreak,
+        completedAtMs: player.completedAtMs,
+        completionRemainingTimeMs: player.completionRemainingTimeMs,
       })) as [PersistedMatchPlayer, PersistedMatchPlayer],
     };
   }
@@ -238,11 +248,18 @@ export class GameMatch {
       player.bestStreak = Math.max(player.bestStreak, player.correctStreak);
       player.lastCorrectAtMs = nowMs;
       player.inputLockedUntilMs = null;
-      if (foundIds.size === GAME_CONFIG.differenceCount) {
+      if (foundIds.size === puzzle.differences.length) {
         puzzleCompleted = true;
         player.puzzleIndex += 1;
+        if (player.puzzleIndex === this.puzzles.length) {
+          player.completedAtMs = nowMs;
+          player.completionRemainingTimeMs = this.getRemainingTime(nowMs);
+        }
       }
       this.bumpVersion();
+      if (player.puzzleIndex === this.puzzles.length) {
+        this.finish(player.playerId, "COMPLETED");
+      }
     } else if (!hit) {
       player.wrongAnswerCount += 1;
       player.correctStreak = 0;
@@ -307,6 +324,7 @@ export class GameMatch {
       nextPuzzleId: nextPuzzle?.id ?? null,
       nextPuzzleVersion: nextPuzzle?.assetVersion ?? null,
       totalPuzzleCount: this.puzzles.length,
+      totalDifferenceCount: this.totalDifferenceCount(),
       deadlineMs: this.deadlineMs,
       players: this.players.map((player) => this.toProgress(player, !viewerId || player.playerId === viewer.playerId)) as [PlayerProgress, PlayerProgress],
       winnerId: this.winnerId,
@@ -343,11 +361,15 @@ export class GameMatch {
 
   private determineWinner(): string | null {
     const [first, second] = this.players;
-    if (first.puzzleIndex !== second.puzzleIndex) return first.puzzleIndex > second.puzzleIndex ? first.playerId : second.playerId;
-    const firstFound = first.foundIdsByPuzzle[first.puzzleIndex]?.size ?? 0;
-    const secondFound = second.foundIdsByPuzzle[second.puzzleIndex]?.size ?? 0;
-    if (firstFound !== secondFound) return firstFound > secondFound ? first.playerId : second.playerId;
+    const firstScore = this.scoreFor(first);
+    const secondScore = this.scoreFor(second);
+    if (firstScore !== secondScore) return firstScore > secondScore ? first.playerId : second.playerId;
     if (first.wrongAnswerCount !== second.wrongAnswerCount) return first.wrongAnswerCount < second.wrongAnswerCount ? first.playerId : second.playerId;
+    if (first.completedAtMs !== second.completedAtMs) {
+      if (first.completedAtMs === null) return second.playerId;
+      if (second.completedAtMs === null) return first.playerId;
+      return first.completedAtMs < second.completedAtMs ? first.playerId : second.playerId;
+    }
     return null;
   }
 
@@ -393,6 +415,9 @@ export class GameMatch {
 
   private toProgress(player: InternalPlayer, isViewer: boolean): SelfPlayerProgress | OpponentPlayerProgress {
     const foundCount = player.foundIdsByPuzzle[player.puzzleIndex]?.size ?? 0;
+    const totalFoundCount = this.totalFoundCount(player);
+    const totalDifferenceCount = this.totalDifferenceCount();
+    const currentDifferenceCount = this.puzzles[player.puzzleIndex]?.differences.length ?? 0;
     const publicProgress: OpponentPlayerProgress = {
       playerId: player.playerId,
       nickname: player.nickname,
@@ -400,6 +425,12 @@ export class GameMatch {
       loaded: player.loaded,
       completedPuzzleCount: player.puzzleIndex,
       foundCount,
+      currentDifferenceCount,
+      totalFoundCount,
+      totalDifferenceCount,
+      completedAllPuzzles: player.puzzleIndex === this.puzzles.length,
+      score: this.scoreFor(player),
+      timeBonus: this.timeBonusFor(player),
       connectionStatus: player.connectionStatus,
       perspective: "OPPONENT",
       correctStreak: player.correctStreak,
@@ -410,7 +441,6 @@ export class GameMatch {
       ...publicProgress,
       perspective: "SELF",
       puzzleIndex: player.puzzleIndex,
-      totalFoundCount: player.puzzleIndex * GAME_CONFIG.differenceCount + foundCount,
       wrongAnswerCount: player.wrongAnswerCount,
       inputLockedUntilMs: player.inputLockedUntilMs,
     };
@@ -420,8 +450,8 @@ export class GameMatch {
     if (typeof puzzle.assetVersion !== "string" || !puzzle.assetVersion.trim()) {
       throw new GameRuleError("INVALID_PUZZLE", puzzle.id + " 문제의 에셋 버전이 없습니다.");
     }
-    if (puzzle.differences.length !== GAME_CONFIG.differenceCount) {
-      throw new GameRuleError("INVALID_PUZZLE", puzzle.id + " 문제의 차이점 수가 올바르지 않습니다.");
+    if (puzzle.differences.length === 0) {
+      throw new GameRuleError("INVALID_PUZZLE", puzzle.id + " 문제에 차이점이 없습니다.");
     }
     const ids = new Set<string>();
     for (const difference of puzzle.differences) {
@@ -457,6 +487,23 @@ export class GameMatch {
     return puzzle.differences
       .filter((difference) => foundIds.has(difference.id))
       .flatMap((difference) => difference.regions.map((region) => ({ differenceId: difference.id, region: { ...region } })));
+  }
+
+  private totalDifferenceCount(): number {
+    return this.puzzles.reduce((total, puzzle) => total + puzzle.differences.length, 0);
+  }
+
+  private totalFoundCount(player: InternalPlayer): number {
+    return player.foundIdsByPuzzle.reduce((total, foundIds) => total + foundIds.size, 0);
+  }
+
+  private timeBonusFor(player: InternalPlayer): number {
+    if (player.completionRemainingTimeMs === null) return 0;
+    return Math.round((player.completionRemainingTimeMs / 1_000) * GAME_CONFIG.remainingTimeScorePerSecond * 10) / 10;
+  }
+
+  private scoreFor(player: InternalPlayer): number {
+    return this.totalFoundCount(player) * GAME_CONFIG.differenceScore + this.timeBonusFor(player);
   }
 
   private toRevealed(puzzle: MatchPuzzle, foundIds: Set<string>): RevealedDifference[] {

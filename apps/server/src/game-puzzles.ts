@@ -1,23 +1,28 @@
 import type { MatchPuzzle } from "@spot-battle/game-core";
-import { GAME_PUZZLE_ASSET_MANIFEST } from "@spot-battle/shared";
+import {
+  DEFAULT_MATCH_SETTINGS,
+  GAME_PUZZLE_ASSET_MANIFEST,
+  type GameDifficulty,
+  type PuzzleDifficulty,
+} from "@spot-battle/shared";
 
 export const GAME_PUZZLES: readonly MatchPuzzle[] = [
   {
     id: "cozy-cafe",
     assetVersion: GAME_PUZZLE_ASSET_MANIFEST["cozy-cafe"].version,
     differences: [
-      { id: "cafe-clock-hands", label: "벽시계 바늘", regions: [{ x: 0.125, y: 0.155, radius: 0.09 }] },
-      { id: "cafe-bouquet", label: "테이블 꽃", regions: [{ x: 0.52, y: 0.59, radius: 0.14 }] },
-      { id: "cafe-cat", label: "의자 위 고양이", regions: [{ x: 0.86, y: 0.8, radius: 0.13 }] },
+      { id: "cafe-clock-hands", label: "벽시계 바늘", regions: [{ x: 0.075, y: 0.13, radius: 0.065 }] },
+      { id: "cafe-bouquet", label: "테이블 꽃", regions: [{ x: 0.485, y: 0.51, radius: 0.13 }] },
+      { id: "cafe-cat", label: "의자 위 고양이", regions: [{ x: 0.84, y: 0.79, radius: 0.13 }] },
     ],
   },
   {
     id: "enchanted-forest",
     assetVersion: GAME_PUZZLE_ASSET_MANIFEST["enchanted-forest"].version,
     differences: [
-      { id: "forest-lantern", label: "매달린 등불", regions: [{ x: 0.31, y: 0.33, radius: 0.13 }] },
-      { id: "forest-scarf", label: "토끼 목도리", regions: [{ x: 0.27, y: 0.78, radius: 0.08 }] },
-      { id: "forest-roof-bird", label: "버섯 지붕의 새", regions: [{ x: 0.79, y: 0.17, radius: 0.06 }] },
+      { id: "forest-lantern", label: "매달린 등불", regions: [{ x: 0.28, y: 0.39, radius: 0.12 }] },
+      { id: "forest-scarf", label: "토끼 목도리", regions: [{ x: 0.18, y: 0.73, radius: 0.08 }] },
+      { id: "forest-roof-bird", label: "나뭇가지의 새", regions: [{ x: 0.8, y: 0.12, radius: 0.06 }] },
     ],
   },
   {
@@ -33,9 +38,9 @@ export const GAME_PUZZLES: readonly MatchPuzzle[] = [
     id: "cyber-city",
     assetVersion: GAME_PUZZLE_ASSET_MANIFEST["cyber-city"].version,
     differences: [
-      { id: "city-neon-sign", label: "대형 네온 간판", regions: [{ x: 0.23, y: 0.24, radius: 0.16 }] },
-      { id: "city-flying-car", label: "하늘의 자동차", regions: [{ x: 0.75, y: 0.24, radius: 0.15 }] },
-      { id: "city-headphones", label: "가운데 인물의 헤드폰", regions: [{ x: 0.52, y: 0.69, radius: 0.065 }] },
+      { id: "city-neon-sign", label: "대형 네온 간판", regions: [{ x: 0.17, y: 0.2, radius: 0.14 }] },
+      { id: "city-flying-car", label: "하늘의 자동차", regions: [{ x: 0.68, y: 0.18, radius: 0.13 }] },
+      { id: "city-headphones", label: "가운데 인물의 헤드폰", regions: [{ x: 0.52, y: 0.72, radius: 0.07 }] },
     ],
   },
   {
@@ -47,13 +52,72 @@ export const GAME_PUZZLES: readonly MatchPuzzle[] = [
       { id: "winter-campfire", label: "모닥불 색", regions: [{ x: 0.51, y: 0.78, radius: 0.13 }] },
     ],
   },
+  {
+    id: "space-station",
+    assetVersion: GAME_PUZZLE_ASSET_MANIFEST["space-station"].version,
+    differences: [
+      { id: "space-suit", label: "우주복 색", regions: [{ x: 0.27, y: 0.33, radius: 0.17 }] },
+      { id: "space-planet", label: "창밖 행성", regions: [{ x: 0.74, y: 0.27, radius: 0.21 }] },
+      { id: "space-console", label: "조종판 색", regions: [{ x: 0.51, y: 0.8, radius: 0.18 }] },
+    ],
+  },
+  {
+    id: "hawaiian-beach",
+    assetVersion: GAME_PUZZLE_ASSET_MANIFEST["hawaiian-beach"].version,
+    differences: [
+      { id: "hawaii-umbrella", label: "해변 파라솔", regions: [{ x: 0.26, y: 0.56, radius: 0.17 }] },
+      { id: "hawaii-surfboard", label: "서핑보드 색", regions: [{ x: 0.76, y: 0.75, radius: 0.17 }] },
+      { id: "hawaii-parrot", label: "야자수 앵무새", regions: [{ x: 0.88, y: 0.31, radius: 0.1 }] },
+    ],
+  },
+  {
+    id: "alchemist-workshop",
+    assetVersion: GAME_PUZZLE_ASSET_MANIFEST["alchemist-workshop"].version,
+    differences: [
+      { id: "alchemist-potion", label: "큰 물약 색", regions: [{ x: 0.17, y: 0.48, radius: 0.17 }] },
+      { id: "alchemist-fire", label: "가마솥 불꽃", regions: [{ x: 0.51, y: 0.77, radius: 0.16 }] },
+      { id: "alchemist-animal", label: "작업대 옆 동물", regions: [{ x: 0.84, y: 0.61, radius: 0.15 }] },
+    ],
+  },
+  {
+    id: "dinosaur-valley",
+    assetVersion: GAME_PUZZLE_ASSET_MANIFEST["dinosaur-valley"].version,
+    differences: [
+      { id: "dino-volcano", label: "화산의 용암", regions: [{ x: 0.5, y: 0.28, radius: 0.15 }] },
+      { id: "dino-color", label: "공룡 색", regions: [{ x: 0.32, y: 0.57, radius: 0.17 }] },
+      { id: "dino-egg", label: "부화한 공룡알", regions: [{ x: 0.78, y: 0.8, radius: 0.18 }] },
+    ],
+  },
+  {
+    id: "pirate-ship",
+    assetVersion: GAME_PUZZLE_ASSET_MANIFEST["pirate-ship"].version,
+    differences: [
+      { id: "pirate-flag", label: "해적 깃발", regions: [{ x: 0.49, y: 0.12, radius: 0.11 }] },
+      { id: "pirate-headwear", label: "해적의 머리장식", regions: [{ x: 0.8, y: 0.4, radius: 0.11 }] },
+      { id: "pirate-treasure", label: "갑판의 보물상자", regions: [{ x: 0.35, y: 0.87, radius: 0.13 }] },
+    ],
+  },
 ] as const;
 
 export const ACTIVE_GAME_PUZZLES: readonly MatchPuzzle[] = GAME_PUZZLES;
 
-export function shuffledGamePuzzles(): MatchPuzzle[] {
-  return [...ACTIVE_GAME_PUZZLES]
+const ASSET_DIFFICULTY_BY_MATCH = {
+  EASY: "EASY",
+  NORMAL: "MEDIUM",
+  HARD: "HARD",
+} as const satisfies Record<GameDifficulty, Exclude<PuzzleDifficulty, "UNRATED">>;
+
+export function gamePuzzlesForDifficulty(difficulty: GameDifficulty): MatchPuzzle[] {
+  const targetDifficulty = ASSET_DIFFICULTY_BY_MATCH[difficulty];
+  return ACTIVE_GAME_PUZZLES.filter((puzzle) => {
+    const metadata = GAME_PUZZLE_ASSET_MANIFEST[puzzle.id as keyof typeof GAME_PUZZLE_ASSET_MANIFEST];
+    return metadata !== undefined && (metadata.difficulty === "UNRATED" || metadata.difficulty === targetDifficulty);
+  }).map((puzzle) => structuredClone(puzzle));
+}
+
+export function shuffledGamePuzzles(difficulty: GameDifficulty = DEFAULT_MATCH_SETTINGS.difficulty): MatchPuzzle[] {
+  return gamePuzzlesForDifficulty(difficulty)
     .map((puzzle) => ({ puzzle, order: Math.random() }))
     .sort((left, right) => left.order - right.order)
-    .map(({ puzzle }) => structuredClone(puzzle));
+    .map(({ puzzle }) => puzzle);
 }

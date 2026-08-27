@@ -83,14 +83,34 @@ describe("GameMatch simultaneous race", () => {
     expect(match.snapshot("p2")).toMatchObject({ currentPuzzleVersion: "forest-v1", nextPuzzleVersion: "underwater-v1" });
   });
 
-  it("waits for the time limit after a player clears every prepared puzzle", () => {
+  it("finishes immediately when the first player clears every prepared puzzle", () => {
     const match = createMatch();
     let now = startPlaying(match);
     for (const point of [{ x: 0.2, y: 0.2 }, { x: 0.5, y: 0.5 }, { x: 0.8, y: 0.8 }]) match.guess("p1", "enchanted-forest", point, ++now);
     for (const point of [{ x: 0.2, y: 0.8 }, { x: 0.5, y: 0.2 }, { x: 0.8, y: 0.5 }]) match.guess("p1", "underwater-treasure", point, ++now);
-    expect(match.snapshot("p1")).toMatchObject({ state: "PLAYING", currentPuzzleId: null });
-    expect(match.expire(184_100)).toBe(true);
-    expect(match.snapshot("p1")).toMatchObject({ state: "FINISHED", winnerId: "p1", endReason: "TIMEOUT" });
+    const snapshot = match.snapshot("p1");
+    expect(snapshot).toMatchObject({ state: "FINISHED", endReason: "COMPLETED", winnerId: "p1", totalDifferenceCount: 6 });
+    const [first, second] = snapshot.players;
+    expect(first).toMatchObject({ completedAllPuzzles: true, totalFoundCount: 6, totalDifferenceCount: 6 });
+    expect(second).toMatchObject({ completedAllPuzzles: false, totalFoundCount: 0, totalDifferenceCount: 6, score: 0 });
+    expect(first!.score).toBe(60 + first!.timeBonus);
+    expect(first!.timeBonus).toBeGreaterThan(0);
+  });
+
+  it("supports a different number of differences in each puzzle", () => {
+    const variablePuzzles: MatchPuzzle[] = [
+      { ...puzzles[0]!, differences: puzzles[0]!.differences.slice(0, 2) },
+      puzzles[1]!,
+    ];
+    const match = new GameMatch("variable", variablePuzzles, [
+      { playerId: "p1", nickname: "첫째" },
+      { playerId: "p2", nickname: "둘째" },
+    ]);
+    const now = startPlaying(match);
+    match.guess("p1", "enchanted-forest", { x: 0.2, y: 0.2 }, now + 10);
+    match.guess("p1", "enchanted-forest", { x: 0.5, y: 0.5 }, now + 20);
+    expect(match.snapshot("p1")).toMatchObject({ totalDifferenceCount: 5 });
+    expect(match.snapshot("p1").players[0]).toMatchObject({ completedPuzzleCount: 1, totalFoundCount: 2, currentDifferenceCount: 3 });
   });
 
   it("locks wrong input for one second without subtracting time", () => {
@@ -123,7 +143,8 @@ describe("GameMatch simultaneous race", () => {
     const opponent = snapshot.players.find((player) => player.playerId === "p2")!;
     expect(self).toMatchObject({ perspective: "SELF", puzzleIndex: 0, totalFoundCount: 0, wrongAnswerCount: 1 });
     expect(opponent).toMatchObject({ perspective: "OPPONENT", completedPuzzleCount: 0, foundCount: 1 });
-    for (const field of ["puzzleIndex", "totalFoundCount", "wrongAnswerCount", "inputLockedUntilMs"]) {
+    expect(opponent).toMatchObject({ totalFoundCount: 1, currentDifferenceCount: 3 });
+    for (const field of ["puzzleIndex", "wrongAnswerCount", "inputLockedUntilMs"]) {
       expect(opponent).not.toHaveProperty(field);
     }
   });
