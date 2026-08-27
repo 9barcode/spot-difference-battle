@@ -97,6 +97,66 @@ export const GAME_PUZZLES: readonly MatchPuzzle[] = [
       { id: "pirate-treasure", label: "갑판의 보물상자", regions: [{ x: 0.35, y: 0.87, radius: 0.13 }] },
     ],
   },
+  {
+    id: "japanese-shrine",
+    assetVersion: GAME_PUZZLE_ASSET_MANIFEST["japanese-shrine"].version,
+    differences: [
+      { id: "shrine-blossoms", label: "벚꽃 색", regions: [{ x: 0.17, y: 0.1, radius: 0.09 }] },
+      { id: "shrine-torii", label: "도리이 색", regions: [{ x: 0.4, y: 0.3, radius: 0.15 }] },
+      { id: "shrine-mask", label: "인물의 여우 가면", regions: [{ x: 0.78, y: 0.69, radius: 0.07 }] },
+    ],
+  },
+  {
+    id: "korean-palace",
+    assetVersion: GAME_PUZZLE_ASSET_MANIFEST["korean-palace"].version,
+    differences: [
+      { id: "palace-moon", label: "달 모양과 색", regions: [{ x: 0.78, y: 0.09, radius: 0.08 }] },
+      { id: "palace-lights", label: "궁궐 조명 색", regions: [{ x: 0.52, y: 0.39, radius: 0.15 }] },
+      { id: "palace-fox-hat", label: "여우의 모자", regions: [{ x: 0.3, y: 0.72, radius: 0.09 }] },
+    ],
+  },
+  {
+    id: "medieval-castle",
+    assetVersion: GAME_PUZZLE_ASSET_MANIFEST["medieval-castle"].version,
+    differences: [
+      { id: "castle-flag", label: "성의 깃발 색", regions: [{ x: 0.27, y: 0.08, radius: 0.07 }] },
+      { id: "castle-knight", label: "기사 갑옷 색", regions: [{ x: 0.68, y: 0.58, radius: 0.16 }] },
+      { id: "castle-chest", label: "보물상자", regions: [{ x: 0.32, y: 0.82, radius: 0.15 }] },
+    ],
+  },
+  {
+    id: "japanese-ninja",
+    assetVersion: GAME_PUZZLE_ASSET_MANIFEST["japanese-ninja"].version,
+    differences: [
+      { id: "ninja-streamer", label: "잉어 깃발 색", regions: [{ x: 0.17, y: 0.08, radius: 0.07 }] },
+      { id: "ninja-moon", label: "달 색", regions: [{ x: 0.76, y: 0.09, radius: 0.08 }] },
+      { id: "ninja-scarf", label: "닌자 목도리 색", regions: [{ x: 0.56, y: 0.28, radius: 0.07 }] },
+      { id: "ninja-sword", label: "지붕 위 검", regions: [{ x: 0.48, y: 0.75, radius: 0.13 }] },
+      { id: "ninja-lantern", label: "등불 색", regions: [{ x: 0.88, y: 0.8, radius: 0.09 }] },
+    ],
+  },
+  {
+    id: "korean-goblin",
+    assetVersion: GAME_PUZZLE_ASSET_MANIFEST["korean-goblin"].version,
+    differences: [
+      { id: "goblin-club", label: "도깨비 방망이", regions: [{ x: 0.23, y: 0.36, radius: 0.08 }] },
+      { id: "goblin-flame", label: "도깨비불 색", regions: [{ x: 0.76, y: 0.1, radius: 0.08 }] },
+      { id: "goblin-animal", label: "정원의 동물", regions: [{ x: 0.17, y: 0.55, radius: 0.08 }] },
+      { id: "goblin-bag", label: "보따리 색", regions: [{ x: 0.15, y: 0.86, radius: 0.09 }] },
+      { id: "goblin-statue", label: "석상 위 꽃", regions: [{ x: 0.87, y: 0.67, radius: 0.07 }] },
+    ],
+  },
+  {
+    id: "medieval-dragon",
+    assetVersion: GAME_PUZZLE_ASSET_MANIFEST["medieval-dragon"].version,
+    differences: [
+      { id: "dragon-window", label: "스테인드글라스의 용", regions: [{ x: 0.17, y: 0.2, radius: 0.11 }] },
+      { id: "dragon-chandelier", label: "샹들리에 불빛", regions: [{ x: 0.67, y: 0.08, radius: 0.07 }] },
+      { id: "dragon-color", label: "잠든 용의 색", regions: [{ x: 0.63, y: 0.57, radius: 0.18 }] },
+      { id: "dragon-sword", label: "바위에 꽂힌 검", regions: [{ x: 0.19, y: 0.75, radius: 0.1 }] },
+      { id: "dragon-book", label: "마법책 색", regions: [{ x: 0.34, y: 0.48, radius: 0.08 }] },
+    ],
+  },
 ] as const;
 
 export const ACTIVE_GAME_PUZZLES: readonly MatchPuzzle[] = GAME_PUZZLES;

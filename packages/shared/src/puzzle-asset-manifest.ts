@@ -9,6 +9,12 @@ export const GAME_PUZZLE_IDS = [
   "alchemist-workshop",
   "dinosaur-valley",
   "pirate-ship",
+  "japanese-shrine",
+  "korean-palace",
+  "medieval-castle",
+  "japanese-ninja",
+  "korean-goblin",
+  "medieval-dragon",
 ] as const;
 
 export type GamePuzzleId = (typeof GAME_PUZZLE_IDS)[number];
@@ -109,5 +115,47 @@ export const GAME_PUZZLE_ASSET_MANIFEST = {
     rightsStatus: "USER_SUPPLIED",
     original: webp("pirate-ship-original.webp", "A7BDF4EAD9AB1C7FB9EEE7A770E95F4B9AD3AC98A5A742B29A0B442D160A0766"),
     modified: webp("pirate-ship-modified.webp", "4A0230F10428B84AE173932CE588B6D19B4BAF7F2D03569B2F7372DD4034F7EC"),
+  },
+  "japanese-shrine": {
+    version: "2026-08-27.1",
+    difficulty: "EASY",
+    rightsStatus: "USER_SUPPLIED",
+    original: webp("japanese-shrine-original.webp", "D6DDAA26C20E9465825AF0D2645B3B364C59845382FDE975F7041B73409A37D7"),
+    modified: webp("japanese-shrine-modified.webp", "FC9053AB7607ED40833A91B68C777F6589D72706D969E419BA3342F8FEA227E8"),
+  },
+  "korean-palace": {
+    version: "2026-08-27.1",
+    difficulty: "EASY",
+    rightsStatus: "USER_SUPPLIED",
+    original: webp("korean-palace-original.webp", "08731E87D0BAFBCD46348C7EF873026740549D85940E5125DA46CF9472268F38"),
+    modified: webp("korean-palace-modified.webp", "879C55A9C24ED0CD8A37EF8AADE931A003369A4B13AF602028F12ED0B457632F"),
+  },
+  "medieval-castle": {
+    version: "2026-08-27.1",
+    difficulty: "EASY",
+    rightsStatus: "USER_SUPPLIED",
+    original: webp("medieval-castle-original.webp", "227123908D21DAC00001FB256755A088C408F809E8588AF4DE73A91A11EB863F"),
+    modified: webp("medieval-castle-modified.webp", "1529A0AABFF641A95EA8263FBD5876514B8E17AF42F0209B8EBE5A06CBCF7D28"),
+  },
+  "japanese-ninja": {
+    version: "2026-08-27.1",
+    difficulty: "MEDIUM",
+    rightsStatus: "USER_SUPPLIED",
+    original: webp("japanese-ninja-original.webp", "51CCF3D9A58ABAA2D3020AA4D81A17994C366FC2115C8DC0FFC894A184CD7256"),
+    modified: webp("japanese-ninja-modified.webp", "ACD6D250DD110E09D473EFE8B95ACA74E5636D73F4EE71A3E09F2644F043314C"),
+  },
+  "korean-goblin": {
+    version: "2026-08-27.1",
+    difficulty: "MEDIUM",
+    rightsStatus: "USER_SUPPLIED",
+    original: webp("korean-goblin-original.webp", "AAB7C56EE1326562F8933EFC413FD6E7D9F8665A45FE508BBCB3286801B692EE"),
+    modified: webp("korean-goblin-modified.webp", "0CF29D2D11B4C74339C7DBC874FAD3656F1A232F61B11AE0BFAFB21A93C00AF8"),
+  },
+  "medieval-dragon": {
+    version: "2026-08-27.1",
+    difficulty: "MEDIUM",
+    rightsStatus: "USER_SUPPLIED",
+    original: webp("medieval-dragon-original.webp", "B5E77386882B3AA58D0D83A20C6F9AA6E161A7DA452F47D1ADEC9A931D6BD6C1"),
+    modified: webp("medieval-dragon-modified.webp", "428D9BD97748CFA3F30A083EA8D698E87F0692858414D8AC9BE5725EF35E5C76"),
   },
 } as const satisfies Record<GamePuzzleId, PuzzleAssetMetadata>;

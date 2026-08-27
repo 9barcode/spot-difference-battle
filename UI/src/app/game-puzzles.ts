@@ -23,6 +23,18 @@ import dinosaurOriginal from "@/imports/dinosaur-valley-original.webp";
 import dinosaurModified from "@/imports/dinosaur-valley-modified.webp";
 import pirateOriginal from "@/imports/pirate-ship-original.webp";
 import pirateModified from "@/imports/pirate-ship-modified.webp";
+import shrineOriginal from "@/imports/japanese-shrine-original.webp";
+import shrineModified from "@/imports/japanese-shrine-modified.webp";
+import palaceOriginal from "@/imports/korean-palace-original.webp";
+import palaceModified from "@/imports/korean-palace-modified.webp";
+import castleOriginal from "@/imports/medieval-castle-original.webp";
+import castleModified from "@/imports/medieval-castle-modified.webp";
+import ninjaOriginal from "@/imports/japanese-ninja-original.webp";
+import ninjaModified from "@/imports/japanese-ninja-modified.webp";
+import goblinOriginal from "@/imports/korean-goblin-original.webp";
+import goblinModified from "@/imports/korean-goblin-modified.webp";
+import dragonOriginal from "@/imports/medieval-dragon-original.webp";
+import dragonModified from "@/imports/medieval-dragon-modified.webp";
 
 export interface GamePuzzleVisual {
   id: GamePuzzleId;
@@ -113,6 +125,54 @@ export const GAME_PUZZLE_VISUALS: Readonly<Record<GamePuzzleId, GamePuzzleVisual
     originalSrc: pirateOriginal,
     modifiedSrc: pirateModified,
     alt: "해적과 대포가 있는 범선 갑판",
+  },
+  "japanese-shrine": {
+    id: "japanese-shrine",
+    metadata: GAME_PUZZLE_ASSET_MANIFEST["japanese-shrine"],
+    label: "벚꽃 핀 일본 신사",
+    originalSrc: shrineOriginal,
+    modifiedSrc: shrineModified,
+    alt: "도리이와 여우 가면 인물이 있는 일본 신사",
+  },
+  "korean-palace": {
+    id: "korean-palace",
+    metadata: GAME_PUZZLE_ASSET_MANIFEST["korean-palace"],
+    label: "달빛 아래 한국 궁궐",
+    originalSrc: palaceOriginal,
+    modifiedSrc: palaceModified,
+    alt: "달과 구미호가 있는 한국 궁궐 정원",
+  },
+  "medieval-castle": {
+    id: "medieval-castle",
+    metadata: GAME_PUZZLE_ASSET_MANIFEST["medieval-castle"],
+    label: "중세 성의 기사",
+    originalSrc: castleOriginal,
+    modifiedSrc: castleModified,
+    alt: "기사와 보물상자가 있는 중세 성 광장",
+  },
+  "japanese-ninja": {
+    id: "japanese-ninja",
+    metadata: GAME_PUZZLE_ASSET_MANIFEST["japanese-ninja"],
+    label: "달빛 지붕의 닌자",
+    originalSrc: ninjaOriginal,
+    modifiedSrc: ninjaModified,
+    alt: "달빛 아래 일본 마을 지붕에 선 닌자",
+  },
+  "korean-goblin": {
+    id: "korean-goblin",
+    metadata: GAME_PUZZLE_ASSET_MANIFEST["korean-goblin"],
+    label: "도깨비의 신비한 정원",
+    originalSrc: goblinOriginal,
+    modifiedSrc: goblinModified,
+    alt: "도깨비와 불꽃과 석상이 있는 정원",
+  },
+  "medieval-dragon": {
+    id: "medieval-dragon",
+    metadata: GAME_PUZZLE_ASSET_MANIFEST["medieval-dragon"],
+    label: "보물 위의 중세 용",
+    originalSrc: dragonOriginal,
+    modifiedSrc: dragonModified,
+    alt: "보물 더미 위에서 잠든 용과 마법 검",
   },
 };
 
