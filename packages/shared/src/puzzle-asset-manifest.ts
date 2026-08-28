@@ -19,8 +19,8 @@ export interface PuzzleAssetFileMetadata {
   fileName: string;
   sha256: string;
   mimeType: "image/webp";
-  width: number;
-  height: number;
+  width: 1024;
+  height: 1024;
 }
 
 export interface PuzzleAssetMetadata {
@@ -31,12 +31,12 @@ export interface PuzzleAssetMetadata {
   modified: PuzzleAssetFileMetadata;
 }
 
-const webp = (fileName: string, sha256: string, width = 1024, height = 1024): PuzzleAssetFileMetadata => ({
+const webp = (fileName: string, sha256: string): PuzzleAssetFileMetadata => ({
   fileName,
   sha256,
   mimeType: "image/webp",
-  width,
-  height,
+  width: 1024,
+  height: 1024,
 });
 
 export const GAME_PUZZLE_ASSET_MANIFEST = {
@@ -76,38 +76,38 @@ export const GAME_PUZZLE_ASSET_MANIFEST = {
     modified: webp("winter-cabin-modified.webp", "55B52B074833BD66432FD6149FD090728D1411E9A4CB8620EECBC559D7C3C18C"),
   },
   "home-office": {
-    version: "2026-08-28.1",
+    version: "2026-08-28.2",
     difficulty: "UNRATED",
     rightsStatus: "USER_SUPPLIED",
-    original: webp("home-office-original.webp", "15DEB19FEAF209D183F8DB2E391B05941F8781CBBC5C1D5B0C8459F7ECBF8B78", 512, 512),
-    modified: webp("home-office-modified.webp", "E8ED1A35F3CCC1506019587F4539BF4997CB4FD8E6A877AA08F1F941DDBD9CF1", 512, 512),
+    original: webp("home-office-original.webp", "A9FD8612D471D67A36A436E5282C2CDD0117B8315E8E95B0D1FD1D3D9CD8BAEB"),
+    modified: webp("home-office-modified.webp", "09A6F6A76B54EB5E6550AD2488ECE72C57A1F368120CA3A7D40A0EC3FD827BE2"),
   },
   "farmers-market": {
-    version: "2026-08-28.1",
+    version: "2026-08-28.2",
     difficulty: "UNRATED",
     rightsStatus: "USER_SUPPLIED",
-    original: webp("farmers-market-original.webp", "293F8B7EA516650A230706C9E000C99AA4D699E3CCD60999514F044CE0F6633D", 384, 384),
-    modified: webp("farmers-market-modified.webp", "8C265D71DE400179718471A0A05944FBB6A79A6063221628B495FE743E1893A6", 384, 384),
+    original: webp("farmers-market-original.webp", "2E99D7901976A7F3CB5AD605D7B23CB595FF2AC89EE3FF29863A56B14AFE4285"),
+    modified: webp("farmers-market-modified.webp", "E130DA0F037EC0E37BB5588E5552BE9762B56849475F040990997D6116C43F68"),
   },
   "bathroom-vanity": {
-    version: "2026-08-28.1",
+    version: "2026-08-28.2",
     difficulty: "UNRATED",
     rightsStatus: "USER_SUPPLIED",
-    original: webp("bathroom-vanity-original.webp", "E1CBBD4E7620BF3D06516DA9B89FA7CA75C91EE1CEFF688D6A204535589B05DB", 512, 512),
-    modified: webp("bathroom-vanity-modified.webp", "A504F20CBDE9F638D1AFD5B39FA271207D073D5A523093B066EE3B8B58E08438", 512, 512),
+    original: webp("bathroom-vanity-original.webp", "23ACBBBD5D00B19FD27ABFE776CC552DDA246D8C4474FA3348071F1D4C1BB5B3"),
+    modified: webp("bathroom-vanity-modified.webp", "BF9F0804C41A0BD0D4570FFCA9BA4F27CD7AC8706B2C50DD264AFD08ABFBD390"),
   },
   "lakeside-picnic": {
-    version: "2026-08-28.1",
+    version: "2026-08-28.2",
     difficulty: "UNRATED",
     rightsStatus: "USER_SUPPLIED",
-    original: webp("lakeside-picnic-original.webp", "E4240170D7B53B1BE73781858DA17AAB04B1C78687062C2A00A90955F7B211DC", 384, 384),
-    modified: webp("lakeside-picnic-modified.webp", "37651D4077213B0C87BE7C1F120035703F14096CC348FDCFA3B9C19332575138", 384, 384),
+    original: webp("lakeside-picnic-original.webp", "8E46E269D9645C0B5B041DB59FFBF34E4606CADBF7092117E61BDFEF0F42DFCF"),
+    modified: webp("lakeside-picnic-modified.webp", "0C1C433EDFB0F21E1A832D16F0A3695F7319C20AB7A0E4A1B9D7467A7AA7C320"),
   },
   "laundry-room": {
-    version: "2026-08-28.1",
+    version: "2026-08-28.2",
     difficulty: "UNRATED",
     rightsStatus: "USER_SUPPLIED",
-    original: webp("laundry-room-original.webp", "B85F1C8A23AE5C25CE9E997C5E6437C9F9E836EB4382C84BEBEC8BB65CBA8C2C", 384, 384),
-    modified: webp("laundry-room-modified.webp", "D34945FF648E56B8B601EC0F9906553319FFACBE94997D2C32CFBC6C199E1E9E", 384, 384),
+    original: webp("laundry-room-original.webp", "5FE54A914A41A31C1576BA3699728CE1919470DED4DFFE2B2788990994DE7AFA"),
+    modified: webp("laundry-room-modified.webp", "863B7E2C0BF13BEDE9A8FB260DDA7413E158E6D6E1ED494C68C68ADAAB0F97AA"),
   },
 } as const satisfies Record<GamePuzzleId, PuzzleAssetMetadata>;
