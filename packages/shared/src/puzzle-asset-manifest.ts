@@ -4,6 +4,11 @@ export const GAME_PUZZLE_IDS = [
   "underwater-treasure",
   "cyber-city",
   "winter-cabin",
+  "home-office",
+  "farmers-market",
+  "bathroom-vanity",
+  "lakeside-picnic",
+  "laundry-room",
 ] as const;
 
 export type GamePuzzleId = (typeof GAME_PUZZLE_IDS)[number];
@@ -14,8 +19,8 @@ export interface PuzzleAssetFileMetadata {
   fileName: string;
   sha256: string;
   mimeType: "image/webp";
-  width: 1024;
-  height: 1024;
+  width: number;
+  height: number;
 }
 
 export interface PuzzleAssetMetadata {
@@ -26,12 +31,12 @@ export interface PuzzleAssetMetadata {
   modified: PuzzleAssetFileMetadata;
 }
 
-const webp = (fileName: string, sha256: string): PuzzleAssetFileMetadata => ({
+const webp = (fileName: string, sha256: string, width = 1024, height = 1024): PuzzleAssetFileMetadata => ({
   fileName,
   sha256,
   mimeType: "image/webp",
-  width: 1024,
-  height: 1024,
+  width,
+  height,
 });
 
 export const GAME_PUZZLE_ASSET_MANIFEST = {
@@ -69,5 +74,40 @@ export const GAME_PUZZLE_ASSET_MANIFEST = {
     rightsStatus: "USER_SUPPLIED",
     original: webp("winter-cabin-original.webp", "215134746A7E741F063ED87A4008DF65B5BC1866F55E142C75175A403C9B6C6E"),
     modified: webp("winter-cabin-modified.webp", "55B52B074833BD66432FD6149FD090728D1411E9A4CB8620EECBC559D7C3C18C"),
+  },
+  "home-office": {
+    version: "2026-08-28.1",
+    difficulty: "UNRATED",
+    rightsStatus: "USER_SUPPLIED",
+    original: webp("home-office-original.webp", "15DEB19FEAF209D183F8DB2E391B05941F8781CBBC5C1D5B0C8459F7ECBF8B78", 512, 512),
+    modified: webp("home-office-modified.webp", "E8ED1A35F3CCC1506019587F4539BF4997CB4FD8E6A877AA08F1F941DDBD9CF1", 512, 512),
+  },
+  "farmers-market": {
+    version: "2026-08-28.1",
+    difficulty: "UNRATED",
+    rightsStatus: "USER_SUPPLIED",
+    original: webp("farmers-market-original.webp", "293F8B7EA516650A230706C9E000C99AA4D699E3CCD60999514F044CE0F6633D", 384, 384),
+    modified: webp("farmers-market-modified.webp", "8C265D71DE400179718471A0A05944FBB6A79A6063221628B495FE743E1893A6", 384, 384),
+  },
+  "bathroom-vanity": {
+    version: "2026-08-28.1",
+    difficulty: "UNRATED",
+    rightsStatus: "USER_SUPPLIED",
+    original: webp("bathroom-vanity-original.webp", "E1CBBD4E7620BF3D06516DA9B89FA7CA75C91EE1CEFF688D6A204535589B05DB", 512, 512),
+    modified: webp("bathroom-vanity-modified.webp", "A504F20CBDE9F638D1AFD5B39FA271207D073D5A523093B066EE3B8B58E08438", 512, 512),
+  },
+  "lakeside-picnic": {
+    version: "2026-08-28.1",
+    difficulty: "UNRATED",
+    rightsStatus: "USER_SUPPLIED",
+    original: webp("lakeside-picnic-original.webp", "E4240170D7B53B1BE73781858DA17AAB04B1C78687062C2A00A90955F7B211DC", 384, 384),
+    modified: webp("lakeside-picnic-modified.webp", "37651D4077213B0C87BE7C1F120035703F14096CC348FDCFA3B9C19332575138", 384, 384),
+  },
+  "laundry-room": {
+    version: "2026-08-28.1",
+    difficulty: "UNRATED",
+    rightsStatus: "USER_SUPPLIED",
+    original: webp("laundry-room-original.webp", "B85F1C8A23AE5C25CE9E997C5E6437C9F9E836EB4382C84BEBEC8BB65CBA8C2C", 384, 384),
+    modified: webp("laundry-room-modified.webp", "D34945FF648E56B8B601EC0F9906553319FFACBE94997D2C32CFBC6C199E1E9E", 384, 384),
   },
 } as const satisfies Record<GamePuzzleId, PuzzleAssetMetadata>;
