@@ -6,18 +6,21 @@ export const APPS_IN_TOSS_WEB_ORIGINS = [
   "https://spot-difference-syk.private-apps.tossmini.com",
 ] as const;
 
-export type WebOrigin = string | RegExp | Array<string | RegExp>;
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 
 export function resolveWebOrigin(
   configuredOrigin: string | undefined,
   nodeEnvironment: string | undefined,
-): WebOrigin | undefined {
+): string | RegExp | undefined {
   const configured = configuredOrigin?.trim();
 
   if (nodeEnvironment === "production") {
-    return configured
+    const origins = configured
       ? [configured, ...APPS_IN_TOSS_WEB_ORIGINS]
       : [...APPS_IN_TOSS_WEB_ORIGINS];
+    return new RegExp(`^(?:${origins.map(escapeRegExp).join("|")})$`);
   }
 
   return configured || LOCAL_DEVELOPMENT_WEB_ORIGIN;
