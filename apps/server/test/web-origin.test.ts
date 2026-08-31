@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { LOCAL_DEVELOPMENT_WEB_ORIGIN, resolveWebOrigin } from "../src/web-origin.js";
+import {
+  APPS_IN_TOSS_WEB_ORIGINS,
+  LOCAL_DEVELOPMENT_WEB_ORIGIN,
+  resolveWebOrigin,
+} from "../src/web-origin.js";
 
 describe("development web origin", () => {
   it.each([
@@ -23,9 +27,25 @@ describe("development web origin", () => {
     expect(LOCAL_DEVELOPMENT_WEB_ORIGIN.test(origin)).toBe(false);
   });
 
-  it("keeps explicit and production policies", () => {
+  it("keeps an explicit development origin", () => {
     expect(resolveWebOrigin(" https://game.example.com ", "development")).toBe("https://game.example.com");
-    expect(resolveWebOrigin(undefined, "production")).toBeUndefined();
     expect(resolveWebOrigin(undefined, "development")).toBe(LOCAL_DEVELOPMENT_WEB_ORIGIN);
+  });
+
+  it("allows Apps in Toss production and QR origins", () => {
+    const productionOrigin = resolveWebOrigin(undefined, "production");
+    expect(productionOrigin).toBeInstanceOf(RegExp);
+    for (const origin of APPS_IN_TOSS_WEB_ORIGINS) {
+      expect((productionOrigin as RegExp).test(origin)).toBe(true);
+    }
+    expect((productionOrigin as RegExp).test("https://evil.example.com")).toBe(false);
+  });
+
+  it("keeps a configured production origin in addition to Toss origins", () => {
+    const productionOrigin = resolveWebOrigin(" https://game.example.com ", "production") as RegExp;
+    expect(productionOrigin.test("https://game.example.com")).toBe(true);
+    for (const origin of APPS_IN_TOSS_WEB_ORIGINS) {
+      expect(productionOrigin.test(origin)).toBe(true);
+    }
   });
 });
