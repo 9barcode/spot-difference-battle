@@ -2,6 +2,72 @@
 @import './tailwind.css';
 @import './theme.css';
 
+:root {
+  min-width: 100%;
+  min-height: 100%;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  min-height: 100%;
+}
+
+html,
+body {
+  min-height: 100vh;
+  min-height: 100dvh;
+  overflow-x: hidden;
+  overscroll-behavior-y: none;
+}
+
+/*
+ * Tailwind's min-h-screen resolves to 100vh. In iOS WKWebView, 100vh can
+ * include browser/WebView chrome and produce a viewport taller than the
+ * visible Toss Mini App area. Keep 100vh as a fallback and prefer 100dvh
+ * where dynamic viewport units are supported.
+ */
+.min-h-screen {
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+/*
+ * viewport-fit=cover lets iOS expose its safe-area insets. Preserve the
+ * existing p-4 / sm:p-7 spacing while ensuring controls never sit under a
+ * notch, status area, or home indicator. On Android the env() values are 0,
+ * so the existing layout is unchanged.
+ */
+main.min-h-screen {
+  box-sizing: border-box;
+  padding-top: max(1rem, env(safe-area-inset-top));
+  padding-right: max(1rem, env(safe-area-inset-right));
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  padding-left: max(1rem, env(safe-area-inset-left));
+}
+
+@media (min-width: 640px) {
+  main.min-h-screen {
+    padding-top: max(1.75rem, env(safe-area-inset-top));
+    padding-right: max(1.75rem, env(safe-area-inset-right));
+    padding-bottom: max(1.75rem, env(safe-area-inset-bottom));
+    padding-left: max(1.75rem, env(safe-area-inset-left));
+  }
+}
+
+/* Avoid accidental native selection/callout on the game image in iOS. */
+[data-testid='original-board'],
+[data-testid='modified-board'] {
+  width: 100%;
+  max-width: min(100%, 70dvh);
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
 :where(button, input, select, [tabindex]):focus-visible {
   outline: 3px solid #7c3aed;
   outline-offset: 3px;
