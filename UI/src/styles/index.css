@@ -21,7 +21,21 @@ body {
   min-height: 100vh;
   min-height: 100dvh;
   overflow-x: hidden;
-  overscroll-behavior-y: none;
+  overflow-y: auto;
+  overscroll-behavior-y: auto;
+  touch-action: pan-y;
+}
+
+html {
+  -webkit-overflow-scrolling: touch;
+}
+
+body {
+  position: relative;
+}
+
+#root {
+  min-height: 100dvh;
 }
 
 /*
@@ -43,6 +57,7 @@ body {
  */
 main.min-h-screen {
   box-sizing: border-box;
+  overflow: visible;
   padding-top: max(1rem, env(safe-area-inset-top));
   padding-right: max(1rem, env(safe-area-inset-right));
   padding-bottom: max(1rem, env(safe-area-inset-bottom));
@@ -66,6 +81,18 @@ main.min-h-screen {
   -webkit-user-select: none;
   user-select: none;
   -webkit-touch-callout: none;
+}
+
+/*
+ * At 1x zoom ImageBoard renders touch-action: manipulation inline. Explicitly
+ * give vertical gestures back to the WebView so a swipe that begins over a
+ * board scrolls the page instead of being consumed by pointer capture.
+ * When zoomed in, ImageBoard switches to touch-action: none and keeps its
+ * existing drag-to-pan behavior.
+ */
+[data-testid='original-board'][style*='touch-action: manipulation'],
+[data-testid='modified-board'][style*='touch-action: manipulation'] {
+  touch-action: pan-y pinch-zoom !important;
 }
 
 :where(button, input, select, [tabindex]):focus-visible {
