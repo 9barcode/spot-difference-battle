@@ -3,7 +3,6 @@ import path from 'path'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 
-
 function figmaAssetResolver() {
   return {
     name: 'figma-asset-resolver',
@@ -28,6 +27,9 @@ export default defineConfig({
     alias: {
       // Alias @ to the src directory
       '@': path.resolve(__dirname, './src'),
+      // Apps in Toss' package collector cannot resolve pnpm workspace links.
+      // Bundle the shared source directly into the web app instead.
+      '@spot-battle/shared': path.resolve(__dirname, '../packages/shared/src/index.ts'),
     },
   },
 
