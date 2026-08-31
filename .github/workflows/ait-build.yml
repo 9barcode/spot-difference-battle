@@ -32,8 +32,8 @@ jobs:
       - name: Type check
         run: pnpm check
 
-      - name: Run web tests
-        run: pnpm --filter @spot-battle/web test
+      - name: Run full test suite
+        run: pnpm test
 
       - name: Build Apps in Toss bundle
         run: pnpm build:ait
