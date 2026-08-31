@@ -60,9 +60,9 @@ export const GAME_PUZZLES: readonly MatchPuzzle[] = [
     id: "farmers-market",
     assetVersion: GAME_PUZZLE_ASSET_MANIFEST["farmers-market"].version,
     differences: [
-      { id: "market-flowers", label: "꽃 종류", regions: [{ x: 0.14, y: 0.37, radius: 0.16 }] },
+      { id: "market-flowers", label: "꽃 종류", regions: [{ x: 0.14, y: 0.37, radius: 0.11 }] },
       { id: "market-fruit", label: "왼쪽 과일", regions: [{ x: 0.21, y: 0.64, radius: 0.16 }] },
-      { id: "market-tote", label: "오른쪽 천가방", regions: [{ x: 0.91, y: 0.57, radius: 0.13 }] },
+      { id: "market-tote", label: "오른쪽 천가방", regions: [{ x: 0.91, y: 0.57, radius: 0.09 }] },
     ],
   },
   {
@@ -71,7 +71,7 @@ export const GAME_PUZZLES: readonly MatchPuzzle[] = [
     differences: [
       { id: "bathroom-succulent", label: "세면대 왼쪽 화분", regions: [{ x: 0.285, y: 0.39, radius: 0.06 }] },
       { id: "bathroom-candle", label: "세면대 왼쪽 촛불", regions: [{ x: 0.40, y: 0.42, radius: 0.04 }] },
-      { id: "bathroom-wall-towel", label: "벽걸이 수건 색", regions: [{ x: 0.90, y: 0.30, radius: 0.11 }] },
+      { id: "bathroom-wall-towel", label: "벽걸이 수건 색", regions: [{ x: 0.90, y: 0.30, radius: 0.10 }] },
     ],
   },
   {
@@ -80,7 +80,7 @@ export const GAME_PUZZLES: readonly MatchPuzzle[] = [
     differences: [
       { id: "picnic-lantern", label: "랜턴 색", regions: [{ x: 0.24, y: 0.49, radius: 0.07 }] },
       { id: "picnic-mug", label: "테이블 위 머그컵", regions: [{ x: 0.35, y: 0.54, radius: 0.04 }] },
-      { id: "picnic-bag", label: "나무 옆 가방", regions: [{ x: 0.87, y: 0.73, radius: 0.15 }] },
+      { id: "picnic-bag", label: "나무 옆 가방", regions: [{ x: 0.87, y: 0.73, radius: 0.13 }] },
     ],
   },
   {
