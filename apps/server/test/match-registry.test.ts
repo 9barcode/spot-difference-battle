@@ -7,7 +7,7 @@ describe("MatchRegistry", () => {
   it("creates a match with the same non-empty puzzle sequence for both players", () => {
     const registry = new MatchRegistry();
     const match = registry.create("m1", [{ playerId: "p1", nickname: "하나" }, { playerId: "p2", nickname: "둘" }]);
-    expect(match.puzzles).toHaveLength(5);
+    expect(match.puzzles).toHaveLength(GAME_PUZZLE_IDS.length);
     expect(new Set(match.puzzles.map((puzzle) => puzzle.id))).toEqual(new Set(GAME_PUZZLE_IDS));
     expect(match.snapshot("p1").currentPuzzleId).toBe(match.snapshot("p2").currentPuzzleId);
   });
