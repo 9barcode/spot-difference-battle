@@ -37,8 +37,8 @@ function pointsForPuzzle(label: string | null): Array<{ x: number; y: number }> 
   throw new Error(`등록되지 않은 문제 제목입니다: ${label}`);
 }
 test("the first player to clear the deck wins and both players see the result", async ({ browser }) => {
-  const first = await createPlayer(browser, "빠른사람", { width: 844, height: 390 });
   test.setTimeout(60_000);
+  const first = await createPlayer(browser, "빠른사람", { width: 844, height: 390 });
   const second = await createPlayer(browser, "도전자", { width: 390, height: 844 });
   try {
     await Promise.all([
@@ -73,6 +73,10 @@ test("the first player to clear the deck wins and both players see the result", 
     expect(modifiedBox).not.toBeNull();
     expect(modifiedBox!.x).toBeGreaterThan(originalBox!.x + originalBox!.width);
     expect(modifiedBox!.y).toBeLessThan(390);
+    await first.page.evaluate(() => {
+      document.documentElement.classList.add("apps-in-toss");
+      document.documentElement.style.setProperty("--ait-safe-area-right", "8px");
+    });
     await first.page.setViewportSize({ width: 640, height: 360 });
     const compactOriginalBox = await first.page.getByTestId("original-board").boundingBox();
     const compactModifiedBox = await first.page.getByTestId("modified-board").boundingBox();
@@ -82,6 +86,9 @@ test("the first player to clear the deck wins and both players see the result", 
       compactOriginalBox!.x + compactOriginalBox!.width,
     );
     expect(compactModifiedBox!.y + compactModifiedBox!.height).toBeLessThanOrEqual(360);
+    expect(compactModifiedBox!.x + compactModifiedBox!.width).toBeLessThanOrEqual(
+      640 - 8 - 104,
+    );
 
     const heading = first.page.getByTestId("playing-screen").getByRole("heading");
     const progressText = await first.page.getByText(/^나 1\/\d+번 · 0\/3$/).textContent();
@@ -132,9 +139,9 @@ test("the first player to clear the deck wins and both players see the result", 
 });
 
 test("the normal pool includes and completes all five-difference puzzles", async ({ browser }) => {
+  test.setTimeout(60_000);
   const first = await createPlayer(browser, "보통빠른사람", { width: 1280, height: 900 });
   const second = await createPlayer(browser, "보통도전자", { width: 390, height: 844 });
-  test.setTimeout(60_000);
   try {
     await Promise.all([
       first.page.getByRole("button", { name: /보통/ }).click(),

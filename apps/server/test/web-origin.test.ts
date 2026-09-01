@@ -2,6 +2,12 @@ import { describe, expect, it } from "vitest";
 import { LOCAL_DEVELOPMENT_WEB_ORIGIN, resolveWebOrigin } from "../src/web-origin.js";
 
 describe("development web origin", () => {
+  it("rejects a comma-only origin list", () => {
+    expect(() => resolveWebOrigin(" , ", "production")).toThrow(
+      "at least one exact URL origin",
+    );
+  });
+
   it.each([
     "http://localhost:5173",
     "http://127.0.0.1:5173",
@@ -27,5 +33,25 @@ describe("development web origin", () => {
     expect(resolveWebOrigin(" https://game.example.com ", "development")).toBe("https://game.example.com");
     expect(resolveWebOrigin(undefined, "production")).toBeUndefined();
     expect(resolveWebOrigin(undefined, "development")).toBe(LOCAL_DEVELOPMENT_WEB_ORIGIN);
+  });
+
+  it("supports an explicit allowlist for the live mini-app and staging", () => {
+    expect(
+      resolveWebOrigin(
+        "https://spot-battle.apps.tossmini.com, https://staging.example.com",
+        "production",
+      ),
+    ).toEqual([
+      "https://spot-battle.apps.tossmini.com",
+      "https://staging.example.com",
+    ]);
+  });
+
+  it.each([
+    "https://spot-battle.apps.tossmini.com/path",
+    "https://spot-battle.apps.tossmini.com/",
+    "not-a-url",
+  ])("rejects a non-origin WEB_ORIGIN entry: %s", (origin) => {
+    expect(() => resolveWebOrigin(origin, "production")).toThrow();
   });
 });

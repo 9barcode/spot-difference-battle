@@ -7,7 +7,7 @@ import {
   GAME_DIFFICULTIES,
   GAME_MODES,
   type ClientToServerEvents,
-  type GameSceneId,
+  type GamePuzzleId,
   type MatchSettings,
   type ServerToClientEvents,
 } from "@spot-battle/shared";
@@ -24,7 +24,7 @@ import { operationalLogFields } from "./operational-logging.js";
 import { GAME_PUZZLES } from "./game-puzzles.js";
 
 export interface GameServerOptions {
-  webOrigin?: string | RegExp;
+  webOrigin?: string | string[] | RegExp;
   logger?: boolean;
   /** Built web client directory to serve from the same origin in production. */
   staticRoot?: string;
@@ -38,7 +38,7 @@ export interface GameServerOptions {
   guestSessionCleanupIntervalMs?: number;
   matchStore?: MatchStore;
   /** 통합 테스트 등에서 특정 장면으로 매칭을 고정한다. */
-  sceneId?: GameSceneId;
+  puzzleId?: GamePuzzleId;
 }
 
 interface SocketData {
@@ -119,8 +119,8 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
   >(app.server, {
     cors: options.webOrigin ? { origin: options.webOrigin } : undefined,
   });
-  const requestedPuzzle = options.sceneId
-    ? GAME_PUZZLES.find((puzzle) => puzzle.id === options.sceneId)
+  const requestedPuzzle = options.puzzleId
+    ? GAME_PUZZLES.find((puzzle) => puzzle.id === options.puzzleId)
     : undefined;
   const registry = new MatchRegistry(requestedPuzzle ? [requestedPuzzle] : undefined);
   const guestSessionRetentionMs = options.guestSessionRetentionMs ?? 7 * 24 * 60 * 60 * 1_000;

@@ -4,8 +4,20 @@ export const LOCAL_DEVELOPMENT_WEB_ORIGIN =
 export function resolveWebOrigin(
   configuredOrigin: string | undefined,
   nodeEnvironment: string | undefined,
-): string | RegExp | undefined {
+): string | string[] | RegExp | undefined {
   const configured = configuredOrigin?.trim();
-  if (configured) return configured;
+  if (configured) {
+    const origins = configured
+      .split(",")
+      .map((origin) => origin.trim())
+      .filter(Boolean);
+    if (origins.length === 0) {
+      throw new Error("WEB_ORIGIN must contain at least one exact URL origin.");
+    }
+    if (origins.some((origin) => new URL(origin).origin !== origin)) {
+      throw new Error("WEB_ORIGIN entries must be exact URL origins.");
+    }
+    return origins.length === 1 ? origins[0] : origins;
+  }
   return nodeEnvironment === "production" ? undefined : LOCAL_DEVELOPMENT_WEB_ORIGIN;
 }

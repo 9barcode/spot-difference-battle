@@ -43,21 +43,6 @@ export const GAME_DIFFICULTY_RULES = {
   HARD: { hitRadiusMultiplier: 0.8, wrongAnswerLockSeconds: 2 },
 } as const;
 
-/**
- * 서버와 웹이 공통으로 아는 장면 식별자다.
- * 실제 이미지와 객체 마스크는 웹의 장면 카탈로그에서 관리한다.
- */
-export const GAME_SCENE_IDS = [
-  "prototype-room",
-  "cartoon-laboratory",
-  "cozy-cafe",
-  "enchanted-forest",
-  "cyber-city",
-  "underwater-treasure",
-] as const;
-export type GameSceneId = (typeof GAME_SCENE_IDS)[number];
-export const DEFAULT_GAME_SCENE_ID: GameSceneId = GAME_SCENE_IDS[0];
-
 export type GameState =
   | "LOBBY"
   | "MATCHING"
@@ -91,13 +76,6 @@ export interface RevealedDifference {
   kind: DifferenceKind;
   region: AnswerRegion;
   found: boolean;
-}
-
-export interface PlayerResult {
-  playerId: string;
-  foundCount: number;
-  wrongAnswerCount: number;
-  lastCorrectAtMs: number | null;
 }
 
 export interface MatchFoundPayload {
@@ -150,7 +128,6 @@ export interface GameSnapshot {
   state: GameState;
   stateVersion: number;
   settings?: MatchSettings;
-  imageId: GameSceneId;
   currentPuzzleId: GamePuzzleId | null;
   currentPuzzleVersion: string | null;
   nextPuzzleId: GamePuzzleId | null;

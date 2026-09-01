@@ -8,7 +8,6 @@ const snapshot: GameSnapshot = {
   matchId: "11111111-1111-4111-8111-111111111111",
   state: "FINISHED",
   stateVersion: 10,
-  imageId: "enchanted-forest",
   currentPuzzleId: null,
   currentPuzzleVersion: null,
   nextPuzzleId: null,

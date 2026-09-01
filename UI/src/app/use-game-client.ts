@@ -14,7 +14,7 @@ import type {
   ServerToClientEvents,
   SessionReadyPayload,
 } from "@spot-battle/shared";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { io, type Socket } from "socket.io-client";
 import { shouldAcceptGameSnapshot } from "./game-snapshot.js";
 import { resolveServerUrl } from "./server-url.js";
@@ -30,12 +30,30 @@ const SERVER_URL = resolveServerUrl(
 const NICKNAME_KEY = "spot-battle.nickname";
 const GUEST_TOKEN_KEY = "spot-battle.guest-token";
 
+function readStorage(key: string): string | null {
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writeStorage(key: string, value: string): void {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // 저장소가 차단된 WebView에서도 현재 연결 동안은 게임을 계속할 수 있다.
+  }
+}
+
 export function useGameClient() {
   const socketRef = useRef<GameSocket | null>(null);
   const snapshotRef = useRef<GameSnapshot | null>(null);
+  const [storedNickname] = useState(() => readStorage(NICKNAME_KEY));
   const [connected, setConnected] = useState(false);
-  const [phase, setPhase] = useState<LobbyPhase>(() => localStorage.getItem(NICKNAME_KEY) ? "LOBBY" : "NICKNAME");
-  const [nickname, setNickname] = useState(() => localStorage.getItem(NICKNAME_KEY) ?? "");
+  const [hasConnectedOnce, setHasConnectedOnce] = useState(false);
+  const [phase, setPhase] = useState<LobbyPhase>(() => storedNickname ? "LOBBY" : "NICKNAME");
+  const [nickname, setNickname] = useState(() => storedNickname ?? "");
   const [match, setMatch] = useState<MatchFoundPayload | null>(null);
   const [snapshot, setSnapshot] = useState<GameSnapshot | null>(null);
   const [lastGuess, setLastGuess] = useState<GuessResult | null>(null);
@@ -44,14 +62,30 @@ export function useGameClient() {
   const [reportId, setReportId] = useState<string | null>(null);
 
   useEffect(() => {
-    const socket: GameSocket = io(SERVER_URL, { reconnection: true, auth: { guestToken: localStorage.getItem(GUEST_TOKEN_KEY) } });
+    const socket: GameSocket = io(SERVER_URL, {
+      reconnection: true,
+      auth: { guestToken: readStorage(GUEST_TOKEN_KEY) },
+    });
     socketRef.current = socket;
     socket.on("session:ready", ({ guestToken }: SessionReadyPayload) => {
-      localStorage.setItem(GUEST_TOKEN_KEY, guestToken);
+      writeStorage(GUEST_TOKEN_KEY, guestToken);
       socket.auth = { guestToken };
     });
-    socket.on("connect", () => setConnected(true));
+    socket.on("connect", () => {
+      setConnected(true);
+      setHasConnectedOnce(true);
+      setError((current) =>
+        current?.code === "SERVER_UNAVAILABLE" ? null : current,
+      );
+    });
     socket.on("disconnect", () => setConnected(false));
+    socket.on("connect_error", () => {
+      setConnected(false);
+      setError({
+        code: "SERVER_UNAVAILABLE",
+        message: "게임 서버에 연결할 수 없습니다. 네트워크를 확인해주세요.",
+      });
+    });
     socket.on("match:found", (payload) => {
       snapshotRef.current = null;
       setMatch(payload);
@@ -91,6 +125,7 @@ export function useGameClient() {
 
   return {
     connected,
+    hasConnectedOnce,
     phase,
     nickname,
     match,
@@ -100,13 +135,14 @@ export function useGameClient() {
     error,
     reportId,
     clearError: () => setError(null),
+    retryConnection: () => socketRef.current?.connect(),
     saveNickname: (value: string) => {
       const normalized = value.trim().slice(0, 16);
       if (normalized.length < 2) {
         setError({ code: "INVALID_NICKNAME", message: "닉네임은 2자 이상 입력해주세요." });
         return false;
       }
-      localStorage.setItem(NICKNAME_KEY, normalized);
+      writeStorage(NICKNAME_KEY, normalized);
       setNickname(normalized);
       setError(null);
       setPhase("LOBBY");

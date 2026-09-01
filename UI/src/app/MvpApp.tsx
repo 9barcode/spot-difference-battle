@@ -29,6 +29,7 @@ import {
   type ImageViewport,
 } from "./image-geometry";
 import { useGameClient } from "./use-game-client";
+import { useAppsInTossSafeArea } from "./use-apps-in-toss-safe-area";
 
 function useRemainingSeconds(
   deadlineMs: number | null | undefined,
@@ -183,11 +184,13 @@ function ImageBoard({
   );
 }
 export default function MvpApp() {
+  useAppsInTossSafeArea();
   const game = useGameClient();
   const [nicknameInput, setNicknameInput] = useState(game.nickname);
   const [mode, setMode] = useState<GameMode>("STANDARD");
   const [difficulty, setDifficulty] = useState<GameDifficulty>("NORMAL");
   const [reportReason, setReportReason] = useState<ReportReason>("UNFAIR");
+  const [confirmingForfeit, setConfirmingForfeit] = useState(false);
   const [preloadError, setPreloadError] = useState<string | null>(null);
   const [preloadAttempt, setPreloadAttempt] = useState(0);
   const [imageViewport, setImageViewport] = useState<ImageViewport>({
@@ -210,6 +213,15 @@ export default function MvpApp() {
   useEffect(() => {
     setImageViewport({ scale: 1, pan: { x: 0, y: 0 } });
   }, [puzzleId]);
+
+  useEffect(() => {
+    if (!confirmingForfeit) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setConfirmingForfeit(false);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [confirmingForfeit]);
 
   const changeZoom = (delta: number) => {
     setImageViewport((current) =>
@@ -389,6 +401,20 @@ export default function MvpApp() {
             <UsersRound size={20} />
             {game.connected ? "이 설정으로 상대 찾기" : "서버 연결 중"}
           </button>
+          {!game.connected && (
+            <div className="mt-4" role="status" aria-live="polite">
+              <p className="text-sm font-bold text-violet-100">
+                게임 서버 연결을 확인하고 있습니다.
+              </p>
+              <button
+                type="button"
+                onClick={game.retryConnection}
+                className="mt-2 rounded-xl border border-white/40 bg-white/10 px-4 py-2 text-sm font-bold text-white"
+              >
+                지금 다시 연결
+              </button>
+            </div>
+          )}
         </section>
       </Shell>
     );
@@ -463,10 +489,9 @@ export default function MvpApp() {
         {!["FINISHED", "CANCELLED"].includes(game.snapshot.state) && (
           <button
             data-testid="forfeit-button"
-            onClick={() =>
-              window.confirm("경기를 나가면 기권패입니다. 나갈까요?") &&
-              game.forfeit()
-            }
+            type="button"
+            aria-label="경기 나가기"
+            onClick={() => setConfirmingForfeit(true)}
             className="rounded-full bg-slate-100 p-2 text-slate-500"
           >
             <LogOut size={18} />
@@ -786,13 +811,50 @@ export default function MvpApp() {
         </div>
       )}
 
-      {!game.connected && (
+      {!game.connected && game.hasConnectedOnce && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/65 p-4">
           <div className="rounded-3xl bg-white p-8 text-center">
             <WifiOff className="mx-auto text-red-500" size={48} />
             <h3 className="mt-3 text-xl font-black">
               서버와 다시 연결 중입니다
             </h3>
+          </div>
+        </div>
+      )}
+      {confirmingForfeit && (
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-slate-950/65 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="forfeit-title"
+        >
+          <div className="w-full max-w-sm rounded-3xl bg-white p-7 text-center shadow-xl">
+            <h3 id="forfeit-title" className="text-xl font-black">
+              경기를 나갈까요?
+            </h3>
+            <p className="mt-2 text-sm text-slate-600">
+              지금 나가면 기권패로 처리됩니다.
+            </p>
+            <div className="mt-6 grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                autoFocus
+                onClick={() => setConfirmingForfeit(false)}
+                className="rounded-xl bg-slate-100 px-4 py-3 font-bold"
+              >
+                계속하기
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setConfirmingForfeit(false);
+                  game.forfeit();
+                }}
+                className="rounded-xl bg-red-600 px-4 py-3 font-bold text-white"
+              >
+                기권하고 나가기
+              </button>
+            </div>
           </div>
         </div>
       )}

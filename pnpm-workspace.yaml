@@ -7,5 +7,6 @@ onlyBuiltDependencies:
   - "@tailwindcss/oxide"
   - "esbuild"
 allowBuilds:
-  '@tailwindcss/oxide': true
+  "@tailwindcss/oxide": true
   esbuild: true
+  protobufjs: false

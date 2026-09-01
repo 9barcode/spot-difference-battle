@@ -1,7 +1,7 @@
 # 문서 포털
 
 > 문서 상태: CURRENT
-> 기준일: 2026-08-31
+> 기준일: 2026-09-01
 
 이 문서는 사람과 AI가 프로젝트를 이해할 때 사용하는 단일 시작점이다. 새 작업은 아래 읽기 순서와 문서 권한을 따른다.
 
@@ -59,6 +59,7 @@
 
 ### 출시와 운영
 
+- [앱인토스 출시 기준](APPS_IN_TOSS_RELEASE.md): 공식 심사 대조, SDK 구성, 실기기 검수와 제출물
 - [배포 가이드](DEPLOYMENT.md): 현재 Render 스테이징 배포 방법
 - [운영·유지보수](OPERATIONS.md): 출시, 관측, 장애, 백업, 유지보수 기준
 - [검토 필요 항목](REVIEW_REQUIRED.md): 사람 결정과 외부 검증 대기 목록
@@ -82,7 +83,7 @@
 | UI·사용자 흐름 | `USER_FLOW`, `SCREEN_SPEC`, `UI_AUDIT`, `TEST_PLAN` |
 | 문제 에셋 | `GAME_ASSETS`, 에셋 QA 기록, `TEST_PLAN`, 백로그 |
 | DB·마이그레이션 | `TECH_SPEC`, `OPERATIONS`, `QUALITY_GATES`, 결정 기록 |
-| 배포·운영 | `DEPLOYMENT`, `OPERATIONS`, 출시 체크리스트 |
+| 배포·운영 | `APPS_IN_TOSS_RELEASE`, `DEPLOYMENT`, `OPERATIONS`, 출시 체크리스트 |
 | 문서 체계 | `DOCUMENTATION`, 이 포털, 영향받는 링크 |
 
 문서 생성·변경·폐기 규칙은 [문서 운영 기준](DOCUMENTATION.md)을 따른다.

@@ -27,7 +27,7 @@ describe("simultaneous game server", () => {
   const sockets: TestSocket[] = [];
 
   beforeEach(async () => {
-    app = await createGameServer({ sceneId: "enchanted-forest", inputCooldownMs: 0 });
+    app = await createGameServer({ puzzleId: "enchanted-forest", inputCooldownMs: 0 });
     await app.listen({ host: "127.0.0.1", port: 0 });
   });
 

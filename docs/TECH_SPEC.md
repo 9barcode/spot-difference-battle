@@ -100,8 +100,8 @@ PostgreSQL이 설정되면 서버 시작 전에 마이그레이션을 실행한�
 
 ## 10. 확인된 기술 부채
 
-- 공개 `determineWinner(PlayerResult)` 함수는 현재 `GameMatch`와 다른 구형 우선순위를 사용하며 테스트 외 실행 경로가 없다.
-- `GAME_SCENE_IDS`, `GameSceneId`, `GAME_SCENE_ID`와 스냅샷 `imageId`는 현재 16개 문제 카탈로그 이전의 장면 계약이다. 현재 문제 ID를 해당 타입으로 강제 캐스팅한다.
+- 승패 판정은 서버 권위 `GameMatch` 내부 구현만 사용한다. 테스트 전용 구형 공개 판정 함수는 제거됐다.
+- 문제 식별은 16개 매니페스트의 `GamePuzzleId`로 통일한다. 테스트 고정값은 `GAME_PUZZLE_ID`로만 주입한다.
 - CI 워크플로, 운영 지표·알림, 부하 기준과 실제 백업·복원 자동화가 없다.
 
 이 항목은 `REVIEW_REQUIRED.md`의 `REV-001`, `REV-002`, `REV-008`~`REV-010`에서 결정·추적한다.
