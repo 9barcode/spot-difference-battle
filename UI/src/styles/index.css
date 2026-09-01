@@ -2,6 +2,110 @@
 @import './tailwind.css';
 @import './theme.css';
 
+html,
+body,
+#root {
+  min-height: 100%;
+  min-height: 100dvh;
+}
+
+body {
+  overscroll-behavior: none;
+}
+
+.game-shell {
+  padding-top: max(1rem, env(safe-area-inset-top));
+  padding-right: max(1rem, env(safe-area-inset-right));
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  padding-left: max(1rem, env(safe-area-inset-left));
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .game-shell[data-game-state='PLAYING'] {
+    box-sizing: border-box;
+    height: 100vh;
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+    padding-top: max(0.25rem, env(safe-area-inset-top));
+    padding-right: max(0.25rem, env(safe-area-inset-right));
+    padding-bottom: max(0.25rem, env(safe-area-inset-bottom));
+    padding-left: max(0.25rem, env(safe-area-inset-left));
+  }
+
+  .game-shell[data-game-state='PLAYING'] .game-header {
+    display: none;
+  }
+
+  .game-shell[data-game-state='PLAYING'] .game-status-bar {
+    margin-bottom: 0.2rem;
+    max-width: none;
+    min-height: 2.5rem;
+    gap: 0.25rem;
+    border-radius: 0.75rem;
+    padding: 0.25rem 0.5rem;
+  }
+
+  .game-shell[data-game-state='PLAYING'] .playing-screen {
+    display: flex;
+    height: calc(100% - 2.7rem);
+    max-width: none;
+    min-height: 0;
+    flex-direction: column;
+  }
+
+  .game-shell[data-game-state='PLAYING'] .game-puzzle-intro {
+    margin-bottom: 0.1rem;
+  }
+
+  .game-shell[data-game-state='PLAYING'] .game-puzzle-intro h2 {
+    font-size: 0.9rem;
+    line-height: 1.1rem;
+  }
+
+  .game-shell[data-game-state='PLAYING'] .game-puzzle-intro p,
+  .game-shell[data-game-state='PLAYING'] .game-zoom-controls > span:first-child {
+    display: none;
+  }
+
+  .game-shell[data-game-state='PLAYING'] .game-zoom-controls {
+    margin-bottom: 0.2rem;
+    flex-wrap: nowrap;
+    gap: 0.25rem;
+  }
+
+  .game-shell[data-game-state='PLAYING'] .game-zoom-controls button {
+    padding: 0.25rem 0.5rem;
+  }
+
+  .game-shell[data-game-state='PLAYING'] .game-board-grid {
+    display: grid;
+    min-height: 0;
+    flex: 1;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 0.35rem;
+  }
+
+  .game-shell[data-game-state='PLAYING'] .game-board-column {
+    display: flex;
+    min-height: 0;
+    flex-direction: column;
+  }
+
+  .game-shell[data-game-state='PLAYING'] .game-board-label {
+    margin-bottom: 0.1rem;
+    font-size: 0.75rem;
+    line-height: 1rem;
+  }
+
+  .game-shell[data-game-state='PLAYING'] .game-board {
+    width: auto;
+    max-width: 100%;
+    height: calc(100% - 1.1rem);
+    max-height: calc(100% - 1.1rem);
+  }
+}
+
 :where(button, input, select, [tabindex]):focus-visible {
   outline: 3px solid #7c3aed;
   outline-offset: 3px;

@@ -37,7 +37,7 @@ function pointsForPuzzle(label: string | null): Array<{ x: number; y: number }> 
   throw new Error(`등록되지 않은 문제 제목입니다: ${label}`);
 }
 test("the first player to clear the deck wins and both players see the result", async ({ browser }) => {
-  const first = await createPlayer(browser, "빠른사람", { width: 1280, height: 900 });
+  const first = await createPlayer(browser, "빠른사람", { width: 844, height: 390 });
   test.setTimeout(60_000);
   const second = await createPlayer(browser, "도전자", { width: 390, height: 844 });
   try {
@@ -67,6 +67,21 @@ test("the first player to clear the deck wins and both players see the result", 
     ]);
     await expect(first.page.getByRole("img", { name: /원본$/ })).toBeVisible();
     await expect(first.page.getByRole("img", { name: /변경본$/ })).toBeVisible();
+    const originalBox = await first.page.getByTestId("original-board").boundingBox();
+    const modifiedBox = await first.page.getByTestId("modified-board").boundingBox();
+    expect(originalBox).not.toBeNull();
+    expect(modifiedBox).not.toBeNull();
+    expect(modifiedBox!.x).toBeGreaterThan(originalBox!.x + originalBox!.width);
+    expect(modifiedBox!.y).toBeLessThan(390);
+    await first.page.setViewportSize({ width: 640, height: 360 });
+    const compactOriginalBox = await first.page.getByTestId("original-board").boundingBox();
+    const compactModifiedBox = await first.page.getByTestId("modified-board").boundingBox();
+    expect(compactOriginalBox).not.toBeNull();
+    expect(compactModifiedBox).not.toBeNull();
+    expect(compactModifiedBox!.x).toBeGreaterThan(
+      compactOriginalBox!.x + compactOriginalBox!.width,
+    );
+    expect(compactModifiedBox!.y + compactModifiedBox!.height).toBeLessThanOrEqual(360);
 
     const heading = first.page.getByTestId("playing-screen").getByRole("heading");
     const progressText = await first.page.getByText(/^나 1\/\d+번 · 0\/3$/).textContent();

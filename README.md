@@ -1,9 +1,12 @@
 # Spot Difference Battle
 
 > 문서 상태: CURRENT
+> 기준일: 2026-08-31
 > 현재 게임 규칙의 유일한 Markdown 정본은 [`docs/GAME_RULES.md`](docs/GAME_RULES.md)다.
 
 두 플레이어가 동일한 원본과 변경본을 비교하고, 문제마다 등록된 차이를 모두 찾으며 정답 점수와 완주 시간 가산점을 겨루는 실시간 1대1 게임입니다.
+
+사람과 AI의 모든 새 작업은 [`docs/README.md`](docs/README.md)에서 시작합니다. 이 문서 포털이 제품 범위, 정본, 개발 단계, 품질 게이트, 운영 기준과 검토 대기 항목을 연결합니다.
 
 ## 다음 게임 방식
 
@@ -13,7 +16,7 @@
 4. 변경본에서 현재 문제에 등록된 차이를 찾는다.
 5. 모두 찾은 플레이어는 상대를 기다리지 않고 다음 이미지로 이동한다.
 6. 한 플레이어가 전체 문제를 먼저 완주하거나 제한시간이 끝나면 경기가 종료된다.
-7. 정답 1개당 10점과 완주 시간 가산점을 합산하고, 동점이면 오답 수와 완주 시각 순으로 판정한다.
+7. 정답 1개당 10점과 완주 시간 가산점을 합산하고, 제한시간 종료는 총점·오답 순으로 판정한 뒤 모두 같으면 무승부다.
 8. 경쟁전 힌트와 문제별 선착 보너스는 없다.
 9. 난이도에 맞는 이미지 풀을 사용하며 오답 입력 잠금은 0.5~2초, 재접속 유예는 10초다.
 
@@ -37,14 +40,19 @@
 - `apps/server/`: Fastify·Socket.IO 서버와 PostgreSQL 저장소
 - `packages/shared/`: 공유 타입·상태·게임 수치
 - `packages/game-core/`: 서버 권한 판정
-- `docs/`: 규칙·상태·기술·화면·테스트와 역사 기록
+- `docs/`: 규칙·프로세스·상태·기술·화면·테스트·운영 문서
 - `e2e/`: Playwright 브라우저 테스트
 
 활성 웹 진입점은 `UI/src/main.tsx`이며 `MvpApp`을 렌더한다.
 
 ## 주요 문서
 
+- [문서 포털](docs/README.md)
+- [프로젝트 헌장](docs/PROJECT_CHARTER.md)
 - [문서 운영 기준](docs/DOCUMENTATION.md)
+- [개발 생명주기](docs/DEVELOPMENT_PROCESS.md)
+- [AI 협업 규칙](docs/AI_COLLABORATION.md)
+- [품질 게이트](docs/QUALITY_GATES.md)
 - [게임 규칙](docs/GAME_RULES.md)
 - [게임 모드와 난이도](docs/GAME_MODES.md)
 - [MVP 결정 기록](docs/MVP_DECISIONS.md)
@@ -54,10 +62,14 @@
 - [화면 명세](docs/SCREEN_SPEC.md)
 - [기술 설계](docs/TECH_SPEC.md)
 - [테스트 계획](docs/TEST_PLAN.md)
+- [요구사항 추적표](docs/TRACEABILITY.md)
 - [구현 백로그](docs/IMPLEMENTATION_BACKLOG.md)
 - [UI 현황 점검](docs/UI_AUDIT.md)
 - [문제 에셋 가이드](docs/GAME_ASSETS.md)
 - [스테이징 배포 가이드](docs/DEPLOYMENT.md)
+- [운영·유지보수 기준](docs/OPERATIONS.md)
+- [검토 및 결정 필요 항목](docs/REVIEW_REQUIRED.md)
+- [변경 역사 색인](docs/HISTORY_INDEX.md)
 
 날짜별 `CHANGES_*.md`와 과거 릴리스는 당시 구현의 역사 기록이다.
 
@@ -90,6 +102,6 @@ pnpm test
 pnpm build
 ```
 
-자동 테스트는 동시 사전 로드·카운트다운·독립 정답 판정·점수·첫 완주자 즉시 승리를 검증한다.
+브라우저 E2E는 `pnpm e2e`로 실행한다. PostgreSQL 없이 실행하면 메모리 저장소를 사용한다. PostgreSQL·환경변수·배포 절차는 `.env.example`, `docs/DEPLOYMENT.md`와 `docs/OPERATIONS.md`를 참고한다.
 
-PostgreSQL 없이 실행하면 메모리 저장소를 사용한다. PostgreSQL·환경변수·배포 절차는 `.env.example`과 `docs/DEPLOYMENT.md`를 참고한다.
+현재 상태는 스테이징 안정화 단계다. 공개 출시 전 남은 차단 조건은 `docs/REVIEW_REQUIRED.md`와 `docs/QUALITY_GATES.md`에서 관리한다.

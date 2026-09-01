@@ -48,9 +48,18 @@ function formatScore(value: number | undefined): string {
   return (value ?? 0).toFixed(1);
 }
 
-function Shell({ children }: { children: ReactNode }) {
+function Shell({
+  children,
+  gameState,
+}: {
+  children: ReactNode;
+  gameState?: string;
+}) {
   return (
-    <main className="min-h-screen bg-gradient-to-br from-violet-50 via-white to-amber-50 p-4 text-slate-900 sm:p-7">
+    <main
+      className="game-shell min-h-screen bg-gradient-to-br from-violet-50 via-white to-amber-50 p-4 text-slate-900 sm:p-7"
+      data-game-state={gameState}
+    >
       {children}
     </main>
   );
@@ -85,7 +94,7 @@ function ImageBoard({
   return (
     <div
       data-testid={alt.endsWith("변경본") ? "modified-board" : "original-board"}
-      className={`relative mx-auto aspect-square overflow-hidden rounded-2xl border-4 border-white bg-slate-100 shadow-lg ${interactive ? "cursor-crosshair" : ""}`}
+      className={`game-board relative mx-auto aspect-square overflow-hidden rounded-2xl border-4 border-white bg-slate-100 shadow-lg ${interactive ? "cursor-crosshair" : ""}`}
       style={{ touchAction: viewport.scale > 1 ? "none" : "manipulation" }}
       onPointerDown={(event) => {
         if (
@@ -252,7 +261,7 @@ export default function MvpApp() {
 
   const header = useMemo(
     () => (
-      <header className="mx-auto mb-6 flex max-w-6xl items-center justify-between rounded-2xl bg-white/90 px-5 py-4 shadow-sm">
+      <header className="game-header mx-auto mb-6 flex max-w-6xl items-center justify-between rounded-2xl bg-white/90 px-5 py-4 shadow-sm">
         <div className="flex items-center gap-3">
           <span className="text-3xl">🔍</span>
           <div>
@@ -420,7 +429,7 @@ export default function MvpApp() {
     );
 
   const statusBar = (
-    <div className="mx-auto mb-5 flex max-w-6xl flex-wrap items-center justify-between gap-3 rounded-2xl bg-white px-5 py-3 shadow-sm">
+    <div className="game-status-bar mx-auto mb-5 flex max-w-6xl flex-wrap items-center justify-between gap-3 rounded-2xl bg-white px-5 py-3 shadow-sm">
       <div>
         <span className="rounded-full bg-violet-100 px-3 py-1 text-xs font-black text-violet-700">
           문제{" "}
@@ -468,7 +477,7 @@ export default function MvpApp() {
   );
 
   return (
-    <Shell>
+    <Shell gameState={game.snapshot.state}>
       {header}
       {statusBar}
       {game.snapshot.state === "PLAYING" && (me?.correctStreak ?? 0) >= 2 && (
@@ -547,8 +556,11 @@ export default function MvpApp() {
       )}
 
       {game.snapshot.state === "PLAYING" && puzzle && (
-        <section data-testid="playing-screen" className="mx-auto max-w-6xl">
-          <div className="mb-4 text-center">
+        <section
+          data-testid="playing-screen"
+          className="playing-screen mx-auto max-w-6xl"
+        >
+          <div className="game-puzzle-intro mb-4 text-center">
             <h2 className="text-2xl font-black">{puzzle.label}</h2>
             <p className="text-sm text-slate-500">
               변경본에서 차이 {me?.currentDifferenceCount ?? 0}개를 찾으세요. 다
@@ -556,7 +568,7 @@ export default function MvpApp() {
             </p>
           </div>
           <div
-            className="mb-4 flex flex-wrap items-center justify-center gap-2"
+            className="game-zoom-controls mb-4 flex flex-wrap items-center justify-center gap-2"
             data-testid="zoom-controls"
           >
             <span className="mr-1 inline-flex items-center gap-1 text-sm font-bold text-slate-600">
@@ -594,9 +606,9 @@ export default function MvpApp() {
               원래 크기
             </button>
           </div>
-          <div className="grid gap-5 lg:grid-cols-2">
-            <div>
-              <p className="mb-2 text-center font-black">원본</p>
+          <div className="game-board-grid grid gap-5 lg:grid-cols-2">
+            <div className="game-board-column">
+              <p className="game-board-label mb-2 text-center font-black">원본</p>
               <ImageBoard
                 src={puzzle.originalSrc}
                 alt={`${puzzle.alt} 원본`}
@@ -604,8 +616,8 @@ export default function MvpApp() {
                 onPanBy={panImages}
               />
             </div>
-            <div>
-              <p className="mb-2 text-center font-black">
+            <div className="game-board-column">
+              <p className="game-board-label mb-2 text-center font-black">
                 변경본 · 여기를 선택
               </p>
               <ImageBoard
