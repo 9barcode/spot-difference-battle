@@ -1,4 +1,5 @@
 ﻿import { describe, expect, it } from "vitest";
+import { isPointInAnswerRegion } from "@spot-battle/game-core";
 import { GAME_PUZZLE_ASSET_MANIFEST, GAME_PUZZLE_IDS } from "@spot-battle/shared";
 import { GAME_PUZZLES } from "../src/game-puzzles.js";
 import { MatchRegistry } from "../src/match-registry.js";
@@ -40,6 +41,21 @@ describe("MatchRegistry", () => {
 
     for (const puzzle of GAME_PUZZLES) {
       expect(GAME_PUZZLE_ASSET_MANIFEST[puzzle.id as keyof typeof GAME_PUZZLE_ASSET_MANIFEST]).toBeDefined();
+    }
+  });
+
+  it("covers the colored dragon from head through body, wing, hindquarter, and tail", () => {
+    const dragon = GAME_PUZZLES.find((puzzle) => puzzle.id === "medieval-dragon");
+    const color = dragon?.differences.find((difference) => difference.id === "dragon-color");
+    expect(color).toBeDefined();
+    for (const point of [
+      { x: 0.49, y: 0.67 },
+      { x: 0.61, y: 0.57 },
+      { x: 0.75, y: 0.54 },
+      { x: 0.79, y: 0.68 },
+      { x: 0.64, y: 0.78 },
+    ]) {
+      expect(color!.regions.some((region) => isPointInAnswerRegion(point, region))).toBe(true);
     }
   });
 

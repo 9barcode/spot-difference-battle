@@ -331,7 +331,7 @@ export default function MvpApp() {
           <div className="text-6xl">⚔️</div>
           <h2 className="mt-4 text-3xl font-black">동시 빨리찾기</h2>
           <p className="mt-2 text-violet-100">
-            같은 설정을 선택한 상대와 공정하게 대결합니다.
+            같은 모드와 난이도를 직접 선택한 상대끼리만 매칭됩니다.
           </p>
           <div className="mt-6 text-left">
             <p className="mb-2 font-black">게임 모드</p>
@@ -360,9 +360,9 @@ export default function MvpApp() {
             <div className="grid gap-2 sm:grid-cols-3">
               {(
                 [
-                  ["EASY", "쉬움", "EASY 문제 · 넓은 판정 · 0.5초 잠금"],
+                  ["EASY", "쉬움", "EASY 문제 · 0.5초 오답 잠금"],
                   ["NORMAL", "보통", "MEDIUM 문제 · 기본 판정 · 1초 잠금"],
-                  ["HARD", "어려움", "HARD 문제 · 정밀 판정 · 2초 잠금"],
+                  ["HARD", "어려움", "HARD 문제 · 2초 오답 잠금"],
                 ] as const
               ).map(([value, label, description]) => (
                 <button

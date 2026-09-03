@@ -457,25 +457,28 @@ export class GameMatch {
         throw new GameRuleError("INVALID_PUZZLE", puzzle.id + " 문제에 비어 있거나 중복된 차이점 ID가 있습니다.");
       }
       ids.add(difference.id);
-      if (difference.regions.length !== 1) {
-        throw new GameRuleError("INVALID_PUZZLE", puzzle.id + " 문제의 각 차이점은 정확히 하나의 영역이어야 합니다.");
+      if (difference.regions.length === 0) {
+        throw new GameRuleError("INVALID_PUZZLE", puzzle.id + " 문제의 각 차이점에는 하나 이상의 판정 영역이 있어야 합니다.");
       }
-      const region = difference.regions[0]!;
-      if (
-        !Number.isFinite(region.x) || !Number.isFinite(region.y) || !Number.isFinite(region.radius) ||
-        region.radius <= 0 || region.radius > 0.5 ||
-        region.x - region.radius < 0 || region.x + region.radius > 1 ||
-        region.y - region.radius < 0 || region.y + region.radius > 1
-      ) {
-        throw new GameRuleError("INVALID_PUZZLE", puzzle.id + " 문제에 유효하지 않은 정답 영역이 있습니다.");
+      for (const region of difference.regions) {
+        if (
+          !Number.isFinite(region.x) || !Number.isFinite(region.y) || !Number.isFinite(region.radius) ||
+          region.radius <= 0 || region.radius > 0.5 ||
+          region.x - region.radius < 0 || region.x + region.radius > 1 ||
+          region.y - region.radius < 0 || region.y + region.radius > 1
+        ) {
+          throw new GameRuleError("INVALID_PUZZLE", puzzle.id + " 문제에 유효하지 않은 정답 영역이 있습니다.");
+        }
       }
     }
     for (let left = 0; left < puzzle.differences.length; left += 1) {
       for (let right = left + 1; right < puzzle.differences.length; right += 1) {
-        const a = puzzle.differences[left]!.regions[0]!;
-        const b = puzzle.differences[right]!.regions[0]!;
-        if (Math.hypot(a.x - b.x, a.y - b.y) < a.radius + b.radius) {
-          throw new GameRuleError("INVALID_PUZZLE", puzzle.id + " 문제의 정답 영역이 서로 겹칩니다.");
+        for (const a of puzzle.differences[left]!.regions) {
+          for (const b of puzzle.differences[right]!.regions) {
+            if (Math.hypot(a.x - b.x, a.y - b.y) < a.radius + b.radius) {
+              throw new GameRuleError("INVALID_PUZZLE", puzzle.id + " 문제의 서로 다른 정답 영역이 겹칩니다.");
+            }
+          }
         }
       }
     }

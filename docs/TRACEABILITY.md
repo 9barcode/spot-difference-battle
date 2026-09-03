@@ -1,7 +1,7 @@
 # 요구사항 추적표
 
 > 문서 상태: CURRENT
-> 기준일: 2026-09-01
+> 기준일: 2026-09-03
 > 책임 역할: QA 책임자
 
 이 표는 핵심 요구사항이 정본, 구현과 자동 검증에 연결되는지 보여준다. `검증`은 테스트 코드가 존재하고 최근 기본 테스트에서 통과한 항목, `조건부`는 외부 환경이 있어야 실행되는 항목, `부분`은 필수 검증이나 운영 요소가 남은 항목이다.
@@ -11,9 +11,9 @@
 | GAME-001 | 같은 설정의 두 플레이어에게 같은 문제 순서·버전을 제공 | `GAME_RULES` 2~3 | `match-registry.ts`, `game-puzzles.ts` | `match-registry.test.ts`, `two-player-match.spec.ts` | 검증 |
 | GAME-002 | 양쪽 이미지 로드 후 서버 기준 카운트다운·마감 | `GAME_RULES` 3, 6 | `GameMatch`, `server.ts` | `match.test.ts`, `two-player-match.spec.ts` | 검증 |
 | GAME-003 | 각 플레이어가 독립적으로 문제를 완료·이동 | `GAME_RULES` 1, 4 | `GameMatch.guess` | 코어·서버·E2E | 검증 |
-| GAME-004 | 서버가 정답·중복·오답·잠금을 판정 | `GAME_RULES` 4 | `GameMatch.guess` | `match.test.ts` | 검증 |
+| GAME-004 | 서버가 복합 객체 영역의 정답·중복·오답·잠금을 판정 | `GAME_RULES` 4 | `GameMatch.guess` | `match.test.ts`, `match-registry.test.ts` | 검증 |
 | GAME-005 | 첫 전체 완주 즉시 승리, 시간 종료 시 총점→오답→무승부 | `GAME_RULES` 5 | `GameMatch.finish`, 내부 `determineWinner` | `match.test.ts`, 서버 E2E | 검증 |
-| GAME-006 | 모드별 시간·생존 한도와 난이도별 판정·잠금 | `GAME_RULES` 1, `GAME_MODES` | 공유 `GAME_MODE_RULES`, `GAME_DIFFICULTY_RULES` | 코어·레지스트리·E2E | 검증 |
+| GAME-006 | 모드별 시간·생존 한도, 난이도별 이미지 풀·오답 잠금, 동일 설정 매칭 | `GAME_RULES` 1, `GAME_MODES` | 공유 규칙, 설정별 서버 큐 | 코어·서버 통합·레지스트리·E2E | 검증 |
 | GAME-007 | 기권·10초 재접속 유예·신뢰 불가 취소 | `GAME_RULES` 7 | `server.ts`, `GameMatch` | 코어·서버 테스트 | 부분: 실제 스테이징 재접속 검수 필요 |
 | PRIV-001 | 경기 중 미발견 정답과 상대 발견 위치 비공개 | `GAME_RULES` 4, 6, 8 | `GameMatch.snapshot` | `match.test.ts`, E2E | 검증 |
 | UX-001 | 데스크톱·가로 게임 WebView 좌우, 세로 모바일 상하 비교와 동기화 확대·이동 | `SCREEN_SPEC`, `APPS_IN_TOSS_RELEASE` | `MvpApp.tsx`, `index.css`, `use-apps-in-toss-safe-area.ts` | UI 단위·640×360·844×390 포함 3브라우저 E2E | 부분: 앱인토스 실기기 Safe Area·접근성 QA 필요 |

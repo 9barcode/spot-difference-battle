@@ -152,7 +152,17 @@ export const GAME_PUZZLES: readonly MatchPuzzle[] = [
     differences: [
       { id: "dragon-window", label: "스테인드글라스의 용", regions: [{ x: 0.17, y: 0.2, radius: 0.11 }] },
       { id: "dragon-chandelier", label: "샹들리에 불빛", regions: [{ x: 0.67, y: 0.08, radius: 0.07 }] },
-      { id: "dragon-color", label: "잠든 용의 색", regions: [{ x: 0.63, y: 0.57, radius: 0.18 }] },
+      {
+        id: "dragon-color",
+        label: "잠든 용의 색",
+        regions: [
+          { x: 0.49, y: 0.67, radius: 0.12 },
+          { x: 0.61, y: 0.57, radius: 0.16 },
+          { x: 0.75, y: 0.54, radius: 0.15 },
+          { x: 0.79, y: 0.68, radius: 0.13 },
+          { x: 0.64, y: 0.78, radius: 0.12 },
+        ],
+      },
       { id: "dragon-sword", label: "바위에 꽂힌 검", regions: [{ x: 0.19, y: 0.75, radius: 0.1 }] },
       { id: "dragon-book", label: "마법책 색", regions: [{ x: 0.34, y: 0.48, radius: 0.08 }] },
     ],

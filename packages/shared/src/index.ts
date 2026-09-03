@@ -38,9 +38,9 @@ export const GAME_MODE_RULES = {
 } as const;
 
 export const GAME_DIFFICULTY_RULES = {
-  EASY: { hitRadiusMultiplier: 1.25, wrongAnswerLockSeconds: 0.5 },
+  EASY: { hitRadiusMultiplier: 1, wrongAnswerLockSeconds: 0.5 },
   NORMAL: { hitRadiusMultiplier: 1, wrongAnswerLockSeconds: 1 },
-  HARD: { hitRadiusMultiplier: 0.8, wrongAnswerLockSeconds: 2 },
+  HARD: { hitRadiusMultiplier: 1, wrongAnswerLockSeconds: 2 },
 } as const;
 
 export type GameState =

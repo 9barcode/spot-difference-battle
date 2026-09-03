@@ -46,6 +46,62 @@ describe("simultaneous game server", () => {
     return socket;
   }
 
+  it("matches only players who selected the same mode and difficulty", async () => {
+    const standardEasy = await connect();
+    const sprintEasy = await connect();
+    const standardEasyPeer = await connect();
+    const sprintEasyPeer = await connect();
+    const firstFound = waitForEvent<MatchFoundPayload>(standardEasy, "match:found");
+    const secondFound = waitForEvent<MatchFoundPayload>(sprintEasy, "match:found");
+    const firstPeerFound = waitForEvent<MatchFoundPayload>(standardEasyPeer, "match:found");
+    const secondPeerFound = waitForEvent<MatchFoundPayload>(sprintEasyPeer, "match:found");
+    const firstReady = waitForState(standardEasy, "READY");
+    const secondReady = waitForState(sprintEasy, "READY");
+
+    standardEasy.emit("queue:join", { nickname: "기본쉬움", settings: { mode: "STANDARD", difficulty: "EASY" } });
+    sprintEasy.emit("queue:join", { nickname: "속도쉬움", settings: { mode: "SPRINT", difficulty: "EASY" } });
+    standardEasyPeer.emit("queue:join", { nickname: "기본쉬움짝", settings: { mode: "STANDARD", difficulty: "EASY" } });
+    sprintEasyPeer.emit("queue:join", { nickname: "속도쉬움짝", settings: { mode: "SPRINT", difficulty: "EASY" } });
+
+    const [first, second, firstPeer, secondPeer, firstSnapshot, secondSnapshot] = await Promise.all([
+      firstFound,
+      secondFound,
+      firstPeerFound,
+      secondPeerFound,
+      firstReady,
+      secondReady,
+    ]);
+    expect(first.matchId).toBe(firstPeer.matchId);
+    expect(second.matchId).toBe(secondPeer.matchId);
+    expect(first.matchId).not.toBe(second.matchId);
+    expect(firstSnapshot.settings).toEqual({ mode: "STANDARD", difficulty: "EASY" });
+    expect(secondSnapshot.settings).toEqual({ mode: "SPRINT", difficulty: "EASY" });
+
+    const normal = await connect();
+    const hard = await connect();
+    const normalPeer = await connect();
+    const hardPeer = await connect();
+    const normalFound = waitForEvent<MatchFoundPayload>(normal, "match:found");
+    const hardFound = waitForEvent<MatchFoundPayload>(hard, "match:found");
+    const normalPeerFound = waitForEvent<MatchFoundPayload>(normalPeer, "match:found");
+    const hardPeerFound = waitForEvent<MatchFoundPayload>(hardPeer, "match:found");
+
+    normal.emit("queue:join", { nickname: "기본보통", settings: { mode: "STANDARD", difficulty: "NORMAL" } });
+    hard.emit("queue:join", { nickname: "기본어려움", settings: { mode: "STANDARD", difficulty: "HARD" } });
+    normalPeer.emit("queue:join", { nickname: "기본보통짝", settings: { mode: "STANDARD", difficulty: "NORMAL" } });
+    hardPeer.emit("queue:join", { nickname: "기본어려움짝", settings: { mode: "STANDARD", difficulty: "HARD" } });
+
+    const [normalMatch, hardMatch, normalPeerMatch, hardPeerMatch] = await Promise.all([
+      normalFound,
+      hardFound,
+      normalPeerFound,
+      hardPeerFound,
+    ]);
+    expect(normalMatch.matchId).toBe(normalPeerMatch.matchId);
+    expect(hardMatch.matchId).toBe(hardPeerMatch.matchId);
+    expect(normalMatch.matchId).not.toBe(hardMatch.matchId);
+  });
+
   it("does not accept a report when finished-match cleanup persistence fails", async () => {
     await app.close();
     const store = new class extends InMemoryMatchStore {
