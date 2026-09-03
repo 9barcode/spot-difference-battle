@@ -59,6 +59,33 @@ describe("MatchRegistry", () => {
     }
   });
 
+  it("keeps long and irregular changed objects covered by compound answer regions", () => {
+    const expectedRegionCounts: Record<string, number> = {
+      "space-suit": 2,
+      "dino-color": 3,
+      "shrine-blossoms": 4,
+      "shrine-torii": 4,
+      "palace-lights": 4,
+      "castle-flag": 2,
+      "castle-knight": 4,
+      "ninja-streamer": 3,
+      "ninja-sword": 3,
+      "goblin-club": 3,
+      "goblin-animal": 3,
+      "goblin-bag": 3,
+      "goblin-statue": 2,
+      "dragon-window": 2,
+      "dragon-chandelier": 3,
+      "dragon-sword": 3,
+      "dragon-book": 3,
+    };
+
+    const differences = GAME_PUZZLES.flatMap((puzzle) => puzzle.differences);
+    for (const [differenceId, expectedCount] of Object.entries(expectedRegionCounts)) {
+      expect(differences.find((difference) => difference.id === differenceId)?.regions).toHaveLength(expectedCount);
+    }
+  });
+
   it("restores and removes player lookup", () => {
     const registry = new MatchRegistry();
     const match = registry.create("m1", [{ playerId: "p1", nickname: "하나" }, { playerId: "p2", nickname: "둘" }]);
