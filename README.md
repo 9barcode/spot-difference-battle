@@ -64,7 +64,7 @@
 
 ## 로컬 실행
 
-필요 항목은 Node.js와 pnpm 11.9.0이며 PostgreSQL을 쓸 때만 Docker Desktop이 필요하다.
+필요 항목은 Apps in Toss SDK 3.1.1과 AIT Devtools 3.1.1이 요구하는 Node.js 24 이상 및 pnpm 11.9.0이며, PostgreSQL을 쓸 때만 Docker Desktop이 필요하다.
 
 ```powershell
 pnpm setup
@@ -82,6 +82,12 @@ pnpm dev
 4. 휴대폰에서 `http://<PC의 IPv4 주소>:5173`으로 접속한다.
 
 개발 웹은 접속한 PC 호스트의 `3001` 포트로 API를 자동 연결한다. Windows 방화벽 알림이 나오면 개인 네트워크만 허용한다. 이 기능은 같은 사설망의 개발 테스트용이며 인터넷에 직접 공개하는 용도가 아니다.
+
+### Apps in Toss SDK 3.1.1 테스트
+
+SDK 3.x의 로컬 기능 검증은 샌드박스 앱이나 Metro가 아니라 `pnpm dev`로 실행한 브라우저의 AIT Devtools를 사용한다. 실제 토스 환경은 `pnpm build:ait`로 `.ait` 번들을 만든 뒤 앱인토스 콘솔에 업로드하고 QR 코드로 테스트한다.
+
+서버의 프로덕션 CORS는 SDK 3.x의 실서비스 및 QR 테스트 Origin인 `https://spot-difference-syk.web.tossmini.com`과 `https://spot-difference-syk.private-web.tossmini.com`을 허용한다.
 
 검사:
 

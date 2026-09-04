@@ -3,6 +3,9 @@
   "private": true,
   "version": "0.1.0",
   "packageManager": "pnpm@11.9.0",
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "build": "pnpm -r --if-present build",
     "build:ait": "pnpm --filter @spot-battle/web build:ait",
