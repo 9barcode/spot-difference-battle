@@ -1,5 +1,4 @@
 packages:
-  - "UI"
   - "apps/*"
   - "packages/*"
 

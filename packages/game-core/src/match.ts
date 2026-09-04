@@ -18,7 +18,7 @@ import {
   type RevealedDifference,
   type SelfPlayerProgress,
 } from "@spot-battle/shared";
-import { isPointInAnswerRegion } from "./index.js";
+import { isPointInAnswerRegion } from "./geometry.js";
 
 export class GameRuleError extends Error {
   constructor(public readonly code: string, message: string) {

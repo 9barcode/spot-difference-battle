@@ -11,5 +11,4 @@ playwright-report
 test-results
 *.log
 docs
-e2e
-spot_difference_game_mockup_editable.svg
+tests
