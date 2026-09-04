@@ -39,6 +39,8 @@ describe("development web origin", () => {
       expect((productionOrigin as RegExp).test(origin)).toBe(true);
     }
     expect((productionOrigin as RegExp).test("https://evil.example.com")).toBe(false);
+    expect((productionOrigin as RegExp).test("https://spot-difference-syk.apps.tossmini.com")).toBe(false);
+    expect((productionOrigin as RegExp).test("https://spot-difference-syk.private-apps.tossmini.com")).toBe(false);
   });
 
   it("keeps a configured production origin in addition to Toss origins", () => {

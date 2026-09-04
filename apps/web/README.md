@@ -17,6 +17,8 @@ pnpm --filter @spot-battle/web dev
 
 웹과 서버를 함께 실행하려면 `pnpm dev`를 사용한다. 기본 웹 주소는 `http://localhost:5173`이며 서버 주소는 `VITE_SERVER_URL`로 바꿀 수 있다. 개발 모드에서는 LAN에 바인딩하며, 다른 기기가 PC의 사설 IP로 접속하면 API도 같은 PC의 `3001` 포트를 자동 사용한다.
 
+Apps in Toss SDK 3.1.1에서는 로컬 브라우저의 AIT Devtools로 SDK 동작을 검증한다. Android 샌드박스 앱과 Metro는 SDK 3.x WebView 테스트 경로가 아니다. 실제 토스 환경 검증은 저장소 루트에서 `pnpm build:ait`를 실행하고 생성된 `.ait` 번들을 콘솔에 업로드한 뒤 QR 코드로 진행한다.
+
 ## 검사
 
 ```powershell
