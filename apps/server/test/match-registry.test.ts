@@ -1,15 +1,39 @@
 ﻿import { describe, expect, it } from "vitest";
+import { isPointInAnswerRegion } from "@spot-battle/game-core";
 import { GAME_PUZZLE_ASSET_MANIFEST, GAME_PUZZLE_IDS } from "@spot-battle/shared";
 import { GAME_PUZZLES } from "../src/game-puzzles.js";
 import { MatchRegistry } from "../src/match-registry.js";
 
 describe("MatchRegistry", () => {
+  const expectedIds = (difficulty: "EASY" | "NORMAL" | "HARD") => {
+    const target = { EASY: "EASY", NORMAL: "MEDIUM", HARD: "HARD" }[difficulty];
+    return GAME_PUZZLE_IDS.filter((puzzleId) => {
+      const assetDifficulty = GAME_PUZZLE_ASSET_MANIFEST[puzzleId].difficulty;
+      return assetDifficulty === "UNRATED" || assetDifficulty === target;
+    });
+  };
+
   it("creates a match with the same non-empty puzzle sequence for both players", () => {
     const registry = new MatchRegistry();
     const match = registry.create("m1", [{ playerId: "p1", nickname: "하나" }, { playerId: "p2", nickname: "둘" }]);
-    expect(match.puzzles).toHaveLength(GAME_PUZZLE_IDS.length);
-    expect(new Set(match.puzzles.map((puzzle) => puzzle.id))).toEqual(new Set(GAME_PUZZLE_IDS));
+    expect(match.puzzles).toHaveLength(expectedIds("NORMAL").length);
+    expect(new Set(match.puzzles.map((puzzle) => puzzle.id))).toEqual(new Set(expectedIds("NORMAL")));
     expect(match.snapshot("p1").currentPuzzleId).toBe(match.snapshot("p2").currentPuzzleId);
+  });
+
+  it("selects rated puzzles by match difficulty and shares only unrated puzzles", () => {
+    for (const difficulty of ["EASY", "NORMAL", "HARD"] as const) {
+      const registry = new MatchRegistry();
+      const match = registry.create(
+        `m-${difficulty}`,
+        [
+          { playerId: `p1-${difficulty}`, nickname: "하나" },
+          { playerId: `p2-${difficulty}`, nickname: "둘" },
+        ],
+        { mode: "STANDARD", difficulty },
+      );
+      expect(new Set(match.puzzles.map((puzzle) => puzzle.id))).toEqual(new Set(expectedIds(difficulty)));
+    }
   });
 
   it("keeps the server catalog aligned with the versioned asset manifest", () => {
@@ -17,6 +41,48 @@ describe("MatchRegistry", () => {
 
     for (const puzzle of GAME_PUZZLES) {
       expect(GAME_PUZZLE_ASSET_MANIFEST[puzzle.id as keyof typeof GAME_PUZZLE_ASSET_MANIFEST]).toBeDefined();
+    }
+  });
+
+  it("covers the colored dragon from head through body, wing, hindquarter, and tail", () => {
+    const dragon = GAME_PUZZLES.find((puzzle) => puzzle.id === "medieval-dragon");
+    const color = dragon?.differences.find((difference) => difference.id === "dragon-color");
+    expect(color).toBeDefined();
+    for (const point of [
+      { x: 0.49, y: 0.67 },
+      { x: 0.61, y: 0.57 },
+      { x: 0.75, y: 0.54 },
+      { x: 0.79, y: 0.68 },
+      { x: 0.64, y: 0.78 },
+    ]) {
+      expect(color!.regions.some((region) => isPointInAnswerRegion(point, region))).toBe(true);
+    }
+  });
+
+  it("keeps long and irregular changed objects covered by compound answer regions", () => {
+    const expectedRegionCounts: Record<string, number> = {
+      "space-suit": 2,
+      "dino-color": 3,
+      "shrine-blossoms": 4,
+      "shrine-torii": 4,
+      "palace-lights": 4,
+      "castle-flag": 2,
+      "castle-knight": 4,
+      "ninja-streamer": 3,
+      "ninja-sword": 3,
+      "goblin-club": 3,
+      "goblin-animal": 3,
+      "goblin-bag": 3,
+      "goblin-statue": 2,
+      "dragon-window": 2,
+      "dragon-chandelier": 3,
+      "dragon-sword": 3,
+      "dragon-book": 3,
+    };
+
+    const differences = GAME_PUZZLES.flatMap((puzzle) => puzzle.differences);
+    for (const [differenceId, expectedCount] of Object.entries(expectedRegionCounts)) {
+      expect(differences.find((difference) => difference.id === differenceId)?.regions).toHaveLength(expectedCount);
     }
   });
 

@@ -43,7 +43,7 @@ describeDatabase("PostgreSQL restart recovery", () => {
       expect(persisted).toBeDefined();
       const restored = GameMatch.restore(persisted!);
       expect(restored.serialize()).toMatchObject({
-        schemaVersion: 2,
+        schemaVersion: 4,
         matchId,
         state: "PLAYING",
         deadlineMs: before.deadlineMs,

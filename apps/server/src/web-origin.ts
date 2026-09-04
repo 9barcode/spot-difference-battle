@@ -13,15 +13,29 @@ function escapeRegExp(value: string): string {
 export function resolveWebOrigin(
   configuredOrigin: string | undefined,
   nodeEnvironment: string | undefined,
-): string | RegExp | undefined {
+): string | string[] | RegExp | undefined {
   const configured = configuredOrigin?.trim();
+  let configuredOrigins: string[] = [];
+  if (configured) {
+    configuredOrigins = configured
+      .split(",")
+      .map((origin) => origin.trim())
+      .filter(Boolean);
+    if (configuredOrigins.length === 0) {
+      throw new Error("WEB_ORIGIN must contain at least one exact URL origin.");
+    }
+    if (configuredOrigins.some((origin) => new URL(origin).origin !== origin)) {
+      throw new Error("WEB_ORIGIN entries must be exact URL origins.");
+    }
+  }
 
   if (nodeEnvironment === "production") {
-    const origins = configured
-      ? [configured, ...APPS_IN_TOSS_WEB_ORIGINS]
-      : [...APPS_IN_TOSS_WEB_ORIGINS];
+    const origins = [...new Set([...configuredOrigins, ...APPS_IN_TOSS_WEB_ORIGINS])];
     return new RegExp(`^(?:${origins.map(escapeRegExp).join("|")})$`);
   }
 
-  return configured || LOCAL_DEVELOPMENT_WEB_ORIGIN;
+  if (configuredOrigins.length > 0) {
+    return configuredOrigins.length === 1 ? configuredOrigins[0] : configuredOrigins;
+  }
+  return LOCAL_DEVELOPMENT_WEB_ORIGIN;
 }

@@ -6,16 +6,12 @@
     "jsx": "react-jsx",
     "allowImportingTsExtensions": true,
     "noEmit": true,
+    "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"],
-      "@spot-battle/shared": ["../packages/shared/src/index.ts"]
+      "@/*": ["src/*"]
     },
     "types": ["vite/client"]
   },
-  "include": [
-    "src",
-    "../packages/shared/src",
-    "vite.config.ts",
-    "granite.config.ts"
-  ]
+  "include": ["src", "vite.config.ts", "apps-in-toss.config.ts"]
 }
+

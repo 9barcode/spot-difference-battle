@@ -7,8 +7,6 @@ onlyBuiltDependencies:
   - "@tailwindcss/oxide"
   - "esbuild"
 allowBuilds:
-  '@sentry/cli': true
-  '@swc/core': true
-  '@tailwindcss/oxide': true
+  "@tailwindcss/oxide": true
   esbuild: true
-  protobufjs: true
+  protobufjs: false

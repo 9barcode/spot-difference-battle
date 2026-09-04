@@ -5,6 +5,13 @@ playwright-report/
 test-results/
 .env
 .env.local
+.env.*.local
+.env.production
+.env.apps-in-toss
 *.log
 .DS_Store
+*.ait
+*.tmp
+.payload/
+UI/.granite/
 

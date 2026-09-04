@@ -83,30 +83,18 @@ describe("GameMatch simultaneous race", () => {
     expect(match.snapshot("p2")).toMatchObject({ currentPuzzleVersion: "forest-v1", nextPuzzleVersion: "underwater-v1" });
   });
 
-  it("waits only while one player has cleared every prepared puzzle", () => {
+  it("finishes immediately when the first player clears every prepared puzzle", () => {
     const match = createMatch();
     let now = startPlaying(match);
     for (const point of [{ x: 0.2, y: 0.2 }, { x: 0.5, y: 0.5 }, { x: 0.8, y: 0.8 }]) match.guess("p1", "enchanted-forest", point, ++now);
     for (const point of [{ x: 0.2, y: 0.8 }, { x: 0.5, y: 0.2 }, { x: 0.8, y: 0.5 }]) match.guess("p1", "underwater-treasure", point, ++now);
-    expect(match.snapshot("p1")).toMatchObject({ state: "PLAYING", currentPuzzleId: null });
-  });
-
-  it("finishes immediately when both players clear every puzzle and awards remaining-time score", () => {
-    const match = createMatch();
-    let now = startPlaying(match);
-    const firstPoints = [
-      ["enchanted-forest", { x: 0.2, y: 0.2 }], ["enchanted-forest", { x: 0.5, y: 0.5 }], ["enchanted-forest", { x: 0.8, y: 0.8 }],
-      ["underwater-treasure", { x: 0.2, y: 0.8 }], ["underwater-treasure", { x: 0.5, y: 0.2 }], ["underwater-treasure", { x: 0.8, y: 0.5 }],
-    ] as const;
-    for (const [puzzleId, point] of firstPoints) match.guess("p1", puzzleId, point, ++now);
-    for (const [puzzleId, point] of firstPoints) match.guess("p2", puzzleId, point, now += 1_000);
     const snapshot = match.snapshot("p1");
     expect(snapshot).toMatchObject({ state: "FINISHED", endReason: "COMPLETED", winnerId: "p1", totalDifferenceCount: 6 });
     const [first, second] = snapshot.players;
     expect(first).toMatchObject({ completedAllPuzzles: true, totalFoundCount: 6, totalDifferenceCount: 6 });
-    expect(second).toMatchObject({ completedAllPuzzles: true, totalFoundCount: 6, totalDifferenceCount: 6 });
-    expect(first!.score).toBeGreaterThan(second!.score);
+    expect(second).toMatchObject({ completedAllPuzzles: false, totalFoundCount: 0, totalDifferenceCount: 6, score: 0 });
     expect(first!.score).toBe(60 + first!.timeBonus);
+    expect(first!.timeBonus).toBeGreaterThan(0);
   });
 
   it("supports a different number of differences in each puzzle", () => {
@@ -191,12 +179,37 @@ describe("GameMatch simultaneous race", () => {
     invalidPuzzles[0]!.differences[1] = {
       id: "b",
       label: "B",
-      regions: [{ x: 0.2, y: 0.2, radius: 0.05 }, { x: 0.5, y: 0.5, radius: 0.05 }],
+      regions: [],
     };
     expect(() => new GameMatch("bad-regions", invalidPuzzles, [
       { playerId: "p1", nickname: "첫째" },
       { playerId: "p2", nickname: "둘째" },
     ])).toThrowError(GameRuleError);
+  });
+
+  it("accepts multiple calibrated regions for one irregular object", () => {
+    const compoundPuzzles: MatchPuzzle[] = [{
+      ...puzzles[0]!,
+      differences: [
+        {
+          ...puzzles[0]!.differences[0]!,
+          regions: [
+            { x: 0.2, y: 0.2, radius: 0.05 },
+            { x: 0.35, y: 0.2, radius: 0.05 },
+          ],
+        },
+        ...puzzles[0]!.differences.slice(1),
+      ],
+    }];
+    const match = new GameMatch("compound", compoundPuzzles, [
+      { playerId: "p1", nickname: "첫째" },
+      { playerId: "p2", nickname: "둘째" },
+    ]);
+    const now = startPlaying(match);
+    expect(match.guess("p1", compoundPuzzles[0]!.id, { x: 0.35, y: 0.2 }, now + 10)).toMatchObject({
+      correct: true,
+      differenceId: "a",
+    });
   });
   it("awards a forfeit win to the connected opponent", () => {
     const match = createMatch();
@@ -230,18 +243,30 @@ describe("GameMatch simultaneous race", () => {
     expect(match.snapshot("p1")).toMatchObject({ state: "FINISHED", winnerId: "p2", endReason: "MISTAKE_LIMIT" });
   });
 
-  it("adjusts hit tolerance and wrong-answer lock by difficulty", () => {
+  it("keeps calibrated hit regions stable and adjusts only the wrong-answer lock by difficulty", () => {
     const players = [
       { playerId: "p1", nickname: "첫째" },
       { playerId: "p2", nickname: "둘째" },
     ] as [{ playerId: string; nickname: string }, { playerId: string; nickname: string }];
     const easy = new GameMatch("easy", puzzles, players, 1_000, { mode: "STANDARD", difficulty: "EASY" });
     const easyNow = startPlaying(easy);
-    expect(easy.guess("p1", "enchanted-forest", { x: 0.255, y: 0.2 }, easyNow + 10).correct).toBe(true);
+    expect(easy.guess("p1", "enchanted-forest", { x: 0.249, y: 0.2 }, easyNow + 10).correct).toBe(true);
 
     const hard = new GameMatch("hard", puzzles, players, 1_000, { mode: "STANDARD", difficulty: "HARD" });
     const hardNow = startPlaying(hard);
-    const wrong = hard.guess("p1", "enchanted-forest", { x: 0.255, y: 0.2 }, hardNow + 10);
-    expect(wrong).toMatchObject({ correct: false, inputLockedUntilMs: hardNow + 2_010 });
+    expect(hard.guess("p1", "enchanted-forest", { x: 0.249, y: 0.2 }, hardNow + 10).correct).toBe(true);
+
+    const easyWrong = new GameMatch("easy-wrong", puzzles, players, 1_000, { mode: "STANDARD", difficulty: "EASY" });
+    const easyWrongNow = startPlaying(easyWrong);
+    expect(easyWrong.guess("p1", "enchanted-forest", { x: 0.255, y: 0.2 }, easyWrongNow + 10)).toMatchObject({
+      correct: false,
+      inputLockedUntilMs: easyWrongNow + 510,
+    });
+    const hardWrong = new GameMatch("hard-wrong", puzzles, players, 1_000, { mode: "STANDARD", difficulty: "HARD" });
+    const hardWrongNow = startPlaying(hardWrong);
+    expect(hardWrong.guess("p1", "enchanted-forest", { x: 0.255, y: 0.2 }, hardWrongNow + 10)).toMatchObject({
+      correct: false,
+      inputLockedUntilMs: hardWrongNow + 2_010,
+    });
   });
 });

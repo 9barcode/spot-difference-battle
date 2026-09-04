@@ -5,12 +5,15 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
-    "build:ait": "vite build && ait build",
+    "build:ait": "vite build --mode apps-in-toss && ait build",
     "check": "tsc --noEmit",
     "dev": "vite",
+    "dev:ait": "vite --host --mode apps-in-toss",
     "test": "vitest run"
   },
   "dependencies": {
+    "@apps-in-toss/web-framework": "3.1.1",
+    "@spot-battle/shared": "workspace:*",
     "lucide-react": "0.487.0",
     "react": "18.3.1",
     "react-dom": "18.3.1",
@@ -19,14 +22,18 @@
   },
   "devDependencies": {
     "@apps-in-toss/devtools": "3.1.1",
-    "@apps-in-toss/web-framework": "3.1.1",
+    "@tailwindcss/vite": "4.1.12",
     "@types/node": "^22.15.30",
     "@types/react": "^18.3.23",
     "@types/react-dom": "^18.3.7",
-    "@tailwindcss/vite": "4.1.12",
     "@vitejs/plugin-react": "4.7.0",
     "tailwindcss": "4.1.12",
     "typescript": "^5.9.3",
     "vite": "6.3.5"
+  },
+  "pnpm": {
+    "overrides": {
+      "vite": "6.3.5"
+    }
   }
 }

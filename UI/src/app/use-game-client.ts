@@ -42,15 +42,16 @@ function writeStorage(key: string, value: string): void {
   try {
     window.localStorage.setItem(key, value);
   } catch {
-    // The game can still run for the current session when WebView storage is unavailable.
+    // 저장소가 차단된 WebView에서도 현재 연결 동안은 게임을 계속할 수 있다.
   }
 }
 
 export function useGameClient() {
   const socketRef = useRef<GameSocket | null>(null);
   const snapshotRef = useRef<GameSnapshot | null>(null);
-  const storedNickname = readStorage(NICKNAME_KEY);
+  const [storedNickname] = useState(() => readStorage(NICKNAME_KEY));
   const [connected, setConnected] = useState(false);
+  const [hasConnectedOnce, setHasConnectedOnce] = useState(false);
   const [phase, setPhase] = useState<LobbyPhase>(() => storedNickname ? "LOBBY" : "NICKNAME");
   const [nickname, setNickname] = useState(() => storedNickname ?? "");
   const [match, setMatch] = useState<MatchFoundPayload | null>(null);
@@ -70,8 +71,21 @@ export function useGameClient() {
       writeStorage(GUEST_TOKEN_KEY, guestToken);
       socket.auth = { guestToken };
     });
-    socket.on("connect", () => setConnected(true));
+    socket.on("connect", () => {
+      setConnected(true);
+      setHasConnectedOnce(true);
+      setError((current) =>
+        current?.code === "SERVER_UNAVAILABLE" ? null : current,
+      );
+    });
     socket.on("disconnect", () => setConnected(false));
+    socket.on("connect_error", () => {
+      setConnected(false);
+      setError({
+        code: "SERVER_UNAVAILABLE",
+        message: "게임 서버에 연결할 수 없습니다. 네트워크를 확인해주세요.",
+      });
+    });
     socket.on("match:found", (payload) => {
       snapshotRef.current = null;
       setMatch(payload);
@@ -111,6 +125,7 @@ export function useGameClient() {
 
   return {
     connected,
+    hasConnectedOnce,
     phase,
     nickname,
     match,
@@ -120,6 +135,7 @@ export function useGameClient() {
     error,
     reportId,
     clearError: () => setError(null),
+    retryConnection: () => socketRef.current?.connect(),
     saveNickname: (value: string) => {
       const normalized = value.trim().slice(0, 16);
       if (normalized.length < 2) {
