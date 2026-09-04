@@ -1,5 +1,5 @@
 import { expect, test, type Browser, type BrowserContext, type Page } from "@playwright/test";
-import { GAME_PUZZLES } from "../apps/server/src/game/puzzle-catalog.js";
+import { GAME_PUZZLES } from "../../apps/server/src/game/puzzle-catalog.js";
 import { GAME_PUZZLE_IDS, type GamePuzzleId } from "@spot-battle/shared";
 
 async function createPlayer(browser: Browser, nickname: string, viewport: { width: number; height: number }): Promise<{ context: BrowserContext; page: Page }> {

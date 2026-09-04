@@ -19,12 +19,13 @@
     - `src/observability/`: 운영 로그
     - `src/persistence/`: 메모리·PostgreSQL 저장소
     - `src/sessions/`: 게스트 세션
-    - `test/unit/`: 단위 테스트
-    - `test/integration/`: 서버 통합 테스트
+    - `test/unit/`: 서버 모듈 단위 테스트
+    - `test/integration/`: 서버 프로세스·저장소 통합 테스트
 - `packages/`
   - `shared/`: 게임 설정·공유 타입·Socket.IO 계약·에셋 매니페스트
   - `game-core/`: 좌표 판정·점수·경기 상태 머신
-- `tests/`: Playwright E2E 테스트
+    - `test/`: 순수 게임 규칙 단위 테스트
+- `tests/e2e/`: 웹과 서버를 함께 실행하는 Playwright 시스템 테스트
 - `docs/`
   - 현재 게임·기술·화면·배포 명세
   - `design/`: 설계 참고 자료
@@ -54,9 +55,11 @@ flowchart TD
 | 서버 저장 구현 | `apps/server/src/persistence/` | 게임 규칙과 인프라를 분리한다 |
 | 공유 네트워크 계약 | `packages/shared/src/protocol/` | 웹·서버 타입 불일치를 막는다 |
 | 순수 판정 로직 | `packages/game-core/src/` | 프레임워크 없이 단위 테스트한다 |
+| 패키지 단위·통합 테스트 | 각 패키지의 `test/` 또는 구현 옆 `*.test.ts` | 패키지가 독립적으로 검사되고 변경 소유권이 드러난다 |
+| 앱 전체 브라우저 테스트 | `tests/e2e/` | 웹·서버 어느 한쪽에도 소유되지 않는 시스템 검증이다 |
 | 과거 변경 기록 | `docs/history/` | 현재 명세와 검색 결과가 섞이지 않게 한다 |
 | 생성된 `*.ait` | GitHub Actions artifact | 재생성 가능한 바이너리를 소스에 넣지 않는다 |
 
 ## 구조 검사
 
-`pnpm check`는 타입 검사 전에 `scripts/check-repository-structure.mjs`를 실행한다. 예전 `UI/`, `e2e/`, 임시 payload, 서버 `src` 내부 테스트, 생성된 `*.ait`가 다시 들어오면 실패한다.
+`pnpm check`는 타입 검사 전에 `scripts/check-repository-structure.mjs`를 실행한다. 예전 `UI/`, 최상위 `e2e/`, 임시 payload, 서버 `src` 내부 테스트, 생성된 `*.ait`가 다시 들어오면 실패한다. 테스트 배치의 상세 결정은 [테스트 구조](TEST_STRUCTURE.md)를 따른다.

@@ -36,6 +36,7 @@
 | `TEST_PLAN.md`, `IMPLEMENTATION_BACKLOG.md` | 검증 범위와 작업 상태 |
 | `GAME_ASSETS.md` | 문제 이미지 쌍 품질과 등록 기준 |
 | `REPOSITORY_STRUCTURE.md` | 디렉터리 책임과 허용 의존 방향 |
+| `TEST_STRUCTURE.md` | 테스트 계층별 위치·실행 경계·배치 결정 |
 | `README.md` | 입문용 요약과 실행 방법 |
 
 ## 규칙 변경 절차

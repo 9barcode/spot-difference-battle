@@ -33,7 +33,7 @@
 - `apps/server/`: Fastify·Socket.IO 서버와 PostgreSQL 저장소
 - `packages/shared/`: 웹·서버 공유 규칙, 타입, Socket.IO 계약
 - `packages/game-core/`: 프레임워크와 분리된 서버 권한 판정
-- `tests/`: Playwright 브라우저 E2E 테스트
+- `tests/e2e/`: 웹·서버 전체를 검증하는 Playwright 브라우저 E2E 테스트
 - `docs/`: 현재 명세, 설계 자료, 과거 변경 기록
 
 활성 웹 진입점은 `apps/web/src/main.tsx`이며 `App`을 렌더한다. 전체 디렉터리 책임과 의존 방향은 [저장소 구조](docs/REPOSITORY_STRUCTURE.md)를 따른다.
@@ -50,6 +50,7 @@
 - [화면 명세](docs/SCREEN_SPEC.md)
 - [기술 설계](docs/TECH_SPEC.md)
 - [테스트 계획](docs/TEST_PLAN.md)
+- [테스트 구조](docs/TEST_STRUCTURE.md)
 - [구현 백로그](docs/IMPLEMENTATION_BACKLOG.md)
 - [UI 현황 점검](docs/UI_AUDIT.md)
 - [문제 에셋 가이드](docs/GAME_ASSETS.md)

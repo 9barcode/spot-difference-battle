@@ -5,7 +5,7 @@ const serverPort = 3101;
 const gameSceneId = process.env.GAME_SCENE_ID ?? "";
 
 export default defineConfig({
-  testDir: "./tests",
+  testDir: "./tests/e2e",
   fullyParallel: false,
   workers: 1,
   timeout: 40_000,

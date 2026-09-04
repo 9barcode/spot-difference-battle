@@ -11,7 +11,7 @@ const requiredPaths = [
   "apps/server",
   "packages/game-core",
   "packages/shared",
-  "tests",
+  "tests/e2e",
   "docs/history",
 ];
 
