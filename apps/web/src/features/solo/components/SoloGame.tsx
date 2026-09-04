@@ -1,7 +1,10 @@
 import type { FoundMark, NormalizedPoint } from "@spot-battle/shared";
 import { ArrowLeft, Clock3, Minus, Move, Plus, RotateCcw, Trophy } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { ImageBoard } from "../../game/components/ImageBoard";
+import {
+  ImageBoard,
+  type ImageSelectionContext,
+} from "../../game/components/ImageBoard";
 import { clampViewport, type ImageViewport } from "../../game/model/image-geometry";
 import {
   SOLO_DIFFERENCE_COUNT,
@@ -9,6 +12,7 @@ import {
   bestSoloTime,
   findSoloDifference,
   formatSoloTime,
+  minimumSoloHitRadius,
   soloElapsedMs,
 } from "../model/solo-engine";
 import {
@@ -103,9 +107,14 @@ export function SoloGame({ onExit }: { onExit: () => void }) {
     }
   };
 
-  const selectPoint = (point: NormalizedPoint) => {
+  const selectPoint = (point: NormalizedPoint, context: ImageSelectionContext) => {
     if (phase !== "PLAYING" || startedAtMs === null) return;
-    const found = findSoloDifference(puzzle.differences, foundSet, point);
+    const found = findSoloDifference(
+      puzzle.differences,
+      foundSet,
+      point,
+      minimumSoloHitRadius(context.pointerType, context.boardSizePx),
+    );
     if (!found) {
       setWrongAnswers((value) => value + 1);
       setFeedback(`오답 · +${SOLO_WRONG_PENALTY_MS / 1_000}초`);

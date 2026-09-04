@@ -19,11 +19,11 @@ test("a solo player can finish five hard differences and keep a personal record"
   await expect(page.getByTestId("solo-playing")).toBeVisible({ timeout: 6_000 });
 
   for (const point of [
-    { x: 0.27, y: 0.18 },
-    { x: 0.58, y: 0.27 },
-    { x: 0.92, y: 0.75 },
-    { x: 0.17, y: 0.47 },
-    { x: 0.38, y: 0.88 },
+    { x: 0.31, y: 0.21 },
+    { x: 0.56, y: 0.27 },
+    { x: 0.924, y: 0.75 },
+    { x: 0.17, y: 0.478 },
+    { x: 0.32, y: 0.93 },
   ]) {
     await clickNormalized(page, point.x, point.y);
   }

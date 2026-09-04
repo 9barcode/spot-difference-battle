@@ -2,14 +2,20 @@ import type { FoundMark, NormalizedPoint } from "@spot-battle/shared";
 import { useRef } from "react";
 import {
   normalizedPointFromClient,
+  pointerMoveThresholdPx,
   type ImageViewport,
 } from "../model/image-geometry";
+
+export interface ImageSelectionContext {
+  pointerType: string;
+  boardSizePx: number;
+}
 
 interface ImageBoardProps {
   src: string;
   alt: string;
   marks?: FoundMark[];
-  onSelect?: (point: NormalizedPoint) => void;
+  onSelect?: (point: NormalizedPoint, context: ImageSelectionContext) => void;
   viewport: ImageViewport;
   onPanBy: (delta: NormalizedPoint) => void;
 }
@@ -57,8 +63,8 @@ export function ImageBoard({
           event.clientX - gesture.startX,
           event.clientY - gesture.startY,
         );
-        if (totalDistance > 6) gesture.moved = true;
-        if (viewport.scale > 1) {
+        if (totalDistance > pointerMoveThresholdPx(event.pointerType)) gesture.moved = true;
+        if (viewport.scale > 1 && gesture.moved) {
           const rect = event.currentTarget.getBoundingClientRect();
           onPanBy({
             x: (event.clientX - gesture.lastX) / rect.width,
@@ -76,12 +82,17 @@ export function ImageBoard({
           event.currentTarget.releasePointerCapture(event.pointerId);
         }
         if (!gesture.moved && onSelect && imageRef.current) {
+          const imageRect = imageRef.current.getBoundingClientRect();
           onSelect(
             normalizedPointFromClient(
               event.clientX,
               event.clientY,
-              imageRef.current.getBoundingClientRect(),
+              imageRect,
             ),
+            {
+              pointerType: event.pointerType,
+              boardSizePx: Math.min(imageRect.width, imageRect.height),
+            },
           );
         }
       }}

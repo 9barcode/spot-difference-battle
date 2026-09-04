@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { clampViewport, normalizedPointFromClient } from "./image-geometry.js";
+import {
+  clampViewport,
+  normalizedPointFromClient,
+  pointerMoveThresholdPx,
+} from "./image-geometry.js";
 
 describe("image board geometry", () => {
   it("maps a click through the transformed image rectangle", () => {
@@ -19,5 +23,11 @@ describe("image board geometry", () => {
       .toEqual({ scale: 2, pan: { x: 0.5, y: -0.5 } });
     expect(clampViewport({ scale: 1, pan: { x: 0.2, y: 0.2 } }))
       .toEqual({ scale: 1, pan: { x: 0, y: 0 } });
+  });
+
+  it("allows more natural movement for touch and pen taps", () => {
+    expect(pointerMoveThresholdPx("mouse")).toBe(6);
+    expect(pointerMoveThresholdPx("pen")).toBe(10);
+    expect(pointerMoveThresholdPx("touch")).toBe(14);
   });
 });
