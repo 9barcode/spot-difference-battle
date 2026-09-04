@@ -11,7 +11,9 @@
     - `src/app/`: 앱 조합과 최상위 화면
     - `src/config/`: 런타임 환경 해석
     - `src/features/game/`: 게임 UI, 훅, 화면 모델, 퍼즐 카탈로그
-    - `src/assets/puzzles/`: 실제 배포되는 WebP 문제 이미지
+    - `src/assets/puzzles/`: 경쟁전에서 배포되는 WebP 문제 이미지
+    - `src/assets/puzzles/solo/`: 솔로 타임어택 전용 5차이 이미지
+    - `src/features/solo/`: 솔로 엔진, 화면, 퍼즐 카탈로그와 기록 처리
     - `src/styles/`: 전역 스타일과 테마
   - `server/`: Fastify·Socket.IO 서버
     - `src/config/`: 서버 환경 설정
