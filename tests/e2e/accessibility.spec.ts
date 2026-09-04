@@ -12,7 +12,8 @@ test("keyboard users can set a nickname and start matchmaking with visible focus
 
   const matchmaking = page.getByTestId("matchmaking-start");
   await expect(matchmaking).toBeEnabled();
-  for (let control = 0; control < 7; control += 1) {
+  for (let control = 0; control < 12; control += 1) {
+    if (await matchmaking.evaluate((element) => element === document.activeElement)) break;
     await page.keyboard.press("Tab");
   }
   await expect(matchmaking).toBeFocused();

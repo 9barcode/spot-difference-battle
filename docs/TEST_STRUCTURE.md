@@ -26,11 +26,11 @@ tests/
 
 | 계층 | 위치 | 실행기 | 검증 범위 |
 |---|---|---|---|
-| 웹 단위 테스트 | `apps/web/src/**/*.test.ts` | Vitest | 설정, 화면 모델, 좌표 변환, 퍼즐 카탈로그 |
+| 웹 단위 테스트 | `apps/web/src/**/*.test.ts` | Vitest | 설정, 화면 모델, 좌표 변환, 경쟁전·솔로 퍼즐 카탈로그와 타임어택 엔진 |
 | 서버 단위 테스트 | `apps/server/test/unit/` | Vitest | 세션, 경기 레지스트리, 저장소, 로그, Origin 처리 |
 | 서버 통합 테스트 | `apps/server/test/integration/` | Vitest | Fastify·Socket.IO·PostgreSQL·정적 웹 연동 |
 | 게임 코어 단위 테스트 | `packages/game-core/test/` | Vitest | 좌표 판정, 점수, 경기 상태 머신 |
-| 시스템 E2E | `tests/e2e/` | Playwright | 실제 웹과 서버를 함께 띄운 사용자 흐름·접근성 |
+| 시스템 E2E | `tests/e2e/` | Playwright | 실제 웹과 서버를 함께 띄운 사용자 흐름·접근성 및 클라이언트 솔로 모드 |
 
 ## 서버 테스트를 `src` 밖에 둔 이유
 

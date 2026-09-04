@@ -8,6 +8,8 @@ const ignoredDirectories = new Set([".git", "node_modules", "dist"]);
 
 const requiredPaths = [
   "apps/web",
+  "apps/web/src/assets/puzzles/solo",
+  "apps/web/src/features/solo",
   "apps/server",
   "packages/game-core",
   "packages/shared",

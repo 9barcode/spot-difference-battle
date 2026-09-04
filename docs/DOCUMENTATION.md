@@ -28,6 +28,7 @@
 | 문서 | 책임 |
 |---|---|
 | `GAME_RULES.md` | 게임 규칙의 유일한 정본 |
+| `design/SOLO_ASSET_PROVENANCE.md` | 솔로 퍼즐 생성 도구·프롬프트 방향·의도한 차이 기록 |
 | `MVP_DECISIONS.md` | 결정 이유와 변경 이력 |
 | `GAME_STATE.md` | 서버 상태와 입력 권한 |
 | `GAME_DESIGN.md` | 핵심 경험과 제품 목표 |

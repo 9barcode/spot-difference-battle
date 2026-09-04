@@ -24,7 +24,7 @@ export default defineConfig({
   ],
   webServer: [
     {
-      command: "pnpm --filter @spot-battle/server exec tsx src/index.ts",
+      command: "pnpm --filter @spot-battle/server build && pnpm --filter @spot-battle/server start",
       url: `http://127.0.0.1:${serverPort}/health`,
       reuseExistingServer: false,
       env: {
