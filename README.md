@@ -29,14 +29,14 @@
 
 ## 프로젝트 구성
 
-- `UI/`: React 웹 앱
+- `apps/web/`: React 웹 앱과 배포용 퍼즐 이미지
 - `apps/server/`: Fastify·Socket.IO 서버와 PostgreSQL 저장소
-- `packages/shared/`: 공유 타입·상태·게임 수치
-- `packages/game-core/`: 서버 권한 판정
-- `docs/`: 규칙·상태·기술·화면·테스트와 역사 기록
-- `e2e/`: Playwright 브라우저 테스트
+- `packages/shared/`: 웹·서버 공유 규칙, 타입, Socket.IO 계약
+- `packages/game-core/`: 프레임워크와 분리된 서버 권한 판정
+- `tests/e2e/`: 웹·서버 전체를 검증하는 Playwright 브라우저 E2E 테스트
+- `docs/`: 현재 명세, 설계 자료, 과거 변경 기록
 
-활성 웹 진입점은 `UI/src/main.tsx`이며 `MvpApp`을 렌더한다.
+활성 웹 진입점은 `apps/web/src/main.tsx`이며 `App`을 렌더한다. 전체 디렉터리 책임과 의존 방향은 [저장소 구조](docs/REPOSITORY_STRUCTURE.md)를 따른다.
 
 ## 주요 문서
 
@@ -50,12 +50,14 @@
 - [화면 명세](docs/SCREEN_SPEC.md)
 - [기술 설계](docs/TECH_SPEC.md)
 - [테스트 계획](docs/TEST_PLAN.md)
+- [테스트 구조](docs/TEST_STRUCTURE.md)
 - [구현 백로그](docs/IMPLEMENTATION_BACKLOG.md)
 - [UI 현황 점검](docs/UI_AUDIT.md)
 - [문제 에셋 가이드](docs/GAME_ASSETS.md)
 - [스테이징 배포 가이드](docs/DEPLOYMENT.md)
+- [저장소 구조](docs/REPOSITORY_STRUCTURE.md)
 
-날짜별 `CHANGES_*.md`와 과거 릴리스는 당시 구현의 역사 기록이다.
+`docs/history/`의 날짜별 변경 문서와 과거 릴리스는 당시 구현의 역사 기록이다.
 
 ## 로컬 실행
 

@@ -11,7 +11,7 @@
 - 상태·화면·흐름 문서는 정본을 각 관점으로 매핑한다.
 - `MVP_DECISIONS.md`는 결정 이유와 변경 이력을 보존한다.
 - 기술·테스트·백로그 문서는 구현 계약과 작업 상태를 설명한다.
-- `CHANGES_*.md`와 과거 릴리스는 역사 기록이다.
+- `history/CHANGES_*.md`와 과거 릴리스는 역사 기록이다.
 
 2026-08-04 동시 빨리찾기 구현과 테스트 전환이 완료되어 `GAME_RULES.md`와 파생 문서를 `CURRENT`로 승격했다.
 
@@ -35,6 +35,8 @@
 | `TECH_SPEC.md` | 기술 계약과 마이그레이션 |
 | `TEST_PLAN.md`, `IMPLEMENTATION_BACKLOG.md` | 검증 범위와 작업 상태 |
 | `GAME_ASSETS.md` | 문제 이미지 쌍 품질과 등록 기준 |
+| `REPOSITORY_STRUCTURE.md` | 디렉터리 책임과 허용 의존 방향 |
+| `TEST_STRUCTURE.md` | 테스트 계층별 위치·실행 경계·배치 결정 |
 | `README.md` | 입문용 요약과 실행 방법 |
 
 ## 규칙 변경 절차

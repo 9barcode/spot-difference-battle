@@ -17,11 +17,11 @@ import { Server, type Socket } from "socket.io";
 import {
   GuestSessionRegistry,
   type GuestSession,
-} from "./guest-session-registry.js";
-import { MatchRegistry } from "./match-registry.js";
-import { InMemoryMatchStore, type MatchStore } from "./match-store.js";
-import { operationalLogFields } from "./operational-logging.js";
-import { GAME_PUZZLES } from "./game-puzzles.js";
+} from "./sessions/guest-session-registry.js";
+import { MatchRegistry } from "./game/match-registry.js";
+import { InMemoryMatchStore, type MatchStore } from "./persistence/match-store.js";
+import { operationalLogFields } from "./observability/operational-logging.js";
+import { GAME_PUZZLES } from "./game/puzzle-catalog.js";
 
 export interface GameServerOptions {
   webOrigin?: string | RegExp;

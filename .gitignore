@@ -6,5 +6,5 @@ test-results/
 .env
 .env.local
 *.log
+*.ait
 .DS_Store
-

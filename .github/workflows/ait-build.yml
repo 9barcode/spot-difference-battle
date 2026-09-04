@@ -3,6 +3,8 @@ name: Apps in Toss Build
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 jobs:
@@ -35,17 +37,23 @@ jobs:
       - name: Run full test suite
         run: pnpm test
 
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium firefox webkit
+
+      - name: Run browser E2E
+        run: pnpm e2e
+
       - name: Build Apps in Toss bundle
         run: pnpm build:ait
 
       - name: Verify AIT bundle
         run: |
-          test -f UI/spot-difference-syk.ait
-          ls -lh UI/spot-difference-syk.ait
+          test -f apps/web/spot-difference-syk.ait
+          ls -lh apps/web/spot-difference-syk.ait
 
       - name: Upload AIT bundle
         uses: actions/upload-artifact@v4
         with:
           name: spot-difference-syk-ait
-          path: UI/spot-difference-syk.ait
+          path: apps/web/spot-difference-syk.ait
           if-no-files-found: error

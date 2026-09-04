@@ -1,10 +1,10 @@
 import { createGameServer } from "./server.js";
-import { InMemoryMatchStore, PostgresMatchStore } from "./match-store.js";
+import { InMemoryMatchStore, PostgresMatchStore } from "./persistence/match-store.js";
 import {
   GAME_SCENE_IDS,
   type GameSceneId,
 } from "@spot-battle/shared";
-import { resolveWebOrigin } from "./web-origin.js";
+import { resolveWebOrigin } from "./config/web-origin.js";
 
 const host = process.env.HOST ?? "0.0.0.0";
 const port = Number.parseInt(process.env.PORT ?? "3001", 10);
