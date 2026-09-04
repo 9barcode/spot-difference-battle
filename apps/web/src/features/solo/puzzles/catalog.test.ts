@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { SOLO_DIFFERENCE_COUNT } from "../model/solo-engine";
+import { SOLO_DIFFERENCE_COUNT, findSoloDifference } from "../model/solo-engine";
 import { SOLO_PUZZLES, SOLO_PUZZLE_IDS } from "./catalog";
 
 describe("solo puzzle catalog", () => {
@@ -21,6 +21,17 @@ describe("solo puzzle catalog", () => {
         expect(difference.region.y).toBeGreaterThanOrEqual(0);
         expect(difference.region.y).toBeLessThanOrEqual(1);
         expect(difference.region.radius).toBeLessThanOrEqual(0.055);
+      }
+    }
+  });
+
+  it("keeps every answer selectable when mobile touch targets overlap", () => {
+    for (const puzzle of SOLO_PUZZLES) {
+      for (const difference of puzzle.differences) {
+        expect(
+          findSoloDifference(puzzle.differences, new Set(), difference.region, 0.08)?.id,
+          `${puzzle.id}/${difference.id}`,
+        ).toBe(difference.id);
       }
     }
   });

@@ -3,6 +3,7 @@ import {
   bestSoloTime,
   findSoloDifference,
   formatSoloTime,
+  minimumSoloHitRadius,
   soloElapsedMs,
   type SoloDifference,
 } from "./solo-engine";
@@ -16,6 +17,24 @@ describe("solo time attack engine", () => {
     expect(findSoloDifference(differences, new Set(), { x: 0.53, y: 0.52 })?.id).toBe("clock");
     expect(findSoloDifference(differences, new Set(), { x: 0.56, y: 0.5 })).toBeNull();
     expect(findSoloDifference(differences, new Set(["clock"]), { x: 0.5, y: 0.5 })).toBeNull();
+  });
+
+  it("uses a finger-sized touch target without relaxing mouse accuracy", () => {
+    expect(minimumSoloHitRadius("mouse", 320)).toBe(0);
+    expect(minimumSoloHitRadius("touch", 320)).toBe(0.075);
+    expect(findSoloDifference(differences, new Set(), { x: 0.565, y: 0.5 }, 0.075)?.id)
+      .toBe("clock");
+  });
+
+  it("selects the nearest answer when enlarged touch targets overlap", () => {
+    const closeDifferences: SoloDifference[] = [
+      { id: "clock", label: "시계", region: { x: 0.72, y: 0.31, radius: 0.04 } },
+      { id: "whisk", label: "거품기", region: { x: 0.662, y: 0.34, radius: 0.04 } },
+    ];
+    expect(findSoloDifference(closeDifferences, new Set(), { x: 0.67, y: 0.34 }, 0.075)?.id)
+      .toBe("whisk");
+    expect(findSoloDifference(closeDifferences, new Set(), { x: 0.71, y: 0.31 }, 0.075)?.id)
+      .toBe("clock");
   });
 
   it("adds three seconds per wrong answer", () => {

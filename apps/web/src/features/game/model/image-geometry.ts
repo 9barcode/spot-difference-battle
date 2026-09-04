@@ -12,6 +12,12 @@ export interface ImageViewport {
   pan: NormalizedPoint;
 }
 
+export function pointerMoveThresholdPx(pointerType: string): number {
+  if (pointerType === "touch") return 14;
+  if (pointerType === "pen") return 10;
+  return 6;
+}
+
 export function normalizedPointFromClient(
   clientX: number,
   clientY: number,
