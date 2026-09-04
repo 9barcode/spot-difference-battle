@@ -12,11 +12,11 @@
 |---|---|---|---|
 | `pnpm docs:check` | 2026-09-04 | PASS, 68 Markdown files | 내부 링크·상태·기준일·증거 중복·백로그 정합성 |
 | `pnpm check` | 2026-09-04 | PASS | 문서 게이트와 공유·게임 코어·웹·서버 TypeScript |
-| `pnpm test` | 2026-09-04 | PASS, 83 tests | 실제 PostgreSQL 통합 2개는 DB 부재로 SKIPPED |
+| `pnpm test` | 2026-09-04 | PASS, 84 tests | 실제 PostgreSQL 통합 2개는 DB 부재로 SKIPPED |
 | `pnpm build` | 2026-09-04 | PASS | 웹 프로덕션 번들·패키지·서버 |
-| `pnpm e2e` | 2026-09-03 | PASS, 9 tests | Chromium·Firefox·WebKit, 640×360·844×390 포함 |
+| `pnpm e2e` | 2026-09-04 | PASS, 9 tests | Chromium·Firefox·WebKit, 640×360·844×390 포함 |
 
-런타임 기준 커밋은 `ed154cef27563cc326e1acfae74031f58c0a5bd7`이며 2026-09-04 실행은 이 커밋 위의 문서 통제 작업 트리를 포함한다. 릴리스 후보를 확정하면 해당 불변 커밋에서 필수 게이트를 다시 실행하고 커밋·CI URL을 기록한다.
+2026-09-04 결과는 `origin/main`을 통합한 병합 후보 작업 트리에서 실행했다. 릴리스 후보를 확정하면 해당 불변 커밋에서 필수 게이트를 다시 실행하고 커밋·CI URL을 기록한다.
 
 ## 미확보 증거
 
@@ -27,7 +27,7 @@
 | 앱인토스 `.ait` | NOT_READY | 검증된 운영 HTTPS origin으로 생성한 번들 해시·크기 |
 | 토스앱 QR 실기기 | NOT_READY | 대표 iOS/Android 기기, 버전, 화면·결과 증거 |
 | WCAG 2.2 AA 수동 검수 | NOT_READY | 키보드·스크린리더·색각·대상 크기 결과 |
-| 문제 16세트 육안·권리 승인 | NOT_READY | 문제별 QA 문서와 권리 책임자 승인 |
+| 문제 21세트 육안·권리 승인 | NOT_READY | 문제별 QA 문서와 권리 책임자 승인 |
 | 부하·SLO·알림 | NOT_READY | 승인 목표, 부하 결과, 대시보드·알림 링크 |
 
 ## 증거 기록 규칙

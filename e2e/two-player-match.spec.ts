@@ -34,6 +34,11 @@ function pointsForPuzzle(label: string | null): Array<{ x: number; y: number }> 
   if (label?.includes("닌자")) return [{ x: 0.17, y: 0.08 }, { x: 0.76, y: 0.09 }, { x: 0.56, y: 0.28 }, { x: 0.48, y: 0.75 }, { x: 0.88, y: 0.8 }];
   if (label?.includes("도깨비")) return [{ x: 0.23, y: 0.36 }, { x: 0.76, y: 0.1 }, { x: 0.17, y: 0.55 }, { x: 0.15, y: 0.86 }, { x: 0.87, y: 0.67 }];
   if (label?.includes("중세 용")) return [{ x: 0.17, y: 0.2 }, { x: 0.67, y: 0.08 }, { x: 0.63, y: 0.57 }, { x: 0.19, y: 0.75 }, { x: 0.34, y: 0.48 }];
+  if (label?.includes("홈오피스")) return [{ x: 0.56, y: 0.16 }, { x: 0.24, y: 0.66 }, { x: 0.84, y: 0.72 }];
+  if (label?.includes("농산물")) return [{ x: 0.14, y: 0.37 }, { x: 0.21, y: 0.64 }, { x: 0.91, y: 0.57 }];
+  if (label?.includes("욕실")) return [{ x: 0.285, y: 0.39 }, { x: 0.4, y: 0.42 }, { x: 0.9, y: 0.3 }];
+  if (label?.includes("피크닉")) return [{ x: 0.24, y: 0.49 }, { x: 0.35, y: 0.54 }, { x: 0.87, y: 0.73 }];
+  if (label?.includes("세탁실")) return [{ x: 0.34, y: 0.14 }, { x: 0.83, y: 0.3 }, { x: 0.78, y: 0.51 }];
   throw new Error(`등록되지 않은 문제 제목입니다: ${label}`);
 }
 test("the first player to clear the deck wins and both players see the result", async ({ browser }) => {
@@ -171,7 +176,7 @@ test("the normal pool includes and completes all five-difference puzzles", async
     const heading = first.page.getByTestId("playing-screen").getByRole("heading");
     const progressText = await first.page.getByText(/^나 1\/\d+번 · 0\/\d+$/).textContent();
     const puzzleTotal = Number(progressText?.match(/^나 1\/(\d+)번/)?.[1]);
-    expect(puzzleTotal).toBe(6);
+    expect(puzzleTotal).toBe(11);
     let sawFiveDifferences = false;
 
     for (let puzzleIndex = 0; puzzleIndex < puzzleTotal; puzzleIndex += 1) {

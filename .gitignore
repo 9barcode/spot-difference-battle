@@ -11,4 +11,7 @@ test-results/
 *.log
 .DS_Store
 *.ait
+*.tmp
+.payload/
+UI/.granite/
 

@@ -21,7 +21,7 @@
 | AIT-DESIGN-01 | Safe Area·내비게이션·가로 화면·종료 UX | BLOCKER | 실기기 화면과 체크리스트 | UI·QA 책임자 |
 | AIT-FUNC-01 | 매칭·로드·경기·결과·재접속·신고 | BLOCKER | 두 실기기 시나리오 결과 | QA 책임자 |
 | AIT-SEC-01 | 보안·개인정보 고지와 검수 | BLOCKER | 보안표, 보존정책, 콘솔 제출 결과 | 보안 책임자 |
-| AIT-ASSET-01 | 활성 문제 권리·모바일 QA | BLOCKER | 16개 문제 QA 승인 | 콘텐츠 책임자 |
+| AIT-ASSET-01 | 활성 문제 권리·모바일 QA | BLOCKER | 21개 문제 QA 승인 | 콘텐츠 책임자 |
 | AIT-OPS-02 | SLO·로그·알림·백업·롤백 | BLOCKER | 대시보드, 알림 시험, 복원·롤백 기록 | 운영 책임자 |
 | AIT-REGRESSION-01 | 릴리스 후보 자동 게이트 | PENDING | `VERIFICATION_EVIDENCE` 최신 실행 | QA 책임자 |
 

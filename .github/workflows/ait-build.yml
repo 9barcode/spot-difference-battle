@@ -1,0 +1,60 @@
+name: Apps in Toss Build
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-ait:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      VITE_SERVER_URL: ${{ vars.VITE_SERVER_URL }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type check
+        run: pnpm check
+
+      - name: Run full test suite
+        run: pnpm test
+
+      - name: Build Apps in Toss bundle
+        if: ${{ env.VITE_SERVER_URL != '' }}
+        run: pnpm build:ait
+
+      - name: Require production server URL
+        if: ${{ env.VITE_SERVER_URL == '' }}
+        run: |
+          echo "Repository variable VITE_SERVER_URL is required for Apps in Toss builds."
+          exit 1
+
+      - name: Verify AIT bundle
+        run: |
+          test -f UI/spot-difference-syk.ait
+          ls -lh UI/spot-difference-syk.ait
+
+      - name: Upload AIT bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: spot-difference-syk-ait
+          path: UI/spot-difference-syk.ait
+          if-no-files-found: error

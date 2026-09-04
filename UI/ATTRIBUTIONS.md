@@ -4,7 +4,7 @@
 > 기준일: 2026-09-04
 > 이 파일은 확인된 출처와 확인이 필요한 자산을 구분한다.
 
-> 활성 16개 문제의 현재 실행 권리 상태 정본은 `../packages/shared/src/puzzle-asset-manifest.ts`이며 모두 `USER_SUPPLIED`다. 아래 `VERIFIED` 표기는 과거·비활성 자산에 대한 당시 프로젝트 내부 기록이며 현재 활성 문제의 법률·출시 승인을 뜻하지 않는다.
+> 활성 21개 문제의 현재 실행 권리 상태 정본은 `../packages/shared/src/puzzle-asset-manifest.ts`이며 모두 `USER_SUPPLIED`다. 아래 `VERIFIED` 표기는 과거·비활성 자산에 대한 당시 프로젝트 내부 기록이며 현재 활성 문제의 법률·출시 승인을 뜻하지 않는다.
 
 ## Game scene
 

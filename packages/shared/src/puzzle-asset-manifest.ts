@@ -15,6 +15,11 @@ export const GAME_PUZZLE_IDS = [
   "japanese-ninja",
   "korean-goblin",
   "medieval-dragon",
+  "home-office",
+  "farmers-market",
+  "bathroom-vanity",
+  "lakeside-picnic",
+  "laundry-room",
 ] as const;
 
 export type GamePuzzleId = (typeof GAME_PUZZLE_IDS)[number];
@@ -157,5 +162,40 @@ export const GAME_PUZZLE_ASSET_MANIFEST = {
     rightsStatus: "USER_SUPPLIED",
     original: webp("medieval-dragon-original.webp", "B5E77386882B3AA58D0D83A20C6F9AA6E161A7DA452F47D1ADEC9A931D6BD6C1"),
     modified: webp("medieval-dragon-modified.webp", "428D9BD97748CFA3F30A083EA8D698E87F0692858414D8AC9BE5725EF35E5C76"),
+  },
+  "home-office": {
+    version: "2026-08-28.2",
+    difficulty: "UNRATED",
+    rightsStatus: "USER_SUPPLIED",
+    original: webp("home-office-original.webp", "A9FD8612D471D67A36A436E5282C2CDD0117B8315E8E95B0D1FD1D3D9CD8BAEB"),
+    modified: webp("home-office-modified.webp", "09A6F6A76B54EB5E6550AD2488ECE72C57A1F368120CA3A7D40A0EC3FD827BE2"),
+  },
+  "farmers-market": {
+    version: "2026-08-28.2",
+    difficulty: "UNRATED",
+    rightsStatus: "USER_SUPPLIED",
+    original: webp("farmers-market-original.webp", "2E99D7901976A7F3CB5AD605D7B23CB595FF2AC89EE3FF29863A56B14AFE4285"),
+    modified: webp("farmers-market-modified.webp", "E130DA0F037EC0E37BB5588E5552BE9762B56849475F040990997D6116C43F68"),
+  },
+  "bathroom-vanity": {
+    version: "2026-08-28.2",
+    difficulty: "UNRATED",
+    rightsStatus: "USER_SUPPLIED",
+    original: webp("bathroom-vanity-original.webp", "23ACBBBD5D00B19FD27ABFE776CC552DDA246D8C4474FA3348071F1D4C1BB5B3"),
+    modified: webp("bathroom-vanity-modified.webp", "BF9F0804C41A0BD0D4570FFCA9BA4F27CD7AC8706B2C50DD264AFD08ABFBD390"),
+  },
+  "lakeside-picnic": {
+    version: "2026-08-28.2",
+    difficulty: "UNRATED",
+    rightsStatus: "USER_SUPPLIED",
+    original: webp("lakeside-picnic-original.webp", "8E46E269D9645C0B5B041DB59FFBF34E4606CADBF7092117E61BDFEF0F42DFCF"),
+    modified: webp("lakeside-picnic-modified.webp", "0C1C433EDFB0F21E1A832D16F0A3695F7319C20AB7A0E4A1B9D7467A7AA7C320"),
+  },
+  "laundry-room": {
+    version: "2026-08-28.2",
+    difficulty: "UNRATED",
+    rightsStatus: "USER_SUPPLIED",
+    original: webp("laundry-room-original.webp", "5FE54A914A41A31C1576BA3699728CE1919470DED4DFFE2B2788990994DE7AFA"),
+    modified: webp("laundry-room-modified.webp", "863B7E2C0BF13BEDE9A8FB260DDA7413E158E6D6E1ED494C68C68ADAAB0F97AA"),
   },
 } as const satisfies Record<GamePuzzleId, PuzzleAssetMetadata>;

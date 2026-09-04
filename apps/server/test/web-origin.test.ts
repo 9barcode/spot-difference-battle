@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { LOCAL_DEVELOPMENT_WEB_ORIGIN, resolveWebOrigin } from "../src/web-origin.js";
+import {
+  APPS_IN_TOSS_WEB_ORIGINS,
+  LOCAL_DEVELOPMENT_WEB_ORIGIN,
+  resolveWebOrigin,
+} from "../src/web-origin.js";
 
 describe("development web origin", () => {
   it("rejects a comma-only origin list", () => {
@@ -31,20 +35,31 @@ describe("development web origin", () => {
 
   it("keeps explicit and production policies", () => {
     expect(resolveWebOrigin(" https://game.example.com ", "development")).toBe("https://game.example.com");
-    expect(resolveWebOrigin(undefined, "production")).toBeUndefined();
+    const productionOrigin = resolveWebOrigin(undefined, "production") as RegExp;
+    expect(productionOrigin.test("https://spot-difference-syk.apps.tossmini.com")).toBe(true);
+    expect(productionOrigin.test("https://spot-difference-syk.private-apps.tossmini.com")).toBe(true);
+    expect(productionOrigin.test("https://evil.example.com")).toBe(false);
     expect(resolveWebOrigin(undefined, "development")).toBe(LOCAL_DEVELOPMENT_WEB_ORIGIN);
   });
 
-  it("supports an explicit allowlist for the live mini-app and staging", () => {
-    expect(
-      resolveWebOrigin(
-        "https://spot-battle.apps.tossmini.com, https://staging.example.com",
-        "production",
-      ),
-    ).toEqual([
-      "https://spot-battle.apps.tossmini.com",
-      "https://staging.example.com",
-    ]);
+  it("supports explicit staging and Apps in Toss production origins", () => {
+    const productionOrigin = resolveWebOrigin(
+      "https://spot-battle.apps.tossmini.com, https://staging.example.com",
+      "production",
+    ) as RegExp;
+    expect(productionOrigin.test("https://spot-battle.apps.tossmini.com")).toBe(true);
+    expect(productionOrigin.test("https://staging.example.com")).toBe(true);
+    for (const origin of APPS_IN_TOSS_WEB_ORIGINS) {
+      expect(productionOrigin.test(origin)).toBe(true);
+    }
+    expect(productionOrigin.test("https://evil.example.com")).toBe(false);
+  });
+
+  it("allows the Apps in Toss live and QR origins without extra configuration", () => {
+    const productionOrigin = resolveWebOrigin(undefined, "production") as RegExp;
+    for (const origin of APPS_IN_TOSS_WEB_ORIGINS) {
+      expect(productionOrigin.test(origin)).toBe(true);
+    }
   });
 
   it.each([
