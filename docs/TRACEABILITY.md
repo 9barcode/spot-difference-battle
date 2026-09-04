@@ -26,6 +26,9 @@
 | ASSET-002 | 활성 문제 모바일 식별성·화풍·크롭·권리 육안 승인 | `GAME_ASSETS` | 운영 QA 기록 | 템플릿만 존재 | 부분 |
 | OPS-001 | 서버와 DB 상태 확인 및 단일 컨테이너 기동 | `DEPLOYMENT`, `OPERATIONS` | `/health`, Dockerfile | 정적 웹 통합·Docker healthcheck | 부분: 실제 스테이징 증거 필요 |
 | OPS-002 | CI, 관측, 알림, 백업·복원과 롤백 훈련 | `QUALITY_GATES`, `OPERATIONS` | GitHub Actions, 일부 로그와 Render 롤백 | check·test·build·Chromium E2E workflow | 부분: CI 실실행·보호 규칙·관측·백업 증거 필요 |
+| SEC-001 | 입력·세션·정답·비밀정보 보호와 최소 개인정보 처리 | `SECURITY_PRIVACY` | 서버 검증·스냅샷·URL/CORS 정책 | 코어·서버·URL 정책 테스트 | 부분: ASVS 검증·보존정책·운영 환경 증거 필요 |
+| DOC-001 | 요구사항·결정·구현·검증·승인의 추적 가능한 문서 통제 | `DOCUMENTATION`, `STANDARDS_PROFILE` | 문서 포털·변경 계약·ADR·증거 원장 | `pnpm docs:check` | 검증 |
+| REL-001 | 앱인토스 검토 요청 전 모든 차단 게이트에 원본 증거와 승인자 연결 | `APPS_IN_TOSS_RELEASE` | `release/APPS_IN_TOSS_1_0_0.md` | 문서 게이트 | 부분: 외부·운영 증거 미완료 |
 
 ## 추적 규칙
 
@@ -37,4 +40,4 @@
 
 ## 최근 검증 기준
 
-2026-09-01 앱인토스 변경 뒤 전체 로컬 게이트를 다시 실행한다. 실제 PostgreSQL, 실제 콘솔 값 `.ait`, 토스 샌드박스·QR 실기기와 GitHub CI 결과가 없으면 관련 항목을 검증으로 승격하지 않는다.
+최신 로컬 게이트는 `VERIFICATION_EVIDENCE.md`, 앱인토스 승인 상태는 `release/APPS_IN_TOSS_1_0_0.md`를 따른다. 실제 PostgreSQL, `.ait`, 토스앱 QR 실기기와 GitHub CI 결과가 없으면 관련 항목을 검증으로 승격하지 않는다.

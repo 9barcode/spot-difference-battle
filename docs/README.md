@@ -1,7 +1,7 @@
 # 문서 포털
 
 > 문서 상태: CURRENT
-> 기준일: 2026-09-01
+> 기준일: 2026-09-04
 
 이 문서는 사람과 AI가 프로젝트를 이해할 때 사용하는 단일 시작점이다. 새 작업은 아래 읽기 순서와 문서 권한을 따른다.
 
@@ -49,6 +49,7 @@
 
 ### 실행과 품질
 
+- [표준 적용 기준](STANDARDS_PROFILE.md): 요구사항·아키텍처·보안·접근성·운영 표준의 프로젝트 적용 범위
 - [개발 프로세스](DEVELOPMENT_PROCESS.md): 제안부터 폐기까지 8단계 생명주기
 - [AI 협업 규칙](AI_COLLABORATION.md): 바이브 코딩 작업 계약과 인수인계
 - [품질 게이트](QUALITY_GATES.md): 변경 유형별 필수 검증
@@ -56,14 +57,22 @@
 - [테스트 계획](TEST_PLAN.md): 기능별 테스트 시나리오
 - [구현 백로그](IMPLEMENTATION_BACKLOG.md): 우선순위와 완료 상태
 - [UI 감사](UI_AUDIT.md): 현재 UI 구현과 남은 품질 작업
+- [검증 증거 원장](VERIFICATION_EVIDENCE.md): 릴리스 후보별 실제 실행 결과와 미확보 증거
 
 ### 출시와 운영
 
+- [보안·개인정보 설계](SECURITY_PRIVACY.md): 신뢰 경계, 보안 통제, 개인정보 출시 조건
 - [앱인토스 출시 기준](APPS_IN_TOSS_RELEASE.md): 공식 심사 대조, SDK 구성, 실기기 검수와 제출물
 - [배포 가이드](DEPLOYMENT.md): 현재 Render 스테이징 배포 방법
 - [운영·유지보수](OPERATIONS.md): 출시, 관측, 장애, 백업, 유지보수 기준
 - [검토 필요 항목](REVIEW_REQUIRED.md): 사람 결정과 외부 검증 대기 목록
 - [변경 역사 색인](HISTORY_INDEX.md): 날짜별 기록 탐색
+- [앱인토스 1.0.0 승인 체크리스트](release/APPS_IN_TOSS_1_0_0.md): 증거 기반 출시 준비 상태
+
+### 변경 통제 기록
+
+- `changes/`: 실제 작업 전에 작성하는 변경 계약
+- `decisions/`: 장기 영향을 주는 승인된 ADR
 
 ### 템플릿
 
@@ -85,5 +94,6 @@
 | DB·마이그레이션 | `TECH_SPEC`, `OPERATIONS`, `QUALITY_GATES`, 결정 기록 |
 | 배포·운영 | `APPS_IN_TOSS_RELEASE`, `DEPLOYMENT`, `OPERATIONS`, 출시 체크리스트 |
 | 문서 체계 | `DOCUMENTATION`, 이 포털, 영향받는 링크 |
+| 보안·개인정보 | `SECURITY_PRIVACY`, `TECH_SPEC`, `QUALITY_GATES`, `TRACEABILITY` |
 
 문서 생성·변경·폐기 규칙은 [문서 운영 기준](DOCUMENTATION.md)을 따른다.

@@ -1,6 +1,7 @@
 ﻿# UI 구현 기준
 
 > 문서 상태: CURRENT
+> 기준일: 2026-09-04
 > 규칙은 `../../docs/GAME_RULES.md`, 화면 요구는 `../../docs/SCREEN_SPEC.md`를 따른다.
 
 ## 공통

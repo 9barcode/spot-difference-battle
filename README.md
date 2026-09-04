@@ -1,7 +1,7 @@
 # Spot Difference Battle
 
 > 문서 상태: CURRENT
-> 기준일: 2026-08-31
+> 기준일: 2026-09-04
 > 현재 게임 규칙의 유일한 Markdown 정본은 [`docs/GAME_RULES.md`](docs/GAME_RULES.md)다.
 
 두 플레이어가 동일한 원본과 변경본을 비교하고, 문제마다 등록된 차이를 모두 찾으며 정답 점수와 완주 시간 가산점을 겨루는 실시간 1대1 게임입니다.
@@ -48,6 +48,7 @@
 ## 주요 문서
 
 - [문서 포털](docs/README.md)
+- [프로젝트 표준 적용 기준](docs/STANDARDS_PROFILE.md)
 - [프로젝트 헌장](docs/PROJECT_CHARTER.md)
 - [문서 운영 기준](docs/DOCUMENTATION.md)
 - [개발 생명주기](docs/DEVELOPMENT_PROCESS.md)
@@ -67,9 +68,12 @@
 - [UI 현황 점검](docs/UI_AUDIT.md)
 - [문제 에셋 가이드](docs/GAME_ASSETS.md)
 - [스테이징 배포 가이드](docs/DEPLOYMENT.md)
+- [보안·개인정보 설계](docs/SECURITY_PRIVACY.md)
+- [검증 증거 원장](docs/VERIFICATION_EVIDENCE.md)
 - [운영·유지보수 기준](docs/OPERATIONS.md)
 - [검토 및 결정 필요 항목](docs/REVIEW_REQUIRED.md)
 - [변경 역사 색인](docs/HISTORY_INDEX.md)
+- [앱인토스 1.0.0 승인 체크리스트](docs/release/APPS_IN_TOSS_1_0_0.md)
 
 날짜별 `CHANGES_*.md`와 과거 릴리스는 당시 구현의 역사 기록이다.
 
