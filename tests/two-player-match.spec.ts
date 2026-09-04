@@ -1,4 +1,6 @@
 import { expect, test, type Browser, type BrowserContext, type Page } from "@playwright/test";
+import { GAME_PUZZLES } from "../apps/server/src/game/puzzle-catalog.js";
+import { GAME_PUZZLE_IDS, type GamePuzzleId } from "@spot-battle/shared";
 
 async function createPlayer(browser: Browser, nickname: string, viewport: { width: number; height: number }): Promise<{ context: BrowserContext; page: Page }> {
   const context = await browser.newContext({ viewport });
@@ -17,13 +19,14 @@ async function clickNormalized(page: Page, x: number, y: number) {
   await page.waitForTimeout(160);
 }
 
-function pointsForPuzzle(label: string | null): Array<{ x: number; y: number }> {
-  if (label?.includes("카페")) return [{ x: 0.125, y: 0.155 }, { x: 0.52, y: 0.59 }, { x: 0.86, y: 0.8 }];
-  if (label?.includes("마법")) return [{ x: 0.31, y: 0.33 }, { x: 0.27, y: 0.78 }, { x: 0.79, y: 0.17 }];
-  if (label?.includes("바닷속")) return [{ x: 0.39, y: 0.11 }, { x: 0.8, y: 0.22 }, { x: 0.5, y: 0.76 }];
-  if (label?.includes("사이버")) return [{ x: 0.23, y: 0.24 }, { x: 0.75, y: 0.24 }, { x: 0.52, y: 0.69 }];
-  if (label?.includes("겨울")) return [{ x: 0.66, y: 0.12 }, { x: 0.84, y: 0.6 }, { x: 0.51, y: 0.78 }];
-  throw new Error(`등록되지 않은 문제 제목입니다: ${label}`);
+function pointsForPuzzle(puzzleId: string | null): Array<{ x: number; y: number }> {
+  const puzzle = GAME_PUZZLES.find((candidate) => candidate.id === puzzleId as GamePuzzleId);
+  if (!puzzle) throw new Error(`등록되지 않은 문제 ID입니다: ${puzzleId}`);
+  return puzzle.differences.map(({ regions }) => {
+    const [point] = regions;
+    if (!point) throw new Error(`정답 영역이 없는 문제입니다: ${puzzleId}`);
+    return point;
+  });
 }
 test("one player who clears the deck waits while the opponent is still playing", async ({ browser }) => {
   const first = await createPlayer(browser, "빠른사람", { width: 1280, height: 900 });
@@ -52,9 +55,9 @@ test("one player who clears the deck waits while the opponent is still playing",
     await expect(first.page.getByRole("img", { name: /원본$/ })).toBeVisible();
     await expect(first.page.getByRole("img", { name: /변경본$/ })).toBeVisible();
 
-    const heading = first.page.getByTestId("playing-screen").getByRole("heading");
-    const firstPuzzle = await heading.textContent();
-    const firstPoints = pointsForPuzzle(firstPuzzle);
+    const playingScreen = first.page.getByTestId("playing-screen");
+    const firstPuzzleId = await playingScreen.getAttribute("data-puzzle-id");
+    const firstPoints = pointsForPuzzle(firstPuzzleId);
     const mobileImage = second.page.getByRole("img", { name: /변경본$/ });
     const imageBeforeZoom = await mobileImage.boundingBox();
     await second.page.getByRole("button", { name: "확대" }).click();
@@ -71,18 +74,21 @@ test("one player who clears the deck waits while the opponent is still playing",
     await second.page.mouse.down();
     await second.page.mouse.move(boardBox.x + boardBox.width / 2, boardBox.y + boardBox.height / 2 + 120, { steps: 5 });
     await second.page.mouse.up();
-    await expect(second.page.getByText("나 1/5번 · 0/3", { exact: true })).toBeVisible();
+    const totalPuzzleCount = GAME_PUZZLE_IDS.length;
+    await expect(second.page.getByText(`나 1/${totalPuzzleCount}번 · 0/3`, { exact: true })).toBeVisible();
     await second.page.getByRole("button", { name: "원래 크기" }).click();
     await expect(second.page.getByTestId("zoom-controls")).toContainText("1.0배");
 
     await clickNormalized(second.page, firstPoints[0]!.x, firstPoints[0]!.y);
-    await expect(second.page.getByText("나 1/5번 · 1/3", { exact: true })).toBeVisible();
-    for (let puzzleIndex = 0; puzzleIndex < 5; puzzleIndex += 1) {
-      const puzzleLabel = await heading.textContent();
-      const points = pointsForPuzzle(puzzleLabel);
+    await expect(second.page.getByText(`나 1/${totalPuzzleCount}번 · 1/3`, { exact: true })).toBeVisible();
+    for (let puzzleIndex = 0; puzzleIndex < totalPuzzleCount; puzzleIndex += 1) {
+      const puzzleId = await playingScreen.getAttribute("data-puzzle-id");
+      const points = pointsForPuzzle(puzzleId);
       for (const point of points) await clickNormalized(first.page, point.x, point.y);
-      if (puzzleIndex < 4) {
-        await expect(heading).not.toHaveText(puzzleLabel ?? "", { timeout: 5_000 });
+      if (puzzleIndex < totalPuzzleCount - 1) {
+        await expect(playingScreen).not.toHaveAttribute("data-puzzle-id", puzzleId ?? "", {
+          timeout: 5_000,
+        });
       }
     }
 
@@ -98,4 +104,3 @@ test("one player who clears the deck waits while the opponent is still playing",
     await second.context.close();
   }
 });
-
