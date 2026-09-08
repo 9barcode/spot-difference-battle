@@ -149,4 +149,123 @@ describe("simultaneous game server", () => {
     expect(firstResult).toMatchObject({ winnerId: firstMatch.playerId, endReason: "FORFEIT" });
     expect(secondResult.winnerId).toBe(firstMatch.playerId);
   }, 15_000);
+
+  it("keeps private progress scoped to each client and emits one authoritative result", async () => {
+    const first = await connect();
+    const second = await connect();
+    const firstFound = waitForEvent<MatchFoundPayload>(first, "match:found");
+    const secondFound = waitForEvent<MatchFoundPayload>(second, "match:found");
+    const firstReady = waitForState(first, "READY");
+    const secondReady = waitForState(second, "READY");
+
+    first.emit("queue:join", { nickname: "첫째" });
+    second.emit("queue:join", { nickname: "둘째" });
+    const [firstMatch, secondMatch, firstReadySnapshot, secondReadySnapshot] = await Promise.all([
+      firstFound,
+      secondFound,
+      firstReady,
+      secondReady,
+    ]);
+
+    expect(firstMatch.matchId).toBe(secondMatch.matchId);
+    expect(firstReadySnapshot).toMatchObject({
+      currentPuzzleId: "enchanted-forest",
+      currentPuzzleVersion: secondReadySnapshot.currentPuzzleVersion,
+      nextPuzzleId: secondReadySnapshot.nextPuzzleId,
+      totalPuzzleCount: secondReadySnapshot.totalPuzzleCount,
+    });
+
+    const firstOpponent = firstReadySnapshot.players.find(
+      (player) => player.playerId === secondMatch.playerId,
+    )!;
+    expect(firstOpponent.perspective).toBe("OPPONENT");
+    expect(firstOpponent).not.toHaveProperty("puzzleIndex");
+    expect(firstOpponent).not.toHaveProperty("wrongAnswerCount");
+    expect(firstOpponent).not.toHaveProperty("inputLockedUntilMs");
+    expect(firstReadySnapshot).toMatchObject({
+      problemImage: null,
+      myFoundIds: [],
+      foundMarks: [],
+      revealedDifferences: null,
+    });
+
+    const firstPreloading = waitForState(first, "PRELOADING");
+    const secondPreloading = waitForState(second, "PRELOADING");
+    first.emit("game:ready", { matchId: firstMatch.matchId });
+    second.emit("game:ready", { matchId: firstMatch.matchId });
+    const [firstLoad, secondLoad] = await Promise.all([firstPreloading, secondPreloading]);
+
+    const firstCountdown = waitForState(first, "COUNTDOWN");
+    const secondCountdown = waitForState(second, "COUNTDOWN");
+    first.emit("game:loaded", {
+      matchId: firstMatch.matchId,
+      puzzleId: firstLoad.currentPuzzleId!,
+      puzzleVersion: firstLoad.currentPuzzleVersion!,
+    });
+    second.emit("game:loaded", {
+      matchId: secondMatch.matchId,
+      puzzleId: secondLoad.currentPuzzleId!,
+      puzzleVersion: secondLoad.currentPuzzleVersion!,
+    });
+    await Promise.all([firstCountdown, secondCountdown]);
+
+    const [firstPlaying, secondPlaying] = await Promise.all([
+      waitForState(first, "PLAYING"),
+      waitForState(second, "PLAYING"),
+    ]);
+    expect(firstPlaying.deadlineMs).toBe(secondPlaying.deadlineMs);
+
+    const firstProgress = waitForEvent<GameSnapshot>(
+      first,
+      "game:snapshot",
+      (snapshot) => snapshot.myFoundIds.includes("forest-lantern"),
+    );
+    const secondView = waitForEvent<GameSnapshot>(
+      second,
+      "game:snapshot",
+      (snapshot) => snapshot.players.some(
+        (player) => player.playerId === firstMatch.playerId && player.foundCount === 1,
+      ),
+    );
+    first.emit("game:guess", {
+      matchId: firstMatch.matchId,
+      puzzleId: "enchanted-forest",
+      point: { x: 0.31, y: 0.33 },
+      expectedState: "PLAYING",
+      expectedStateVersion: firstPlaying.stateVersion,
+    });
+    const [privateProgress, opponentView] = await Promise.all([firstProgress, secondView]);
+
+    expect(privateProgress.myFoundIds).toEqual(["forest-lantern"]);
+    expect(privateProgress.foundMarks).toHaveLength(1);
+    expect(privateProgress.revealedDifferences).toBeNull();
+    expect(opponentView.myFoundIds).toEqual([]);
+    expect(opponentView.foundMarks).toEqual([]);
+    expect(opponentView.revealedDifferences).toBeNull();
+
+    const firstFinished = waitForState(first, "FINISHED");
+    const secondFinished = waitForState(second, "FINISHED");
+    second.emit("game:forfeit", {
+      matchId: secondMatch.matchId,
+      expectedState: "PLAYING",
+      expectedStateVersion: opponentView.stateVersion,
+    });
+    const [firstResult, secondResult] = await Promise.all([firstFinished, secondFinished]);
+
+    expect(firstResult).toMatchObject({
+      state: "FINISHED",
+      winnerId: firstMatch.playerId,
+      endReason: "FORFEIT",
+      deadlineMs: null,
+    });
+    expect(secondResult).toMatchObject({
+      state: firstResult.state,
+      stateVersion: firstResult.stateVersion,
+      winnerId: firstResult.winnerId,
+      endReason: firstResult.endReason,
+      deadlineMs: firstResult.deadlineMs,
+    });
+    expect(firstResult.revealedDifferences).toHaveLength(3);
+    expect(secondResult.revealedDifferences).toHaveLength(3);
+  }, 15_000);
 });
