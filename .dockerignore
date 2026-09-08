@@ -12,3 +12,4 @@ test-results
 *.log
 docs
 tests
+apps/web/src/assets/puzzles/pending
