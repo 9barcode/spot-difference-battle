@@ -24,6 +24,7 @@ import { operationalLogFields } from "./observability/operational-logging.js";
 import { GAME_PUZZLES } from "./game/puzzle-catalog.js";
 import { WaitingPlayerQueue } from "./application/waiting-player-queue.js";
 import { MatchPersistenceCoordinator } from "./application/match-persistence-coordinator.js";
+import { MatchReconnectCoordinator } from "./application/match-reconnect-coordinator.js";
 import {
   requireActionContext,
   requirePayload,
@@ -93,13 +94,11 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
   const guestSessionRetentionMs = options.guestSessionRetentionMs ?? 7 * 24 * 60 * 60 * 1_000;
   const guestSessionCleanupIntervalMs = options.guestSessionCleanupIntervalMs ?? 60 * 1_000;
   const sessions = new GuestSessionRegistry(guestSessionRetentionMs);
-  const reconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
   const reconnectGraceMs =
     options.reconnectGraceMs ?? GAME_CONFIG.reconnectGraceSeconds * 1_000;
   const inputCooldownMs = options.inputCooldownMs ?? 120;
   const finishedMatchRetentionMs = options.finishedMatchRetentionMs ?? 5 * 60 * 1_000;
   const waitingPlayers = new WaitingPlayerQueue();
-  let closing = false;
 
   function logOperationError(
     event: string,
@@ -147,6 +146,16 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
       void persistence.persistRuntime(match).catch((error) => app.log.error(error));
     }
   }
+
+  const reconnect = new MatchReconnectCoordinator({
+    store: matchStore,
+    registry,
+    sessions,
+    persistence,
+    reconnectGraceMs,
+    emitSnapshots,
+    logger: { error: logOperationError, warning: logOperationWarning },
+  });
   function emitGameError(socket: GameSocket, error: unknown): void {
     if (error instanceof GameRuleError) {
       socket.emit("game:error", { code: error.code, message: error.message });
@@ -221,59 +230,7 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
     emitSnapshots(match);
   }
 
-  function scheduleForfeit(session: GuestSession): void {
-    const previous = reconnectTimers.get(session.playerId);
-    if (previous) clearTimeout(previous);
-    const timer = setTimeout(() => {
-      reconnectTimers.delete(session.playerId);
-      if (session.socketId) return;
-      const match = registry.getCurrentForPlayer(session.playerId);
-      if (!match) return;
-      logOperationWarning("match.reconnect_timeout", {
-        matchId: match.matchId,
-        playerId: session.playerId,
-        state: match.currentState,
-      });
-      match.forfeit(session.playerId);
-      emitSnapshots(match);
-      void persistence.persistIfFinished(match);
-    }, reconnectGraceMs);
-    timer.unref();
-    reconnectTimers.set(session.playerId, timer);
-  }
-
-  try {
-    const restoredGuests = await matchStore.loadGuests();
-    for (const guest of restoredGuests) sessions.restore(guest);
-
-    const restoredMatches = await matchStore.loadActiveMatches();
-    for (const state of restoredMatches) {
-      try {
-        const match = registry.restore(state);
-        if (match.expire(Date.now())) {
-          await persistence.persistIfFinished(match);
-          continue;
-        }
-        const missingSession = state.players.some((player) => !sessions.getByPlayer(player.playerId));
-        if (missingSession) {
-          match.cancel("복구할 수 없는 참가자 세션이 있어 경기를 취소했습니다.");
-          await persistence.persistIfFinished(match);
-          continue;
-        }
-        for (const player of state.players) {
-          match.setConnectionStatus(player.playerId, "RECONNECTING");
-          scheduleForfeit(sessions.getByPlayer(player.playerId)!);
-        }
-        await persistence.persistRuntime(match);
-      } catch (error) {
-        app.log.error(error);
-        const matchId = (state as { matchId?: unknown }).matchId;
-        if (typeof matchId === "string") await matchStore.deleteActiveMatch(matchId);
-      }
-    }
-  } catch (error) {
-    app.log.error(error);
-  }
+  await reconnect.restore();
 
   io.on("connection", (socket) => {
     const lastInputAt = new Map<string, number>();
@@ -294,9 +251,7 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
       io.sockets.sockets.get(oldSocketId)?.disconnect(true);
     }
     session.socketId = socket.id;
-    const reconnectTimer = reconnectTimers.get(session.playerId);
-    if (reconnectTimer) clearTimeout(reconnectTimer);
-    reconnectTimers.delete(session.playerId);
+    reconnect.connected(session);
     socket.join(session.playerId);
     socket.emit("session:ready", {
       guestToken: session.guestToken,
@@ -498,7 +453,7 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
       }
       match.setConnectionStatus(session.playerId, "RECONNECTING");
       emitSnapshots(match);
-      if (!closing) scheduleForfeit(session);
+      reconnect.schedule(session);
     });
   });
 
@@ -515,7 +470,7 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
       Date.now(),
       (playerId) =>
         waitingPlayers.has(playerId) ||
-        reconnectTimers.has(playerId) ||
+        reconnect.hasPending(playerId) ||
         registry.getCurrentForPlayer(playerId) !== null,
     );
     for (const session of expired) persistence.deleteGuest(session);
@@ -523,10 +478,9 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
   guestSessionCleanupTimer.unref();
 
   app.addHook("onClose", async () => {
-    closing = true;
+    reconnect.close();
     clearInterval(expiryTimer);
     clearInterval(guestSessionCleanupTimer);
-    for (const timer of reconnectTimers.values()) clearTimeout(timer);
     await new Promise<void>((resolve) => io.close(() => resolve()));
     await persistence.close();
   });
