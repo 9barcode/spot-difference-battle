@@ -32,6 +32,7 @@ export default defineConfig({
         PORT: String(serverPort),
         WEB_ORIGIN: `http://127.0.0.1:${webPort}`,
         GAME_SCENE_ID: gameSceneId,
+        STORAGE_DRIVER: "memory",
       },
     },
     {
