@@ -1,5 +1,5 @@
 import { createGameServer } from "./server.js";
-import { InMemoryMatchStore, PostgresMatchStore } from "./persistence/match-store.js";
+import { SupabasePostgresMatchStore } from "./persistence/match-store.js";
 import {
   GAME_SCENE_IDS,
   type GameSceneId,
@@ -20,9 +20,13 @@ if (
   );
 }
 const sceneId = configuredSceneId as GameSceneId | undefined;
-const matchStore = process.env.DATABASE_URL
-  ? new PostgresMatchStore(process.env.DATABASE_URL)
-  : new InMemoryMatchStore();
+const supabaseDatabaseUrl = process.env.SUPABASE_DB_URL?.trim();
+if (!supabaseDatabaseUrl) {
+  throw new Error(
+    "SUPABASE_DB_URL is required. Production does not fall back to an in-memory database.",
+  );
+}
+const matchStore = new SupabasePostgresMatchStore(supabaseDatabaseUrl);
 const app = await createGameServer({
   webOrigin,
   staticRoot,

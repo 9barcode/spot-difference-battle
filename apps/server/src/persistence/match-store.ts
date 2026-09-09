@@ -92,7 +92,8 @@ export class InMemoryMatchStore implements MatchStore {
   async close(): Promise<void> {}
 }
 
-export class PostgresMatchStore implements MatchStore {
+/** PostgreSQL adapter for the single production backend: Supabase. */
+export class SupabasePostgresMatchStore implements MatchStore {
   private readonly pool: Pool;
 
   constructor(connectionString: string) {
@@ -228,3 +229,6 @@ export class PostgresMatchStore implements MatchStore {
     await this.pool.end();
   }
 }
+
+/** @deprecated Use SupabasePostgresMatchStore. */
+export class PostgresMatchStore extends SupabasePostgresMatchStore {}

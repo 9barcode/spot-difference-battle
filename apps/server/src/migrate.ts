@@ -1,8 +1,8 @@
 import { readdir, readFile } from "node:fs/promises";
 import { Pool } from "pg";
 
-const databaseUrl = process.env.DATABASE_URL;
-if (!databaseUrl) throw new Error("DATABASE_URL is required");
+const databaseUrl = process.env.SUPABASE_DB_URL;
+if (!databaseUrl) throw new Error("SUPABASE_DB_URL is required");
 
 const migrationDirectory = new URL("../migrations/", import.meta.url);
 const migrationFiles = (await readdir(migrationDirectory))
