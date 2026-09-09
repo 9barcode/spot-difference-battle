@@ -28,6 +28,10 @@ Edge Function은 장기 연결이나 경기 타이머를 실행하지 않고 짧
 보존 타이머와 종료 시 미완료 쓰기 정리를 담당한다. Socket 전송 계층은 저장 순서나
 저장소 수명주기를 직접 관리하지 않는다.
 
+`MatchReconnectCoordinator`가 재접속 유예 타이머와 서버 재시작 시 게스트·활성 경기
+복구를 담당한다. 손상된 활성 경기 행은 다른 경기 복구를 막지 않고 격리·삭제하며,
+유예 시간에 돌아오지 않은 플레이어의 몰수패 결과는 동일한 저장 계층으로 확정한다.
+
 `InMemoryMatchStore`는 로컬 게임 흐름을 위한 독립 구현체이며 `NODE_ENV=production`에서는
 선택할 수 없다. 로컬/E2E에서는 `STORAGE_DRIVER=memory`를 명시해야 하므로 운영 서버가
 자동으로 인메모리 저장소에 빠지는 일은 없다. Supabase Realtime/Edge Functions 전환 테스트는 실제 프로젝트 연결 정보가 준비된
