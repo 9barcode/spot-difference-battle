@@ -3,9 +3,9 @@ import { randomUUID } from "node:crypto";
 import { Pool } from "pg";
 import { describe, expect, it } from "vitest";
 import { GAME_PUZZLES } from "../../src/game/puzzle-catalog.js";
-import { SupabasePostgresMatchStore } from "../../src/persistence/match-store.js";
+import { PostgresMatchStore } from "../../src/persistence/match-store.js";
 
-const databaseUrl = process.env.SUPABASE_DB_URL;
+const databaseUrl = process.env.DATABASE_URL;
 const describeDatabase = databaseUrl ? describe : describe.skip;
 
 describeDatabase("PostgreSQL restart recovery", () => {
@@ -16,8 +16,8 @@ describeDatabase("PostgreSQL restart recovery", () => {
     const firstToken = randomUUID();
     const secondToken = randomUUID();
     const pool = new Pool({ connectionString: databaseUrl });
-    let firstStore: SupabasePostgresMatchStore | null = new SupabasePostgresMatchStore(databaseUrl!);
-    let secondStore: SupabasePostgresMatchStore | null = null;
+    let firstStore: PostgresMatchStore | null = new PostgresMatchStore(databaseUrl!);
+    let secondStore: PostgresMatchStore | null = null;
 
     try {
       await firstStore.upsertGuest({ playerId: firstId, guestToken: firstToken, nickname: "재시작첫째" });
@@ -37,7 +37,7 @@ describeDatabase("PostgreSQL restart recovery", () => {
       await firstStore.close();
       firstStore = null;
 
-      secondStore = new SupabasePostgresMatchStore(databaseUrl!);
+      secondStore = new PostgresMatchStore(databaseUrl!);
       const states = await secondStore.loadActiveMatches();
       const persisted = states.find((state) => state.matchId === matchId);
       expect(persisted).toBeDefined();
@@ -66,7 +66,7 @@ describeDatabase("PostgreSQL restart recovery", () => {
     const matchId = randomUUID();
     const firstId = randomUUID();
     const secondId = randomUUID();
-    const store = new SupabasePostgresMatchStore(databaseUrl!);
+    const store = new PostgresMatchStore(databaseUrl!);
     const pool = new Pool({ connectionString: databaseUrl });
 
     try {

@@ -22,13 +22,6 @@ import { MatchRegistry } from "./game/match-registry.js";
 import { InMemoryMatchStore, type MatchStore } from "./persistence/match-store.js";
 import { operationalLogFields } from "./observability/operational-logging.js";
 import { GAME_PUZZLES } from "./game/puzzle-catalog.js";
-import { WaitingPlayerQueue } from "./application/waiting-player-queue.js";
-import {
-  requireActionContext,
-  requirePayload,
-  requirePoint,
-  requireStringField,
-} from "./transport/socket-payload.js";
 
 export interface GameServerOptions {
   webOrigin?: string | RegExp;
@@ -51,6 +44,47 @@ export interface GameServerOptions {
 interface SocketData {
   playerId: string;
   guestToken: string;
+}
+
+function requirePayload(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new GameRuleError("INVALID_PAYLOAD", "요청 형식이 올바르지 않습니다.");
+  }
+  return value as Record<string, unknown>;
+}
+
+function requireStringField(payload: unknown, field: string): string {
+  const value = requirePayload(payload)[field];
+  if (typeof value !== "string") {
+    throw new GameRuleError("INVALID_PAYLOAD", `${field} 값이 올바르지 않습니다.`);
+  }
+  return value;
+}
+
+function requireActionContext(payload: unknown): { expectedState: string; expectedStateVersion: number } {
+  const input = requirePayload(payload);
+  if (typeof input.expectedState !== "string" || !Number.isInteger(input.expectedStateVersion)) {
+    throw new GameRuleError("INVALID_PAYLOAD", "경기 상태 정보가 올바르지 않습니다.");
+  }
+  return {
+    expectedState: input.expectedState,
+    expectedStateVersion: input.expectedStateVersion as number,
+  };
+}
+
+function requirePoint(payload: unknown): { x: number; y: number } {
+  const point = requirePayload(payload).point;
+  if (!point || typeof point !== "object" || Array.isArray(point)) {
+    throw new GameRuleError("INVALID_POINT", "선택 좌표가 올바르지 않습니다.");
+  }
+  const { x, y } = point as Record<string, unknown>;
+  if (
+    typeof x !== "number" || !Number.isFinite(x) || x < 0 || x > 1 ||
+    typeof y !== "number" || !Number.isFinite(y) || y < 0 || y > 1
+  ) {
+    throw new GameRuleError("INVALID_POINT", "선택 좌표가 올바르지 않습니다.");
+  }
+  return { x, y };
 }
 
 type GameSocket = Socket<
@@ -101,7 +135,14 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
     options.reconnectGraceMs ?? GAME_CONFIG.reconnectGraceSeconds * 1_000;
   const inputCooldownMs = options.inputCooldownMs ?? 120;
   const finishedMatchRetentionMs = options.finishedMatchRetentionMs ?? 5 * 60 * 1_000;
-  const waitingPlayers = new WaitingPlayerQueue();
+  type WaitingPlayer = { playerId: string; socketId: string; nickname: string; settings: MatchSettings };
+  const waitingPlayers = new Map<string, WaitingPlayer>();
+  const queueKey = ({ mode, difficulty }: MatchSettings) => `${mode}:${difficulty}`;
+  const removeWaitingPlayer = (playerId: string) => {
+    for (const [key, player] of waitingPlayers) {
+      if (player.playerId === playerId) waitingPlayers.delete(key);
+    }
+  };
   let closing = false;
 
   function logOperationError(
@@ -389,12 +430,14 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
           mode: rawSettings.mode as MatchSettings["mode"],
           difficulty: rawSettings.difficulty as MatchSettings["difficulty"],
         };
+        const key = queueKey(settings);
         session.nickname = normalizedNickname;
         persistGuest(session);
 
-        const waitingPlayer = waitingPlayers.get(settings);
+        const waitingPlayer = waitingPlayers.get(key);
         if (!waitingPlayer || waitingPlayer.playerId === session.playerId) {
-          waitingPlayers.set({
+          removeWaitingPlayer(session.playerId);
+          waitingPlayers.set(key, {
             playerId: session.playerId,
             socketId: socket.id,
             nickname: normalizedNickname,
@@ -405,7 +448,7 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
 
         const opponentSocket = io.sockets.sockets.get(waitingPlayer.socketId);
         if (!opponentSocket || registry.getCurrentForPlayer(waitingPlayer.playerId)) {
-          waitingPlayers.set({
+          waitingPlayers.set(key, {
             playerId: session.playerId,
             socketId: socket.id,
             nickname: normalizedNickname,
@@ -434,13 +477,13 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
           opponentNickname: normalizedNickname,
         });
         emitSnapshots(match);
-        waitingPlayers.delete(settings);
+        waitingPlayers.delete(key);
       } catch (error) {
         emitGameError(socket, error);
       }
     });
     socket.on("queue:leave", () => {
-      waitingPlayers.remove(session.playerId);
+      removeWaitingPlayer(session.playerId);
       socket.emit("queue:left");
     });
 
@@ -555,7 +598,7 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
       session.socketId = null;
       sessions.touch(session);
       persistGuest(session);
-      waitingPlayers.remove(session.playerId);
+      removeWaitingPlayer(session.playerId);
       const match = registry.getCurrentForPlayer(session.playerId);
       if (!match || match.currentState === "FINISHED" || match.currentState === "CANCELLED") {
         return;
@@ -578,7 +621,7 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
     const expired = sessions.removeExpired(
       Date.now(),
       (playerId) =>
-        waitingPlayers.has(playerId) ||
+        [...waitingPlayers.values()].some((player) => player.playerId === playerId) ||
         reconnectTimers.has(playerId) ||
         registry.getCurrentForPlayer(playerId) !== null,
     );
