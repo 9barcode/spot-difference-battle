@@ -22,15 +22,6 @@ import { MatchRegistry } from "./game/match-registry.js";
 import { InMemoryMatchStore, type MatchStore } from "./persistence/match-store.js";
 import { operationalLogFields } from "./observability/operational-logging.js";
 import { GAME_PUZZLES } from "./game/puzzle-catalog.js";
-import { WaitingPlayerQueue } from "./application/waiting-player-queue.js";
-import { MatchPersistenceCoordinator } from "./application/match-persistence-coordinator.js";
-import { MatchReconnectCoordinator } from "./application/match-reconnect-coordinator.js";
-import {
-  requireActionContext,
-  requirePayload,
-  requirePoint,
-  requireStringField,
-} from "./transport/socket-payload.js";
 
 export interface GameServerOptions {
   webOrigin?: string | RegExp;
@@ -53,6 +44,47 @@ export interface GameServerOptions {
 interface SocketData {
   playerId: string;
   guestToken: string;
+}
+
+function requirePayload(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new GameRuleError("INVALID_PAYLOAD", "요청 형식이 올바르지 않습니다.");
+  }
+  return value as Record<string, unknown>;
+}
+
+function requireStringField(payload: unknown, field: string): string {
+  const value = requirePayload(payload)[field];
+  if (typeof value !== "string") {
+    throw new GameRuleError("INVALID_PAYLOAD", `${field} 값이 올바르지 않습니다.`);
+  }
+  return value;
+}
+
+function requireActionContext(payload: unknown): { expectedState: string; expectedStateVersion: number } {
+  const input = requirePayload(payload);
+  if (typeof input.expectedState !== "string" || !Number.isInteger(input.expectedStateVersion)) {
+    throw new GameRuleError("INVALID_PAYLOAD", "경기 상태 정보가 올바르지 않습니다.");
+  }
+  return {
+    expectedState: input.expectedState,
+    expectedStateVersion: input.expectedStateVersion as number,
+  };
+}
+
+function requirePoint(payload: unknown): { x: number; y: number } {
+  const point = requirePayload(payload).point;
+  if (!point || typeof point !== "object" || Array.isArray(point)) {
+    throw new GameRuleError("INVALID_POINT", "선택 좌표가 올바르지 않습니다.");
+  }
+  const { x, y } = point as Record<string, unknown>;
+  if (
+    typeof x !== "number" || !Number.isFinite(x) || x < 0 || x > 1 ||
+    typeof y !== "number" || !Number.isFinite(y) || y < 0 || y > 1
+  ) {
+    throw new GameRuleError("INVALID_POINT", "선택 좌표가 올바르지 않습니다.");
+  }
+  return { x, y };
 }
 
 type GameSocket = Socket<
@@ -94,11 +126,24 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
   const guestSessionRetentionMs = options.guestSessionRetentionMs ?? 7 * 24 * 60 * 60 * 1_000;
   const guestSessionCleanupIntervalMs = options.guestSessionCleanupIntervalMs ?? 60 * 1_000;
   const sessions = new GuestSessionRegistry(guestSessionRetentionMs);
+  const reconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  const finishedMatchCleanupTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  const persistedMatches = new Set<string>();
+  const runtimeWrites = new Map<string, Promise<void>>();
+  const guestWrites = new Set<Promise<void>>();
   const reconnectGraceMs =
     options.reconnectGraceMs ?? GAME_CONFIG.reconnectGraceSeconds * 1_000;
   const inputCooldownMs = options.inputCooldownMs ?? 120;
   const finishedMatchRetentionMs = options.finishedMatchRetentionMs ?? 5 * 60 * 1_000;
-  const waitingPlayers = new WaitingPlayerQueue();
+  type WaitingPlayer = { playerId: string; socketId: string; nickname: string; settings: MatchSettings };
+  const waitingPlayers = new Map<string, WaitingPlayer>();
+  const queueKey = ({ mode, difficulty }: MatchSettings) => `${mode}:${difficulty}`;
+  const removeWaitingPlayer = (playerId: string) => {
+    for (const [key, player] of waitingPlayers) {
+      if (player.playerId === playerId) waitingPlayers.delete(key);
+    }
+  };
+  let closing = false;
 
   function logOperationError(
     event: string,
@@ -115,16 +160,25 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
     app.log.warn(operationalLogFields(event, context), event);
   }
 
-  const persistence = new MatchPersistenceCoordinator({
-    store: matchStore,
-    registry,
-    finishedMatchRetentionMs,
-    logger: { error: logOperationError },
-  });
+  function trackGuestWrite(write: Promise<void>): void {
+    const handled = write.catch((error) =>
+      logOperationError("database.guest_write_failed", error),
+    );
+    guestWrites.add(handled);
+    void handled.finally(() => guestWrites.delete(handled));
+  }
+
+  function persistGuest(session: GuestSession): void {
+    trackGuestWrite(matchStore.upsertGuest(session));
+  }
+
+  function deleteGuest(session: GuestSession): void {
+    trackGuestWrite(matchStore.deleteGuest(session.playerId));
+  }
 
   function createSession(): GuestSession {
     const session = sessions.create();
-    persistence.persistGuest(session);
+    persistGuest(session);
     return session;
   }
 
@@ -143,19 +197,61 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
       io.to(player.playerId).emit("game:snapshot", match.snapshot(player.playerId));
     }
     if (match.currentState !== "FINISHED" && match.currentState !== "CANCELLED") {
-      void persistence.persistRuntime(match).catch((error) => app.log.error(error));
+      void persistRuntime(match).catch((error) => app.log.error(error));
     }
   }
 
-  const reconnect = new MatchReconnectCoordinator({
-    store: matchStore,
-    registry,
-    sessions,
-    persistence,
-    reconnectGraceMs,
-    emitSnapshots,
-    logger: { error: logOperationError, warning: logOperationWarning },
-  });
+  function persistRuntime(match: GameMatch): Promise<void> {
+    const matchId = match.matchId;
+    const state =
+      match.currentState === "FINISHED" || match.currentState === "CANCELLED"
+        ? null
+        : match.serialize();
+    const previous = runtimeWrites.get(matchId) ?? Promise.resolve();
+    const next = previous
+      .catch((error) => app.log.error(error))
+      .then(async () => {
+        if (state) await matchStore.saveActiveMatch(state);
+        else await matchStore.deleteActiveMatch(matchId);
+      });
+    runtimeWrites.set(matchId, next);
+    const clearWrite = () => {
+      if (runtimeWrites.get(matchId) === next) runtimeWrites.delete(matchId);
+    };
+    void next.then(clearWrite, clearWrite);
+    return next;
+  }
+
+  function scheduleFinishedMatchCleanup(match: GameMatch): void {
+    if (finishedMatchCleanupTimers.has(match.matchId)) return;
+
+    const timer = setTimeout(() => {
+      finishedMatchCleanupTimers.delete(match.matchId);
+      registry.remove(match.matchId);
+      persistedMatches.delete(match.matchId);
+    }, finishedMatchRetentionMs);
+    timer.unref();
+    finishedMatchCleanupTimers.set(match.matchId, timer);
+  }
+
+  async function persistIfFinished(match: GameMatch): Promise<boolean> {
+    if (
+      persistedMatches.has(match.matchId) ||
+      (match.currentState !== "FINISHED" && match.currentState !== "CANCELLED")
+    ) {
+      return true;
+    }
+    try {
+      await matchStore.saveMatch(match.snapshot(), match.serialize());
+      await persistRuntime(match);
+      persistedMatches.add(match.matchId);
+      scheduleFinishedMatchCleanup(match);
+      return true;
+    } catch (error) {
+      logOperationError("database.finished_match_save_failed", error, { matchId: match.matchId, state: match.currentState });
+      return false;
+    }
+  }
   function emitGameError(socket: GameSocket, error: unknown): void {
     if (error instanceof GameRuleError) {
       socket.emit("game:error", { code: error.code, message: error.message });
@@ -176,7 +272,7 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
         (match.currentState === "FINISHED" || match.currentState === "CANCELLED")
       ) {
         emitSnapshots(match);
-        void persistence.persistIfFinished(match);
+        void persistIfFinished(match);
       }
       logOperationWarning("game.action_rejected", {
         matchId,
@@ -190,7 +286,7 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
     if (match?.matchId === matchId) {
       match.cancel();
       emitSnapshots(match);
-      void persistence.persistIfFinished(match);
+      void persistIfFinished(match);
     }
     emitGameError(socket, error);
   }
@@ -230,7 +326,59 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
     emitSnapshots(match);
   }
 
-  await reconnect.restore();
+  function scheduleForfeit(session: GuestSession): void {
+    const previous = reconnectTimers.get(session.playerId);
+    if (previous) clearTimeout(previous);
+    const timer = setTimeout(() => {
+      reconnectTimers.delete(session.playerId);
+      if (session.socketId) return;
+      const match = registry.getCurrentForPlayer(session.playerId);
+      if (!match) return;
+      logOperationWarning("match.reconnect_timeout", {
+        matchId: match.matchId,
+        playerId: session.playerId,
+        state: match.currentState,
+      });
+      match.forfeit(session.playerId);
+      emitSnapshots(match);
+      void persistIfFinished(match);
+    }, reconnectGraceMs);
+    timer.unref();
+    reconnectTimers.set(session.playerId, timer);
+  }
+
+  try {
+    const restoredGuests = await matchStore.loadGuests();
+    for (const guest of restoredGuests) sessions.restore(guest);
+
+    const restoredMatches = await matchStore.loadActiveMatches();
+    for (const state of restoredMatches) {
+      try {
+        const match = registry.restore(state);
+        if (match.expire(Date.now())) {
+          await persistIfFinished(match);
+          continue;
+        }
+        const missingSession = state.players.some((player) => !sessions.getByPlayer(player.playerId));
+        if (missingSession) {
+          match.cancel("복구할 수 없는 참가자 세션이 있어 경기를 취소했습니다.");
+          await persistIfFinished(match);
+          continue;
+        }
+        for (const player of state.players) {
+          match.setConnectionStatus(player.playerId, "RECONNECTING");
+          scheduleForfeit(sessions.getByPlayer(player.playerId)!);
+        }
+        await persistRuntime(match);
+      } catch (error) {
+        app.log.error(error);
+        const matchId = (state as { matchId?: unknown }).matchId;
+        if (typeof matchId === "string") await matchStore.deleteActiveMatch(matchId);
+      }
+    }
+  } catch (error) {
+    app.log.error(error);
+  }
 
   io.on("connection", (socket) => {
     const lastInputAt = new Map<string, number>();
@@ -245,13 +393,15 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
     };
     const session = sessions.getByPlayer(socket.data.playerId)!;
     sessions.touch(session);
-    persistence.persistGuest(session);
+    persistGuest(session);
     const oldSocketId = session.socketId;
     if (oldSocketId && oldSocketId !== socket.id) {
       io.sockets.sockets.get(oldSocketId)?.disconnect(true);
     }
     session.socketId = socket.id;
-    reconnect.connected(session);
+    const reconnectTimer = reconnectTimers.get(session.playerId);
+    if (reconnectTimer) clearTimeout(reconnectTimer);
+    reconnectTimers.delete(session.playerId);
     socket.join(session.playerId);
     socket.emit("session:ready", {
       guestToken: session.guestToken,
@@ -280,12 +430,14 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
           mode: rawSettings.mode as MatchSettings["mode"],
           difficulty: rawSettings.difficulty as MatchSettings["difficulty"],
         };
+        const key = queueKey(settings);
         session.nickname = normalizedNickname;
-        persistence.persistGuest(session);
+        persistGuest(session);
 
-        const waitingPlayer = waitingPlayers.get(settings);
+        const waitingPlayer = waitingPlayers.get(key);
         if (!waitingPlayer || waitingPlayer.playerId === session.playerId) {
-          waitingPlayers.set({
+          removeWaitingPlayer(session.playerId);
+          waitingPlayers.set(key, {
             playerId: session.playerId,
             socketId: socket.id,
             nickname: normalizedNickname,
@@ -296,7 +448,7 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
 
         const opponentSocket = io.sockets.sockets.get(waitingPlayer.socketId);
         if (!opponentSocket || registry.getCurrentForPlayer(waitingPlayer.playerId)) {
-          waitingPlayers.set({
+          waitingPlayers.set(key, {
             playerId: session.playerId,
             socketId: socket.id,
             nickname: normalizedNickname,
@@ -325,13 +477,13 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
           opponentNickname: normalizedNickname,
         });
         emitSnapshots(match);
-        waitingPlayers.delete(settings);
+        waitingPlayers.delete(key);
       } catch (error) {
         emitGameError(socket, error);
       }
     });
     socket.on("queue:leave", () => {
-      waitingPlayers.remove(session.playerId);
+      removeWaitingPlayer(session.playerId);
       socket.emit("queue:left");
     });
 
@@ -381,7 +533,7 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
         socket.emit("game:guess-result", result);
         if (match.version !== versionBeforeGuess) {
           emitSnapshots(match);
-          void persistence.persistIfFinished(match);
+          void persistIfFinished(match);
         }
       } catch (error) {
         handleActionError(socket, matchId, error);
@@ -397,7 +549,7 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
         assertClientState(match, session.playerId, expectedState, expectedStateVersion);
         match.forfeit(session.playerId);
         emitSnapshots(match);
-        void persistence.persistIfFinished(match);
+        void persistIfFinished(match);
       } catch (error) {
         handleActionError(socket, matchId, error);
       }
@@ -420,7 +572,7 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
         if (match.currentState !== "FINISHED" && match.currentState !== "CANCELLED") {
           throw new GameRuleError("MATCH_NOT_FINISHED", "경기 종료 후 신고할 수 있습니다.");
         }
-        if (!await persistence.persistIfFinished(match)) {
+        if (!await persistIfFinished(match)) {
           throw new Error("MATCH_PERSISTENCE_FAILED");
         }
         const reportId = await matchStore.createReport({
@@ -445,22 +597,22 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
       if (session.socketId !== socket.id) return;
       session.socketId = null;
       sessions.touch(session);
-      persistence.persistGuest(session);
-      waitingPlayers.remove(session.playerId);
+      persistGuest(session);
+      removeWaitingPlayer(session.playerId);
       const match = registry.getCurrentForPlayer(session.playerId);
       if (!match || match.currentState === "FINISHED" || match.currentState === "CANCELLED") {
         return;
       }
       match.setConnectionStatus(session.playerId, "RECONNECTING");
       emitSnapshots(match);
-      reconnect.schedule(session);
+      if (!closing) scheduleForfeit(session);
     });
   });
 
   const expiryTimer = setInterval(() => {
     for (const match of registry.expire(Date.now())) {
       emitSnapshots(match);
-      void persistence.persistIfFinished(match);
+      void persistIfFinished(match);
     }
   }, 250);
   expiryTimer.unref();
@@ -469,20 +621,24 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
     const expired = sessions.removeExpired(
       Date.now(),
       (playerId) =>
-        waitingPlayers.has(playerId) ||
-        reconnect.hasPending(playerId) ||
+        [...waitingPlayers.values()].some((player) => player.playerId === playerId) ||
+        reconnectTimers.has(playerId) ||
         registry.getCurrentForPlayer(playerId) !== null,
     );
-    for (const session of expired) persistence.deleteGuest(session);
+    for (const session of expired) deleteGuest(session);
   }, guestSessionCleanupIntervalMs);
   guestSessionCleanupTimer.unref();
 
   app.addHook("onClose", async () => {
-    reconnect.close();
+    closing = true;
     clearInterval(expiryTimer);
     clearInterval(guestSessionCleanupTimer);
+    for (const timer of reconnectTimers.values()) clearTimeout(timer);
+    for (const timer of finishedMatchCleanupTimers.values()) clearTimeout(timer);
+    finishedMatchCleanupTimers.clear();
     await new Promise<void>((resolve) => io.close(() => resolve()));
-    await persistence.close();
+    await Promise.allSettled([...runtimeWrites.values(), ...guestWrites]);
+    await matchStore.close();
   });
 
   return app;
