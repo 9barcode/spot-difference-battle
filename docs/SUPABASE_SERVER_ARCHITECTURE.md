@@ -24,10 +24,6 @@ Edge Function은 장기 연결이나 경기 타이머를 실행하지 않고 짧
 - DB 통합 테스트는 실제 `SUPABASE_DB_URL`이 있을 때만 실행한다.
 - 자격 증명이 없는 환경에서는 DB 통합 테스트를 명시적으로 제외하며 성공으로 가장하지 않는다.
 
-`MatchPersistenceCoordinator`가 활성 경기 쓰기 순서, 종료 결과의 멱등 저장, 종료 경기
-보존 타이머와 종료 시 미완료 쓰기 정리를 담당한다. Socket 전송 계층은 저장 순서나
-저장소 수명주기를 직접 관리하지 않는다.
-
 `InMemoryMatchStore`는 로컬 게임 흐름을 위한 독립 구현체이며 `NODE_ENV=production`에서는
 선택할 수 없다. 로컬/E2E에서는 `STORAGE_DRIVER=memory`를 명시해야 하므로 운영 서버가
 자동으로 인메모리 저장소에 빠지는 일은 없다. Supabase Realtime/Edge Functions 전환 테스트는 실제 프로젝트 연결 정보가 준비된
