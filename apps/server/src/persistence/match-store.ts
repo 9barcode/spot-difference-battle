@@ -97,7 +97,8 @@ export class InMemoryMatchStore implements MatchStore {
   async close(): Promise<void> {}
 }
 
-export class PostgresMatchStore implements MatchStore {
+/** Supabase PostgreSQL 전용 운영 저장소. */
+export class SupabasePostgresMatchStore implements MatchStore {
   private readonly pool: Pool;
 
   constructor(connectionString: string) {
@@ -262,3 +263,6 @@ export class PostgresMatchStore implements MatchStore {
     await this.pool.end();
   }
 }
+
+/** @deprecated SupabasePostgresMatchStore를 사용한다. */
+export class PostgresMatchStore extends SupabasePostgresMatchStore {}

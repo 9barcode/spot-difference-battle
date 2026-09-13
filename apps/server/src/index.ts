@@ -1,5 +1,5 @@
 import { createGameServer } from "./server.js";
-import { InMemoryMatchStore, PostgresMatchStore } from "./persistence/match-store.js";
+import { InMemoryMatchStore, SupabasePostgresMatchStore } from "./persistence/match-store.js";
 import {
   GAME_SCENE_IDS,
   type GameSceneId,
@@ -20,8 +20,15 @@ if (
   );
 }
 const sceneId = configuredSceneId as GameSceneId | undefined;
-const matchStore = process.env.DATABASE_URL
-  ? new PostgresMatchStore(process.env.DATABASE_URL)
+const supabaseDatabaseUrl = process.env.SUPABASE_DB_URL?.trim();
+const useMemoryStore = process.env.NODE_ENV !== "production" && process.env.STORAGE_DRIVER === "memory";
+if (!supabaseDatabaseUrl && !useMemoryStore) {
+  throw new Error(
+    "SUPABASE_DB_URL is required. STORAGE_DRIVER=memory is allowed only for explicit local tests.",
+  );
+}
+const matchStore = supabaseDatabaseUrl
+  ? new SupabasePostgresMatchStore(supabaseDatabaseUrl)
   : new InMemoryMatchStore();
 const app = await createGameServer({
   webOrigin,

@@ -5,7 +5,7 @@
 
 ## 목표
 
-Supabase PostgreSQL 한 곳에서 경쟁전 복구, 결과 조회, 신고 검토와 퍼즐 교체를 관리한다.
+Supabase 프로젝트 `usigggufvapufvbyugbr`의 PostgreSQL 한 곳에서 경쟁전 복구, 결과 조회, 신고 검토와 퍼즐 교체를 관리한다.
 조회가 잦은 결과 값만 일반 열로 두고, 버전이 자주 바뀌는 경기 내부 상태와 퍼즐 정답은
 JSONB 스냅샷으로 보존한다. 솔로 타임어택은 현재 규칙대로 기기 로컬 저장만 사용한다.
 
@@ -79,7 +79,8 @@ puzzle_catalog ──(버전 선택)──> matches.puzzle_manifest 사본
 - 브라우저에는 DB 연결 문자열이나 service role 키를 제공하지 않는다.
 - 서버 전용 테이블에 대한 Supabase `anon`, `authenticated` 권한은 부여하지 않는다.
 - 새 열은 먼저 nullable 또는 안전한 기본값으로 추가한 뒤 코드 배포 후 제약을 강화한다.
-- `schema_migrations`에 파일명과 SHA-256을 기록해 같은 마이그레이션의 중복 실행과
-  적용 완료 SQL의 사후 수정을 차단한다.
+- Supabase CLI의 원격 마이그레이션 이력을 기준으로 아직 적용하지 않은 SQL만 배포한다.
+- 적용 완료한 마이그레이션 파일은 수정하지 않고 새 번호의 파일을 추가한다.
 
-스키마 적용 파일은 `apps/server/migrations/005_simple_game_schema.sql`이다.
+스키마는 `supabase/migrations`에서만 관리하며 `pnpm db:push`로 연결된 프로젝트에 적용한다.
+앱 서버가 시작할 때 스키마를 변경하지 않는다.
