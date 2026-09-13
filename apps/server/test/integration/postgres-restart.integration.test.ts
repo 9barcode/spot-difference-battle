@@ -86,18 +86,55 @@ describeDatabase("PostgreSQL restart recovery", () => {
 
       await store.saveMatch(match.snapshot(firstId), state);
 
-      const savedMatch = await pool.query<{ puzzle_manifest: typeof state.puzzles }>(
-        "SELECT puzzle_manifest FROM matches WHERE id = $1",
+      const savedMatch = await pool.query<{
+        puzzle_manifest: typeof state.puzzles;
+        mode: string;
+        difficulty: string;
+        total_puzzle_count: number;
+        total_difference_count: number;
+        final_state: typeof state;
+      }>(
+        `SELECT puzzle_manifest, mode, difficulty, total_puzzle_count,
+                total_difference_count, final_state
+         FROM matches WHERE id = $1`,
         [matchId],
       );
       expect(savedMatch.rows[0]?.puzzle_manifest).toEqual(state.puzzles);
-      const savedPlayers = await pool.query<{ player_id: string; found_count: number; wrong_answer_count: number }>(
-        "SELECT player_id, found_count, wrong_answer_count FROM match_players WHERE match_id = $1 ORDER BY player_id",
+      expect(savedMatch.rows[0]).toMatchObject({
+        mode: "STANDARD",
+        difficulty: "NORMAL",
+        total_puzzle_count: 1,
+        total_difference_count: GAME_PUZZLES[0]!.differences.length,
+        final_state: state,
+      });
+      const savedPlayers = await pool.query<{
+        player_id: string;
+        found_count: number;
+        wrong_answer_count: number;
+        result: string;
+        total_found_count: number;
+        found_ids_by_puzzle: string[][];
+      }>(
+        `SELECT player_id, found_count, wrong_answer_count, result,
+                total_found_count, found_ids_by_puzzle
+         FROM match_players WHERE match_id = $1 ORDER BY player_id`,
         [matchId],
       );
       expect(savedPlayers.rows).toEqual(expect.arrayContaining([
-        { player_id: firstId, found_count: 1, wrong_answer_count: 0 },
-        { player_id: secondId, found_count: 0, wrong_answer_count: 1 },
+        expect.objectContaining({
+          player_id: firstId,
+          found_count: 1,
+          wrong_answer_count: 0,
+          result: "WIN",
+          total_found_count: 1,
+        }),
+        expect.objectContaining({
+          player_id: secondId,
+          found_count: 0,
+          wrong_answer_count: 1,
+          result: "LOSE",
+          total_found_count: 0,
+        }),
       ]));
     } finally {
       await store.close();

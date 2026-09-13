@@ -1,5 +1,10 @@
 ﻿import type { PersistedMatchState } from "@spot-battle/game-core";
-import type { GameSnapshot, ReportReason } from "@spot-battle/shared";
+import {
+  DEFAULT_MATCH_SETTINGS,
+  GAME_MODE_RULES,
+  type GameSnapshot,
+  type ReportReason,
+} from "@spot-battle/shared";
 import { randomUUID } from "node:crypto";
 import { Pool } from "pg";
 
@@ -168,9 +173,13 @@ export class PostgresMatchStore implements MatchStore {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
+      const settings = state.settings ?? DEFAULT_MATCH_SETTINGS;
       const inserted = await client.query(
-        `INSERT INTO matches (id, image_id, winner_player_id, end_reason, state_version, puzzle_manifest, ended_at)
-         VALUES ($1, $2, $3, $4, $5, $6::jsonb, NOW())
+        `INSERT INTO matches
+         (id, image_id, winner_player_id, end_reason, state_version, puzzle_manifest,
+          mode, difficulty, duration_seconds, total_puzzle_count, total_difference_count,
+          cancel_reason, final_state, ended_at)
+         VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9, $10, $11, $12, $13::jsonb, NOW())
          ON CONFLICT (id) DO NOTHING
          RETURNING id`,
         [
@@ -180,14 +189,31 @@ export class PostgresMatchStore implements MatchStore {
           snapshot.endReason,
           snapshot.stateVersion,
           JSON.stringify(state.puzzles),
+          settings.mode,
+          settings.difficulty,
+          GAME_MODE_RULES[settings.mode].durationSeconds,
+          state.puzzles.length,
+          state.puzzles.reduce((total, puzzle) => total + puzzle.differences.length, 0),
+          state.cancelReason,
+          JSON.stringify(state),
         ],
       );
       if (inserted.rowCount) {
         for (const player of state.players) {
+          const progress = snapshot.players.find((candidate) => candidate.playerId === player.playerId)!;
+          const result = snapshot.endReason === "CANCELLED"
+            ? "CANCELLED"
+            : snapshot.winnerId === null
+              ? "DRAW"
+              : snapshot.winnerId === player.playerId ? "WIN" : "LOSE";
           await client.query(
             `INSERT INTO match_players
-             (match_id, player_id, nickname, found_count, wrong_answer_count, hints_used, connection_status)
-             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+             (match_id, player_id, nickname, found_count, wrong_answer_count, hints_used,
+              connection_status, result, completed_puzzle_count, total_found_count,
+              score, time_bonus, best_streak, completed_at, found_ids_by_puzzle)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
+                     CASE WHEN $14::bigint IS NULL THEN NULL ELSE to_timestamp($14::double precision / 1000.0) END,
+                     $15::jsonb)`,
             [
               snapshot.matchId,
               player.playerId,
@@ -196,6 +222,14 @@ export class PostgresMatchStore implements MatchStore {
               player.wrongAnswerCount,
               0,
               player.connectionStatus,
+              result,
+              player.puzzleIndex,
+              progress.totalFoundCount,
+              progress.score,
+              progress.timeBonus,
+              player.bestStreak ?? 0,
+              player.completedAtMs ?? null,
+              JSON.stringify(player.foundIdsByPuzzle),
             ],
           );
         }
