@@ -19,11 +19,13 @@
     "dev": "pnpm --parallel --filter @spot-battle/web --filter @spot-battle/server dev",
     "e2e": "playwright test",
     "e2e:install": "playwright install chromium firefox webkit",
+    "r2:canary": "node scripts/r2-canary.mjs",
     "setup": "pnpm install && pnpm build:packages",
     "pretest": "pnpm build:packages",
     "test": "pnpm -r --if-present test"
   },
   "devDependencies": {
+    "@aws-sdk/client-s3": "^3.1131.0",
     "@playwright/test": "^1.61.1",
     "typescript": "^5.9.3",
     "vitest": "^3.2.4"
