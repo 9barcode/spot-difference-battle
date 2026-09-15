@@ -6,7 +6,6 @@ import path from "node:path";
 import process from "node:process";
 
 const DEFAULT_BUCKET = "spot-difference-assets";
-const DEFAULT_PUZZLE_ID = "cozy-cafe";
 const REQUIRED_ENV = [
   "R2_ACCOUNT_ID",
   "R2_ACCESS_KEY_ID",
@@ -17,10 +16,16 @@ const REQUIRED_ENV = [
 
 const args = process.argv.slice(2);
 const dryRun = args.includes("--dry-run");
-const puzzleId = args.find((arg) => !arg.startsWith("--")) ?? DEFAULT_PUZZLE_ID;
+const puzzleId = args.find((arg) => !arg.startsWith("--"));
 
 if (!dryRun) {
   console.error("Refusing network upload: this branch currently supports dry-run validation only.");
+  console.error("Run: pnpm r2:canary <puzzle-id> --dry-run");
+  process.exit(2);
+}
+
+if (!puzzleId) {
+  console.error("Puzzle ID is required.");
   console.error("Run: pnpm r2:canary <puzzle-id> --dry-run");
   process.exit(2);
 }
