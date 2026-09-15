@@ -25,6 +25,7 @@
     "test": "pnpm -r --if-present test"
   },
   "devDependencies": {
+    "@aws-sdk/client-s3": "^3.1131.0",
     "@playwright/test": "^1.61.1",
     "typescript": "^5.9.3",
     "vitest": "^3.2.4"
