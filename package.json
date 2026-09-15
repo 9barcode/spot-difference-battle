@@ -19,6 +19,7 @@
     "dev": "pnpm --parallel --filter @spot-battle/web --filter @spot-battle/server dev",
     "e2e": "playwright test",
     "e2e:install": "playwright install chromium firefox webkit",
+    "r2:canary": "node scripts/r2-canary.mjs",
     "setup": "pnpm install && pnpm build:packages",
     "pretest": "pnpm build:packages",
     "test": "pnpm -r --if-present test"
