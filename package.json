@@ -22,7 +22,8 @@
     "r2:canary": "node scripts/r2-canary.mjs",
     "setup": "pnpm install && pnpm build:packages",
     "pretest": "pnpm build:packages",
-    "test": "pnpm -r --if-present test"
+    "test": "pnpm test:r2-delivery && pnpm -r --if-present test",
+    "test:r2-delivery": "node --test workers/r2-delivery/test/index.test.mjs"
   },
   "devDependencies": {
     "@aws-sdk/client-s3": "^3.1131.0",

@@ -33,7 +33,40 @@ export interface GamePuzzleVisual {
   alt: string;
 }
 
-export const GAME_PUZZLE_VISUALS: Readonly<Record<GamePuzzleId, GamePuzzleVisual>> = {
+const homeOfficeCanarySource = (
+  kind: "original" | "modified",
+  fallback: string,
+  canaryBaseUrl: string | undefined,
+): string => {
+  const configuredUrl = canaryBaseUrl?.trim();
+  if (!configuredUrl) return fallback;
+
+  let baseUrl: URL;
+  try {
+    baseUrl = new URL(configuredUrl);
+  } catch {
+    throw new Error("VITE_R2_CANARY_BASE_URL must be a valid absolute URL.");
+  }
+  const localHttp = baseUrl.protocol === "http:"
+    && ["localhost", "127.0.0.1", "[::1]"].includes(baseUrl.hostname);
+  if (
+    (baseUrl.protocol !== "https:" && !localHttp)
+    || baseUrl.username
+    || baseUrl.password
+    || baseUrl.search
+    || baseUrl.hash
+    || (baseUrl.pathname !== "/" && baseUrl.pathname !== "")
+  ) {
+    throw new Error("VITE_R2_CANARY_BASE_URL must be an HTTPS origin or a local HTTP origin.");
+  }
+
+  const version = GAME_PUZZLE_ASSET_MANIFEST["home-office"].version;
+  return `${baseUrl.origin}/puzzles/home-office/${version}/runtime/${kind}.webp`;
+};
+
+export const createGamePuzzleVisuals = (
+  canaryBaseUrl?: string,
+): Readonly<Record<GamePuzzleId, GamePuzzleVisual>> => ({
   "cozy-cafe": {
     id: "cozy-cafe",
     metadata: GAME_PUZZLE_ASSET_MANIFEST["cozy-cafe"],
@@ -78,8 +111,8 @@ export const GAME_PUZZLE_VISUALS: Readonly<Record<GamePuzzleId, GamePuzzleVisual
     id: "home-office",
     metadata: GAME_PUZZLE_ASSET_MANIFEST["home-office"],
     label: "햇살 좋은 홈오피스",
-    originalSrc: homeOfficeOriginal,
-    modifiedSrc: homeOfficeModified,
+    originalSrc: homeOfficeCanarySource("original", homeOfficeOriginal, canaryBaseUrl),
+    modifiedSrc: homeOfficeCanarySource("modified", homeOfficeModified, canaryBaseUrl),
     alt: "노트북과 스탠드가 놓인 햇살 좋은 홈오피스",
   },
   "farmers-market": {
@@ -114,7 +147,11 @@ export const GAME_PUZZLE_VISUALS: Readonly<Record<GamePuzzleId, GamePuzzleVisual
     modifiedSrc: laundryRoomModified,
     alt: "세탁기와 다리미판이 있는 밝고 아늑한 세탁실",
   },
-};
+});
+
+export const GAME_PUZZLE_VISUALS = createGamePuzzleVisuals(
+  import.meta.env.VITE_R2_CANARY_BASE_URL,
+);
 
 const preloadCache = new Map<GamePuzzleId, Promise<void>>();
 
