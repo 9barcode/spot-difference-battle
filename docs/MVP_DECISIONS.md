@@ -48,6 +48,7 @@
 | 2026-07-30 | `GAME_RULES.md`를 유일한 규칙 정본으로 지정 | 문서 운영 원칙 유지 |
 | 2026-08-02 | 사용자 제작 정사각형 장면 4개 등록 | 일부만 이미지 쌍 후보로 유지 |
 | 2026-08-04 | 경기 중 제작을 제거하고 원본·변경본 동시 빨리찾기 대결로 전환 | 규칙·상태·화면·기술·테스트·에셋 전면 전환 |
+| 2026-09-18 | Cloudflare 전면 이전을 `PROPOSED`로 제안 (6장) | 승인 시 서버 실행 환경과 전송 계층 전환 |
 
 ## 5. 결정 근거
 
@@ -58,3 +59,115 @@
 문제를 먼저 완료한 플레이어는 이미 다음 문제를 먼저 시작한다. 선착 추가 점수는 같은 행동을 두 번 보상하므로 사용하지 않는다.
 
 생성형 편집에는 의도하지 않은 미세 픽셀 변화가 생길 수 있다. 자동 픽셀 비교 대신 제작자가 의도한 3개 정답 영역을 등록하고 사람이 검수한다.
+
+## 6. 제안 — Cloudflare 전면 이전
+
+> 문서 상태: PROPOSED
+> 제안일: 2026-09-18
+> 제안자: 민수 · 승인 필요: 형주, 경래
+
+Render를 사용하지 않고 실행 환경 전체를 Cloudflare로 옮긴다. 승인 전까지는 제안이며
+현재 구현(Render + Supabase)이 정본이다.
+
+### 6.1 구성
+
+| 구성요소 | 역할 | 현재 |
+|---|---|---|
+| Apps in Toss WebView | 게임 화면, 좌표 입력 | 그대로 |
+| Cloudflare Workers | 라우팅, R2 이미지 서빙, 읽기 API | 이미지 서빙만 구현됨 |
+| Durable Objects | 매칭 큐, 게임방, 타이머, 승패 판정 | 없음 |
+| Cloudflare R2 | 퍼즐 이미지 파일 (Private) | 구현됨 |
+| Supabase | 퍼즐 메타데이터, 정답 좌표, 유저·랭킹 | 그대로 |
+| Render | — | 2단계 동작 확인 후 삭제 |
+
+Workers는 요청마다 새로 실행되고 상태를 유지하지 않으므로 2인 대전을 담을 수 없다.
+매칭·게임방·공용 타이머는 Durable Objects가 맡는다. 2026-04-07부터 무료 플랜에서도
+SQLite 기반 Durable Objects를 사용할 수 있다.
+
+### 6.2 테스트 환경
+
+Wrangler의 `staging` 환경을 만들어 그곳에서 검증한다. Render를 테스트 환경으로
+유지하지 않는다.
+
+```toml
+[[env.staging.durable_objects.bindings]]
+name = "MATCH_ROOM"
+class_name = "MatchRoom"
+```
+
+환경마다 Durable Object 네임스페이스와 저장소가 분리되므로 테스트 경기가 운영
+게임방과 섞이지 않는다. 워커 이름에 환경명이 붙어 별도 `*.workers.dev` 주소를
+가지므로 여러 사람이 동시에 접속해 1대1 대전을 확인할 수 있다.
+
+운영과 같은 런타임에서 검증한다는 점에서 Render 스테이징보다 정확하다. 무료 플랜
+Render 인스턴스는 유휴 시 정지해 첫 접속이 느리다는 문제도 없다.
+
+R2는 staging도 같은 버킷을 쓴다. 오브젝트 키에 `asset_version`이 포함된 불변
+파일이므로 환경 간에 섞이지 않는다.
+
+PR 단위 확인이 필요하면 `wrangler versions upload`가 버전별 Preview URL을 만든다.
+
+### 6.3 이전 순서
+
+| 단계 | 범위 | 테스트 | Render |
+|---|---|---|---|
+| 0 | `wrangler.toml`에 `staging` 환경 추가 | — | 유지 |
+| 1 | 이미지 서빙(완료) + 퍼즐 목록·메타데이터 읽기 API를 Worker로 | staging | 유지 |
+| 2 | 매칭 큐와 게임방을 Durable Objects로, Socket.IO를 순수 WebSocket으로 교체 | staging | 동작 확인 후 삭제 |
+| 3 | `render.yaml`, `Dockerfile`, `socket.io` 의존성 삭제 | — | 삭제됨 |
+
+두 단계로 쪼개는 이유는 롤백이 아니라 원인 분리다. 실시간 대전이 실패할 때 원인이
+Durable Objects인지, WebSocket 연결인지, Supabase 읽기 권한인지 동시에 터지면
+구분할 수 없다. 1단계에서 Worker가 Supabase를 읽는 방식(anon 키, 권한 범위, 캐시
+주기)을 확정해 2단계에서 의심할 대상을 줄인다.
+
+Render를 2단계까지 남기는 것은 비교 대상으로 쓰기 위해서가 아니라, 대체 구현이
+동작하기 전까지 게임이 실제로 도는 곳이 거기뿐이기 때문이다. 2단계가 staging에서
+확인되면 유예 없이 삭제한다.
+
+### 6.4 변경 범위
+
+`socket.io`를 직접 참조하는 파일은 셋이다.
+
+| 파일 | 줄 수 | 처리 |
+|---|---|---|
+| `apps/server/src/server.ts` | 645 | 폐기, Durable Object로 재작성 |
+| `apps/web/src/features/game/hooks/use-game-client.ts` | 163 | `io()` → `new WebSocket()` |
+| `packages/shared/src/protocol/socket-events.ts` | 82 | 이벤트 계약 유지, 타입 교체 |
+
+`packages/game-core`(585줄, 좌표 판정·점수·경기 상태 머신)는 전송 계층에 의존하지
+않으므로 그대로 사용한다. `persistence/match-store.ts`(268줄)와
+`game/puzzle-catalog.ts`(104줄)는 로직을 유지하고 저장소 접근만 `pg`에서
+Supabase HTTP로 교체한다.
+
+### 6.5 유지되는 계약
+
+- 퍼즐 식별자는 슬러그다(`home-office`, `cozy-cafe`). 숫자 ID를 도입하지 않는다.
+  Supabase 기본키가 `(pair_id TEXT, asset_version TEXT)`이고 웹 카탈로그와 에셋
+  파일명이 모두 슬러그다.
+- R2 오브젝트 키에 `asset_version`을 포함한다.
+  `puzzles/<pairId>/<assetVersion>/runtime/{original,modified}.webp`
+  Worker가 `max-age=31536000, immutable`을 내리므로 경로에 버전이 없으면 이미지를
+  수정해도 1년간 반영되지 않는다.
+- 이미지 요청마다 Supabase를 조회하지 않는다. 경기 시작 시 서버가 `puzzleId`와
+  `assetVersion`을 확정해 전달하고 브라우저가 그 값으로 Worker URL을 구성한다.
+- 정답 좌표는 서버와 Supabase에만 존재하며 Worker 응답에 포함하지 않는다.
+
+### 6.6 결정이 필요한 항목
+
+**staging 환경이 사용할 Supabase.** 운영과 같은 프로젝트를 쓰면 테스트 경기 기록이
+랭킹과 전적에 섞인다. 별도 프로젝트를 쓰면 깨끗하지만 마이그레이션을 두 곳에
+적용해야 한다. Supabase 담당의 판단이 필요하다.
+
+### 6.7 승인 후 할 일
+
+1. `TECH_SPEC.md`에 Workers·Durable Objects 구성을 반영한다.
+2. `REPOSITORY_STRUCTURE.md`에 `workers/` 디렉터리와 의존 방향을 추가한다.
+3. `DEPLOYMENT.md`에 Worker 배포·롤백 절차와 staging 환경 사용법을 추가한다.
+4. 담당 경계를 디렉터리가 아닌 역할 기준으로 정리하고 `CODEOWNERS`로 강제한다.
+
+### 6.8 이 제안이 다루지 않는 것
+
+- 담당자 배정. 별도 논의가 필요하다.
+- Apps in Toss 심사 일정과의 관계.
+- Durable Objects 사용량이 무료 한도를 넘을 경우의 비용.
