@@ -1,4 +1,5 @@
-﻿import type { PersistedMatchState } from "@spot-battle/game-core";
+﻿import type { MatchPuzzle, PersistedMatchState } from "@spot-battle/game-core";
+import { ACTIVE_GAME_PUZZLES } from "../game/puzzle-catalog.js";
 import {
   DEFAULT_MATCH_SETTINGS,
   GAME_MODE_RULES,
@@ -17,6 +18,7 @@ export interface ReportInput {
 
 export interface MatchStore {
   health(): Promise<boolean>;
+  loadActivePuzzles(): Promise<MatchPuzzle[]>;
   loadGuests(): Promise<Array<{
     playerId: string;
     guestToken: string;
@@ -42,6 +44,9 @@ export class InMemoryMatchStore implements MatchStore {
 
   async health(): Promise<boolean> {
     return true;
+  }
+  async loadActivePuzzles(): Promise<MatchPuzzle[]> {
+  return structuredClone(ACTIVE_GAME_PUZZLES) as MatchPuzzle[];
   }
 
   async loadGuests() {
@@ -112,6 +117,28 @@ export class SupabasePostgresMatchStore implements MatchStore {
     } catch {
       return false;
     }
+  }
+  async loadActivePuzzles(): Promise<MatchPuzzle[]> {
+    const result = await this.pool.query<{
+      pair_id: string;
+      asset_version: string;
+      differences: MatchPuzzle["differences"];
+    }>(
+      `SELECT pair_id, asset_version, differences
+       FROM puzzle_catalog
+       WHERE is_active = TRUE
+       ORDER BY pair_id`,
+    );
+  
+    if (result.rows.length === 0) {
+      throw new Error("활성화된 퍼즐이 puzzle_catalog에 없습니다.");
+    }
+  
+    return result.rows.map((row) => ({
+      id: row.pair_id as MatchPuzzle["id"],
+      assetVersion: row.asset_version,
+      differences: row.differences,
+    }));
   }
 
   async loadGuests() {
