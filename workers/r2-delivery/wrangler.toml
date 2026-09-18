@@ -2,6 +2,9 @@ name = "spot-difference-r2-canary"
 main = "src/index.mjs"
 compatibility_date = "2026-09-16"
 
+[cache]
+enabled = true
+
 [[r2_buckets]]
 binding = "PUZZLE_ASSETS"
 bucket_name = "spot-difference-assets"

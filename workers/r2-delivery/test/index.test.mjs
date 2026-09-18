@@ -4,10 +4,18 @@ import { handleRequest } from "../src/index.mjs";
 
 const originalPath = "/puzzles/home-office/2026-08-28.2/runtime/original.webp";
 const modifiedPath = "/puzzles/home-office/2026-08-28.2/runtime/modified.webp";
+const immutableCache = "public, max-age=31536000, immutable";
 
 function environment(isMissing = false) {
   const get = mock.fn(async () => isMissing ? null : ({ body: new Blob(["webp"]).stream() }));
-  return { env: { PUZZLE_ASSETS: { get } }, get };
+  const put = mock.fn();
+  const remove = mock.fn();
+  const list = mock.fn();
+  return { env: { PUZZLE_ASSETS: { get, put, delete: remove, list } }, get, put, remove, list };
+}
+
+function assertNoStore(response) {
+  assert.equal(response.headers.get("Cache-Control"), "no-store");
 }
 
 describe("R2 delivery canary", () => {
@@ -17,6 +25,8 @@ describe("R2 delivery canary", () => {
       const response = await handleRequest(new Request(`https://canary.example${path}`), env);
       assert.equal(response.status, 200);
       assert.equal(response.headers.get("Content-Type"), "image/webp");
+      assert.equal(response.headers.get("Cache-Control"), immutableCache);
+      assert.equal(response.headers.get("X-Content-Type-Options"), "nosniff");
       assert.equal(await response.text(), "webp");
       assert.equal(get.mock.calls[0].arguments[0], path.slice(1));
     });
@@ -30,14 +40,18 @@ describe("R2 delivery canary", () => {
   ]) {
     test(`rejects ${path}`, async () => {
       const { env, get } = environment();
-      assert.equal((await handleRequest(new Request(`https://canary.example${path}`), env)).status, 404);
+      const response = await handleRequest(new Request(`https://canary.example${path}`), env);
+      assert.equal(response.status, 404);
+      assertNoStore(response);
       assert.equal(get.mock.callCount(), 0);
     });
   }
 
   test("returns 404 when an allowed object is missing", async () => {
     const { env } = environment(true);
-    assert.equal((await handleRequest(new Request(`https://canary.example${originalPath}`), env)).status, 404);
+    const response = await handleRequest(new Request(`https://canary.example${originalPath}`), env);
+    assert.equal(response.status, 404);
+    assertNoStore(response);
   });
 
   for (const method of ["POST", "PUT", "DELETE", "OPTIONS"]) {
@@ -45,6 +59,8 @@ describe("R2 delivery canary", () => {
       const { env, get } = environment();
       const response = await handleRequest(new Request(`https://canary.example${originalPath}`, { method }), env);
       assert.equal(response.status, 405);
+      assertNoStore(response);
+      assert.equal(response.headers.get("Allow"), "GET, HEAD");
       assert.equal(get.mock.callCount(), 0);
     });
   }
@@ -54,6 +70,20 @@ describe("R2 delivery canary", () => {
     const response = await handleRequest(new Request(`https://canary.example${modifiedPath}`, { method: "HEAD" }), env);
     assert.equal(response.status, 200);
     assert.equal(response.headers.get("Content-Type"), "image/webp");
+    assert.equal(response.headers.get("Cache-Control"), immutableCache);
+    assert.equal(response.headers.get("X-Content-Type-Options"), "nosniff");
     assert.equal(await response.text(), "");
+  });
+
+  test("returns a generic no-store error when R2 fails without attempting writes", async () => {
+    const { env, get, put, remove, list } = environment();
+    get.mock.mockImplementation(async () => { throw new Error("private object detail"); });
+    const response = await handleRequest(new Request(`https://canary.example${originalPath}`), env);
+    assert.equal(response.status, 500);
+    assertNoStore(response);
+    assert.equal(await response.text(), "Internal Server Error");
+    assert.equal(put.mock.callCount(), 0);
+    assert.equal(remove.mock.callCount(), 0);
+    assert.equal(list.mock.callCount(), 0);
   });
 });
