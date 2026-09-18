@@ -46,6 +46,13 @@ const OUTCOME = {
 const BASE_HEADERS = { "X-Content-Type-Options": "nosniff" };
 
 /**
+ * 경로에 assetVersion 이 박혀 있어 같은 URL 의 내용은 절대 바뀌지 않는다.
+ * 퍼즐을 고치면 버전이 올라가 경로가 달라지므로 무효화가 필요 없다.
+ * (이전 max-age=300 은 재방문마다 이미지를 다시 받게 했다.)
+ */
+const IMMUTABLE_CACHE = "public, max-age=31536000, immutable";
+
+/**
  * 구조화 로그 한 줄.
  *
  * 경로 조각만 남긴다. 전체 URL 이나 헤더는 남기지 않는다.
@@ -107,12 +114,25 @@ export async function handleRequest(request, env, options = {}) {
     return respond("asset_missing");
   }
 
+  const headers = {
+    "Content-Type": "image/webp",
+    "Cache-Control": IMMUTABLE_CACHE,
+  };
+
+  // R2 의 etag 를 그대로 흘려 조건부 요청이 성립하게 한다.
+  // 없으면 재방문마다 본문 전체를 다시 보낸다.
+  const etag = object.httpEtag ?? (object.etag ? `"${object.etag}"` : null);
+  if (etag) {
+    headers.ETag = etag;
+    if (request.headers.get("if-none-match") === etag) {
+      log("not_modified", { method, pairId, assetVersion, kind });
+      return respond("not_modified", { headers });
+    }
+  }
+
   log("ok", { method, pairId, assetVersion, kind });
   return respond("ok", {
-    headers: {
-      "Content-Type": "image/webp",
-      "Cache-Control": "public, max-age=300",
-    },
+    headers,
     body: method === "HEAD" ? null : object.body,
   });
 }

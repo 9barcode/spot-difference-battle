@@ -6,7 +6,7 @@ const originalPath = "/puzzles/home-office/2026-08-28.2/runtime/original.webp";
 const modifiedPath = "/puzzles/home-office/2026-08-28.2/runtime/modified.webp";
 
 function environment(isMissing = false) {
-  const get = mock.fn(async () => isMissing ? null : ({ body: new Blob(["webp"]).stream() }));
+  const get = mock.fn(async () => isMissing ? null : ({ body: new Blob(["webp"]).stream(), httpEtag: '"abc123"' }));
   return { env: { PUZZLE_ASSETS: { get } }, get };
 }
 
@@ -162,5 +162,54 @@ describe("관측", () => {
     assert.equal(parsed.pairId, "home-office");
     assert.ok(!line.includes("secret"), "요청 헤더를 로그에 남기면 안 된다");
     assert.ok(!line.includes("canary.example"), "전체 URL 을 남기지 않는다");
+  });
+});
+
+describe("캐시", () => {
+  test("버전 고정 경로는 immutable 로 내려준다", async () => {
+    const { env } = environment();
+    const response = await handleRequest(new Request(`https://canary.example${originalPath}`), env, { log: () => {} });
+    assert.equal(response.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
+  });
+
+  test("ETag 를 실어 보낸다", async () => {
+    const { env } = environment();
+    const response = await handleRequest(new Request(`https://canary.example${originalPath}`), env, { log: () => {} });
+    assert.equal(response.headers.get("ETag"), '"abc123"');
+  });
+
+  test("If-None-Match 가 맞으면 304 로 본문을 아낀다", async () => {
+    const { env } = environment();
+    const { log, lines } = recorder();
+    const response = await handleRequest(
+      new Request(`https://canary.example${originalPath}`, { headers: { "If-None-Match": '"abc123"' } }),
+      env,
+      { log },
+    );
+    assert.equal(response.status, 304);
+    assert.equal(await response.text(), "");
+    assert.equal(lines[0].outcome, "not_modified");
+  });
+
+  test("ETag 가 다르면 본문을 보낸다", async () => {
+    const { env } = environment();
+    const response = await handleRequest(
+      new Request(`https://canary.example${originalPath}`, { headers: { "If-None-Match": '"stale"' } }),
+      env,
+      { log: () => {} },
+    );
+    assert.equal(response.status, 200);
+    assert.equal(await response.text(), "webp");
+  });
+
+  test("HEAD 에도 캐시 헤더가 붙는다", async () => {
+    const { env } = environment();
+    const response = await handleRequest(
+      new Request(`https://canary.example${originalPath}`, { method: "HEAD" }),
+      env,
+      { log: () => {} },
+    );
+    assert.equal(response.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
+    assert.equal(response.headers.get("ETag"), '"abc123"');
   });
 });
