@@ -44,4 +44,23 @@ VALUES (
       "sourceDifficulty": "UNRATED"
     }'::jsonb,
     TRUE
-);
+)
+ON CONFLICT (pair_id, asset_version)
+
+DO UPDATE SET
+
+  title = EXCLUDED.title,
+
+  difficulty = EXCLUDED.difficulty,
+
+  original_asset_key = EXCLUDED.original_asset_key,
+
+  modified_asset_key = EXCLUDED.modified_asset_key,
+
+  differences = EXCLUDED.differences,
+
+  metadata = EXCLUDED.metadata,
+
+  is_active = EXCLUDED.is_active,
+
+  updated_at = NOW();
