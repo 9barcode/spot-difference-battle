@@ -111,8 +111,9 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
     });
   }
   const matchStore = options.matchStore ?? new InMemoryMatchStore();
-  app.get("/health", async () => {
+  app.get("/health", async (_request, reply) => {
     const database = await matchStore.health();
+    if (!database) reply.code(503);
     return { status: database ? "ok" : "degraded", server: "ok", database };
   });
 

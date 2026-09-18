@@ -23,6 +23,20 @@ function waitForState(socket: TestSocket, state: GameSnapshot["state"]): Promise
 }
 
 describe("simultaneous game server", () => {
+  it("reports an unavailable database as HTTP 503", async () => {
+    const store = new class extends InMemoryMatchStore {
+      override async health() { return false; }
+    }();
+    const app = await createGameServer({ matchStore: store });
+    try {
+      const response = await app.inject({ method: "GET", url: "/health" });
+      expect(response.statusCode).toBe(503);
+      expect(response.json()).toEqual({ status: "degraded", server: "ok", database: false });
+    } finally {
+      await app.close();
+    }
+  });
+
   let app: Awaited<ReturnType<typeof createGameServer>>;
   const sockets: TestSocket[] = [];
 

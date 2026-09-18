@@ -21,6 +21,8 @@ node scripts/generate-puzzle-catalog-seed.mjs > /tmp/puzzle-catalog-seed.sql
 
 Review and apply the SQL only to the intended development database using the team's secret handling. It inserts missing puzzle identities and never overwrites existing versions or switches active versions. Object keys describe the contract, not proof that every object has been uploaded to R2. Only home-office is currently a delivery Canary.
 
+The generated seed keeps an existing active version. A newly inserted version stays inactive when another version is active. After reviewing the new row, activate it atomically with `SELECT activate_puzzle_version('<puzzleId>', '<assetVersion>');`. The function is unavailable to public, anonymous and authenticated API roles; use the server/owner database role through the team's secure environment.
+
 ## Contract
 
 | DB | Runtime |
@@ -36,7 +38,7 @@ The current frontend still selects visuals from its bundled manifest. Therefore 
 
 ## Acceptance
 
-1. Start with database storage and database catalog; verify `/health` reports database true.
+1. Start with database storage and database catalog; verify `/health` reports database true. Database failure returns HTTP 503 so deployment readiness checks fail correctly.
 2. On the R2 Canary branch, set `GAME_SCENE_ID=home-office` for the backend and the frontend Canary URL through its existing mechanism.
 3. Two clients match, load both Worker images, play and finish.
 4. Verify matches/match_players and active-match cleanup in the isolated DB.
