@@ -48,7 +48,7 @@ JSONB 스냅샷으로 보존한다. 솔로 타임어택은 현재 규칙대로 �
 
 ### `puzzle_catalog`
 
-퍼즐 ID와 에셋 버전을 복합 키로 사용한다. 원본·변경본의 Supabase Storage 키, 검수된
+퍼즐 ID와 에셋 버전을 복합 키로 사용한다. 원본·변경본의 Cloudflare R2 object key, 검수된
 정답 영역 JSON, 난이도와 라이선스 메타데이터를 보존한다. 같은 퍼즐 ID에서는 한 버전만
 활성화할 수 있다.
 
@@ -77,6 +77,7 @@ puzzle_catalog ──(버전 선택)──> matches.puzzle_manifest 사본
 - 종료 후 검색할 값만 `matches`와 `match_players`의 일반 열로 저장한다.
 - 과거 경기의 퍼즐·정답·최종 상태 스냅샷은 수정하지 않는다.
 - 브라우저에는 DB 연결 문자열이나 service role 키를 제공하지 않는다.
+- Supabase에는 R2 credential을 저장하지 않고 object key와 검증 메타데이터만 저장한다.
 - 서버 전용 테이블에 대한 Supabase `anon`, `authenticated` 권한은 부여하지 않는다.
 - 새 열은 먼저 nullable 또는 안전한 기본값으로 추가한 뒤 코드 배포 후 제약을 강화한다.
 - Supabase CLI의 원격 마이그레이션 이력을 기준으로 아직 적용하지 않은 SQL만 배포한다.
