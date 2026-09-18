@@ -1,3 +1,5 @@
+import { loadLocalEnvironment, resolveStorage } from "./config/runtime.js";
+import { loadDatabasePuzzles } from "./persistence/puzzle-catalog.js";
 import { createGameServer } from "./server.js";
 import { InMemoryMatchStore, SupabasePostgresMatchStore } from "./persistence/match-store.js";
 import {
@@ -5,6 +7,8 @@ import {
   type GameSceneId,
 } from "@spot-battle/shared";
 import { resolveWebOrigin } from "./config/web-origin.js";
+
+loadLocalEnvironment();
 
 const host = process.env.HOST ?? "0.0.0.0";
 const port = Number.parseInt(process.env.PORT ?? "3001", 10);
@@ -21,20 +25,20 @@ if (
 }
 const sceneId = configuredSceneId as GameSceneId | undefined;
 const supabaseDatabaseUrl = process.env.SUPABASE_DB_URL?.trim();
-const useMemoryStore = process.env.NODE_ENV !== "production" && process.env.STORAGE_DRIVER === "memory";
-if (!supabaseDatabaseUrl && !useMemoryStore) {
-  throw new Error(
-    "SUPABASE_DB_URL is required. STORAGE_DRIVER=memory is allowed only for explicit local tests.",
-  );
-}
-const matchStore = supabaseDatabaseUrl
-  ? new SupabasePostgresMatchStore(supabaseDatabaseUrl)
+const driver = resolveStorage(process.env);
+const catalogSource = process.env.PUZZLE_CATALOG_SOURCE?.trim() || "code";
+if (!["code", "database"].includes(catalogSource)) throw new Error("PUZZLE_CATALOG_SOURCE must be code or database.");
+if (catalogSource === "database" && driver !== "postgres") throw new Error("Database catalog requires postgres storage.");
+const puzzles = catalogSource === "database" ? await loadDatabasePuzzles(supabaseDatabaseUrl!) : undefined;
+const matchStore = driver === "postgres"
+  ? new SupabasePostgresMatchStore(supabaseDatabaseUrl!)
   : new InMemoryMatchStore();
 const app = await createGameServer({
   webOrigin,
   staticRoot,
   matchStore,
   sceneId,
+  puzzles,
 });
 
 try {

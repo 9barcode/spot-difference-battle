@@ -2,6 +2,10 @@
 
 const webPort = 4173;
 const serverPort = 3101;
+const databaseE2E = process.env.E2E_STORAGE_DRIVER === "postgres";
+if (databaseE2E && !process.env.SUPABASE_DB_URL?.trim()) {
+  throw new Error("Database E2E requires an isolated development SUPABASE_DB_URL.");
+}
 const gameSceneId = process.env.GAME_SCENE_ID ?? "";
 
 export default defineConfig({
@@ -32,7 +36,8 @@ export default defineConfig({
         PORT: String(serverPort),
         WEB_ORIGIN: `http://127.0.0.1:${webPort}`,
         GAME_SCENE_ID: gameSceneId,
-        STORAGE_DRIVER: "memory",
+        STORAGE_DRIVER: databaseE2E ? "postgres" : "memory",
+        PUZZLE_CATALOG_SOURCE: databaseE2E ? "database" : "code",
       },
     },
     {
