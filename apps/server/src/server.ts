@@ -21,6 +21,7 @@ import {
 import { MatchRegistry } from "./game/match-registry.js";
 import { InMemoryMatchStore, type MatchStore } from "./persistence/match-store.js";
 import { operationalLogFields } from "./observability/operational-logging.js";
+import { GAME_PUZZLES } from "./game/puzzle-catalog.js";
 
 export interface GameServerOptions {
   webOrigin?: string | RegExp;
@@ -104,43 +105,24 @@ export async function createGameServer(options: GameServerOptions): Promise<Fast
       index: ["index.html"],
     });
   }
+  const matchStore = options.matchStore ?? new InMemoryMatchStore();
+  app.get("/health", async () => {
+    const database = await matchStore.health();
+    return { status: database ? "ok" : "degraded", server: "ok", database };
+  });
 
-const matchStore = options.matchStore ?? new InMemoryMatchStore();
-
-const activePuzzles = await matchStore.loadActivePuzzles();
-
-if (activePuzzles.length === 0) {
-  throw new Error("활성화된 게임 퍼즐이 없습니다.");
-}
-
-app.get("/health", async () => {
-  const database = await matchStore.health();
-  return { status: database ? "ok" : "degraded", server: "ok", database };
-});
-
-const io = new Server<
-  ClientToServerEvents,
-  ServerToClientEvents,
-  Record<string, never>,
-  SocketData
->(app.server, {
-  cors: options.webOrigin ? { origin: options.webOrigin } : undefined,
-});
-
-const requestedPuzzle = options.sceneId
-  ? activePuzzles.find((puzzle) => puzzle.id === options.sceneId)
-  : undefined;
-
-if (options.sceneId && !requestedPuzzle) {
-  throw new Error(
-    `활성 puzzle_catalog에서 GAME_SCENE_ID=${options.sceneId} 퍼즐을 찾을 수 없습니다.`,
-  );
-}
-
-const registry = new MatchRegistry(
-  requestedPuzzle ? [requestedPuzzle] : activePuzzles,
-); 
-  
+  const io = new Server<
+    ClientToServerEvents,
+    ServerToClientEvents,
+    Record<string, never>,
+    SocketData
+  >(app.server, {
+    cors: options.webOrigin ? { origin: options.webOrigin } : undefined,
+  });
+  const requestedPuzzle = options.sceneId
+    ? GAME_PUZZLES.find((puzzle) => puzzle.id === options.sceneId)
+    : undefined;
+  const registry = new MatchRegistry(requestedPuzzle ? [requestedPuzzle] : undefined);
   const guestSessionRetentionMs = options.guestSessionRetentionMs ?? 7 * 24 * 60 * 60 * 1_000;
   const guestSessionCleanupIntervalMs = options.guestSessionCleanupIntervalMs ?? 60 * 1_000;
   const sessions = new GuestSessionRegistry(guestSessionRetentionMs);
