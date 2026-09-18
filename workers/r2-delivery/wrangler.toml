@@ -8,3 +8,7 @@ enabled = true
 [[r2_buckets]]
 binding = "PUZZLE_ASSETS"
 bucket_name = "spot-difference-assets"
+
+[observability]
+enabled = true
+head_sampling_rate = 1
